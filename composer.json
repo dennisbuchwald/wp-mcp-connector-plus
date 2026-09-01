@@ -1,5 +1,5 @@
 {
-    "name": "dbwmedia/wp-mcp-connector-plus",
+    "name": "dennisbuchwald/wp-mcp-connector-plus",
     "description": "MCP server for WordPress that lets AI agents operate a site the way an editor does: block-tree read/write, block-kit discovery with schemas and nesting rules, and validation before every save.",
     "type": "wordpress-plugin",
     "keywords": [
@@ -13,7 +13,7 @@
         "abilities-api",
         "claude"
     ],
-    "homepage": "https://github.com/dbwmedia/wp-mcp-connector-plus",
+    "homepage": "https://github.com/dennisbuchwald/wp-mcp-connector-plus",
     "license": "GPL-2.0-or-later",
     "require": {
         "php": ">=8.1",

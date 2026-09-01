@@ -53,14 +53,14 @@ content — subtly malformed markup that looks fine and breaks silently.
 
 ## Install
 
-Download the ZIP from [Releases](https://github.com/dbwmedia/wp-mcp-connector-plus/releases)
+Download the ZIP from [Releases](https://github.com/dennisbuchwald/wp-mcp-connector-plus/releases)
 and upload it under *Plugins → Add New → Upload Plugin*. Dependencies are
 bundled; no Composer on the server required.
 
 For development:
 
 ```bash
-git clone https://github.com/dbwmedia/wp-mcp-connector-plus.git
+git clone https://github.com/dennisbuchwald/wp-mcp-connector-plus.git
 cd wp-mcp-connector-plus
 composer install
 ```

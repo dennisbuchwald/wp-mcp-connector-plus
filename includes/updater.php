@@ -27,7 +27,7 @@ function wpmcp_repo_url() {
 	if ( defined( 'WPMCP_REPO' ) && WPMCP_REPO ) {
 		return WPMCP_REPO;
 	}
-	return 'https://github.com/dbwmedia/wp-mcp-connector-plus';
+	return 'https://github.com/dennisbuchwald/wp-mcp-connector-plus';
 }
 
 /**
