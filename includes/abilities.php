@@ -81,7 +81,7 @@ function dbw_connector_register_abilities() {
 		'dbw/blocks-catalog',
 		array(
 			'label'       => 'Block-Katalog',
-			'description' => 'The building kit of this site: every available block with its role (container / child / standalone), what it is for, what may go inside it, and its main variants. This is the overview — use blocks-describe for the full attribute schema of the few blocks you actually intend to use.',
+			'description' => 'The building kit of this site: every available block with its role (container / child / standalone), what it is for, what may go inside it, and its main variants — plus the editorial playbook (page dramaturgy, block choice, tone, house rules) that no schema can carry. Read the playbook before building anything. This is the overview; use blocks-describe for the full attribute schema of the few blocks you actually intend to use.',
 			'category'    => 'dbw-connector',
 			'input_schema' => array(
 				'type'       => 'object',
@@ -99,7 +99,17 @@ function dbw_connector_register_abilities() {
 			'execute_callback'    => function ( $input ) {
 				$scope = ( isset( $input['scope'] ) && 'all' === $input['scope'] ) ? 'all' : 'dbw';
 				dbw_connector_log( 'dbw/blocks-catalog', array( 'summary' => 'scope=' . $scope ) );
-				return array( 'blocks' => dbw_connector_build_catalog( $scope ) );
+
+				$result = array( 'blocks' => dbw_connector_build_catalog( $scope ) );
+
+				// House rules travel with the kit — this is the moment the
+				// model is learning how to build here.
+				$playbook = dbw_connector_playbook();
+				if ( '' !== $playbook ) {
+					$result['playbook'] = $playbook;
+				}
+
+				return $result;
 			},
 			'meta' => $read_only,
 		)

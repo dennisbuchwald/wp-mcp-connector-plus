@@ -405,6 +405,37 @@ function dbw_connector_block_example( $type, array $accepts ) {
 }
 
 /**
+ * Editorial knowledge that no schema can carry: page dramaturgy, block
+ * choice, tone, house rules. Shipped as a markdown file in the core and
+ * optionally extended per project.
+ *
+ * Core first, project second — a project file adds to the house rules
+ * rather than replacing them.
+ *
+ * @return string
+ */
+function dbw_connector_playbook() {
+	$theme = get_stylesheet_directory();
+
+	$candidates = array(
+		$theme . '/core/docs/ai-playbook.md',
+		$theme . '/docs/ai-playbook.md',
+	);
+
+	$parts = array();
+	foreach ( apply_filters( 'dbw_connector_playbook_files', $candidates ) as $file ) {
+		if ( is_readable( $file ) ) {
+			$content = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- local theme file, not remote.
+			if ( is_string( $content ) && '' !== trim( $content ) ) {
+				$parts[] = trim( $content );
+			}
+		}
+	}
+
+	return implode( "\n\n---\n\n", $parts );
+}
+
+/**
  * Design tokens from theme.json: the palette a page may actually use.
  *
  * @return array
