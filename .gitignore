@@ -1,3 +1,6 @@
-/vendor/
+# vendor/ IS committed on purpose: WordPress installs the release ZIP as-is
+# and never runs Composer, so an update without it would break the plugin.
+# Dependencies are pinned in composer.json, so the diff noise stays rare.
+
 /tests/wp-shim/
 .DS_Store

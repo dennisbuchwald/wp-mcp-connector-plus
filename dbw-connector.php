@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name:       dbw Connector
- * Plugin URI:        https://github.com/dbwmedia/dbw-wp-mcp-connector
- * Description:       KI-Konnektor für dbw-media-Websites: stellt den Gutenberg-Blockbaum als WordPress-Abilities und MCP-Server bereit.
+ * Plugin URI:        https://github.com/dbwmedia/dbw-connector
+ * Description:       KI-Konnektor für WordPress: stellt den Gutenberg-Blockbaum als WordPress-Abilities und MCP-Server bereit, damit eine KI die Seite bedienen kann wie ein Redakteur.
  * Version:           0.1.0
  * Requires at least: 6.9
  * Requires PHP:      8.1
@@ -10,6 +10,7 @@
  * Author URI:        https://dbw-media.de
  * License:           proprietary
  * Text Domain:       dbw-connector
+ * Update URI:        https://github.com/dbwmedia/dbw-connector
  *
  * @package dbw-connector
  */
@@ -41,6 +42,7 @@ if ( file_exists( DBW_CONNECTOR_DIR . 'vendor/autoload_packages.php' ) ) {
 require_once DBW_CONNECTOR_DIR . 'includes/auth.php';
 require_once DBW_CONNECTOR_DIR . 'includes/audit.php';
 require_once DBW_CONNECTOR_DIR . 'includes/preview.php';
+require_once DBW_CONNECTOR_DIR . 'includes/updater.php';
 
 /**
  * The heavy lifting (tree transforms, validation, ability registration) is
