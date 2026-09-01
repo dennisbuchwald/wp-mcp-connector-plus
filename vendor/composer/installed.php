@@ -3,7 +3,7 @@
         'name' => 'dbwmedia/dbw-connector',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => '566c61ec6715f26c32bd36d079584bb61a94f697',
+        'reference' => '00b08e07fb8c6ece11a71cb5808a7db632cbc7a7',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -22,7 +22,7 @@
         'dbwmedia/dbw-connector' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => '566c61ec6715f26c32bd36d079584bb61a94f697',
+            'reference' => '00b08e07fb8c6ece11a71cb5808a7db632cbc7a7',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

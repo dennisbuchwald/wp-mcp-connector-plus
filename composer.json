@@ -10,7 +10,7 @@
     },
     "config": {
         "allow-plugins": {
-            "automattic/jetpack-autoloader": true
+            "automattic/jetpack-autoloader": false
         },
         "platform-check": false
     }

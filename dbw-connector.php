@@ -67,9 +67,39 @@ add_action( 'wp_abilities_api_init', 'dbw_connector_load_abilities' );
  * register our curated server. The default adapter server (generic
  * discover/execute meta-tools) is disabled — only the dbw server exists.
  */
+/**
+ * The mcp-adapter release this plugin was built and tested against.
+ * It is still 0.x and has had breaking changes between minor versions.
+ */
+const DBW_CONNECTOR_MCP_ADAPTER_VERSION = '0.6.1';
+
 function dbw_connector_boot_mcp() {
 	if ( ! class_exists( '\WP\MCP\Core\McpAdapter' ) ) {
 		return; // Composer deps missing — abilities still work via wp-abilities/v1 REST.
+	}
+
+	/*
+	 * Another plugin on this site may bundle its own copy of mcp-adapter
+	 * and win the autoloader race. Refuse to drive a version we were not
+	 * built against rather than fail in subtle ways at request time —
+	 * the abilities themselves keep working over wp-abilities/v1 REST.
+	 */
+	$loaded = defined( '\WP\MCP\Core\McpAdapter::VERSION' ) ? \WP\MCP\Core\McpAdapter::VERSION : 'unknown';
+	if ( $loaded !== DBW_CONNECTOR_MCP_ADAPTER_VERSION ) {
+		add_action(
+			'admin_notices',
+			function () use ( $loaded ) {
+				if ( ! current_user_can( 'activate_plugins' ) ) {
+					return;
+				}
+				printf(
+					'<div class="notice notice-error"><p><strong>dbw Connector:</strong> Der MCP-Server wurde nicht gestartet. Erwartet wird mcp-adapter %s, geladen ist %s (vermutlich von einem anderen Plugin). Die Fähigkeiten bleiben über <code>wp-abilities/v1</code> erreichbar.</p></div>',
+					esc_html( DBW_CONNECTOR_MCP_ADAPTER_VERSION ),
+					esc_html( $loaded )
+				);
+			}
+		);
+		return;
 	}
 
 	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
