@@ -32,6 +32,29 @@ if ( defined( 'WPMCP_DISABLE' ) && WPMCP_DISABLE ) {
 	return;
 }
 
+/**
+ * Requirements notice. The abilities hook simply never fires without the
+ * Abilities API (WordPress 6.9), so nothing breaks — it just silently does
+ * nothing, which is the worst way to fail. Check late, so an Abilities API
+ * supplied by another plugin still counts, and never bail out early.
+ */
+function wpmcp_requirements_notice() {
+	if ( function_exists( 'wp_register_ability' ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	global $wp_version;
+	printf(
+		'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
+		esc_html__( 'WP MCP Connector Plus is inactive.', 'wp-mcp-connector-plus' ),
+		sprintf(
+			/* translators: %s: current WordPress version */
+			esc_html__( 'It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector.', 'wp-mcp-connector-plus' ),
+			esc_html( $wp_version )
+		)
+	);
+}
+add_action( 'admin_notices', 'wpmcp_requirements_notice' );
+
 // Composer autoloader (mcp-adapter + php-mcp-schema via Jetpack autoloader).
 if ( file_exists( WPMCP_DIR . 'vendor/autoload_packages.php' ) ) {
 	require_once WPMCP_DIR . 'vendor/autoload_packages.php';
