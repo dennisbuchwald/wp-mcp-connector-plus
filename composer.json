@@ -1,8 +1,20 @@
 {
-    "name": "dbwmedia/dbw-connector",
-    "description": "AI connector for dbw media customer sites: exposes the Gutenberg block tree via WordPress Abilities API and MCP.",
+    "name": "dbwmedia/wp-mcp-connector-plus",
+    "description": "MCP server for WordPress that lets AI agents operate a site the way an editor does: block-tree read/write, block-kit discovery with schemas and nesting rules, and validation before every save.",
     "type": "wordpress-plugin",
-    "license": "proprietary",
+    "keywords": [
+        "wordpress",
+        "mcp",
+        "model-context-protocol",
+        "ai",
+        "ai-agent",
+        "gutenberg",
+        "block-editor",
+        "abilities-api",
+        "claude"
+    ],
+    "homepage": "https://github.com/dbwmedia/wp-mcp-connector-plus",
+    "license": "GPL-2.0-or-later",
     "require": {
         "php": ">=8.1",
         "wordpress/mcp-adapter": "0.6.1",

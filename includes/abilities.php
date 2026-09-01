@@ -7,7 +7,7 @@
  * it behave like an editor (look first, duplicate rather than invent,
  * dry-run before writing) instead of a CRUD client.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -17,33 +17,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Register the ability category.
  */
-function dbw_connector_register_category() {
+function wpmcp_register_category() {
 	if ( ! function_exists( 'wp_register_ability_category' ) ) {
 		return;
 	}
 	wp_register_ability_category(
-		'dbw-connector',
+		'wp-mcp-connector-plus',
 		array(
-			'label'       => 'dbw Connector',
-			'description' => 'Block-tree level access to this dbw media website.',
+			'label'       => 'MCP Connector Plus',
+			'description' => 'Block-tree level access to this WordPress site.',
 		)
 	);
 }
-add_action( 'wp_abilities_api_categories_init', 'dbw_connector_register_category' );
+add_action( 'wp_abilities_api_categories_init', 'wpmcp_register_category' );
 
 /**
  * Shared permission callback for every ability.
  *
  * @return bool
  */
-function dbw_connector_can() {
-	return current_user_can( DBW_CONNECTOR_CAP );
+function wpmcp_can() {
+	return current_user_can( WPMCP_CAP );
 }
 
 /**
  * Register all abilities.
  */
-function dbw_connector_register_abilities() {
+function wpmcp_register_abilities() {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		return;
 	}
@@ -58,53 +58,53 @@ function dbw_connector_register_abilities() {
 	);
 
 	wp_register_ability(
-		'dbw/site-info',
+		'wpmcp/site-info',
 		array(
 			'label'       => 'Site-Info',
 			'description' => 'Fingerprint of this website: WordPress/theme/core versions, client name, active feature modules, editable post types, and the design tokens (colour slugs, font sizes, spacing) the design system allows. Call this first in any session — versions and available blocks differ per customer site, so never assume them.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => new stdClass(),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function () {
-				dbw_connector_log( 'dbw/site-info' );
-				return dbw_connector_site_info();
+				wpmcp_log( 'wpmcp/site-info' );
+				return wpmcp_site_info();
 			},
 			'meta' => $read_only,
 		)
 	);
 
 	wp_register_ability(
-		'dbw/blocks-catalog',
+		'wpmcp/blocks-catalog',
 		array(
 			'label'       => 'Block-Katalog',
 			'description' => 'The building kit of this site: every available block with its role (container / child / standalone), what it is for, what may go inside it, and its main variants — plus the editorial playbook (page dramaturgy, block choice, tone, house rules) that no schema can carry. Read the playbook before building anything. This is the overview; use blocks-describe for the full attribute schema of the few blocks you actually intend to use.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
 					'scope' => array(
 						'type'        => 'string',
-						'enum'        => array( 'dbw', 'all' ),
-						'default'     => 'dbw',
-						'description' => '"dbw" lists the design-system blocks (default, almost always what you want). "all" adds WordPress core blocks.',
+						'enum'        => array( 'site', 'all' ),
+						'default'     => 'site',
+						'description' => '"site" lists the design-system blocks (default, almost always what you want). "all" adds WordPress core blocks.',
 					),
 				),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				$scope = ( isset( $input['scope'] ) && 'all' === $input['scope'] ) ? 'all' : 'dbw';
-				dbw_connector_log( 'dbw/blocks-catalog', array( 'summary' => 'scope=' . $scope ) );
+				$scope = ( isset( $input['scope'] ) && 'all' === $input['scope'] ) ? 'all' : 'site';
+				wpmcp_log( 'wpmcp/blocks-catalog', array( 'summary' => 'scope=' . $scope ) );
 
-				$result = array( 'blocks' => dbw_connector_build_catalog( $scope ) );
+				$result = array( 'blocks' => wpmcp_build_catalog( $scope ) );
 
 				// House rules travel with the kit — this is the moment the
 				// model is learning how to build here.
-				$playbook = dbw_connector_playbook();
+				$playbook = wpmcp_playbook();
 				if ( '' !== $playbook ) {
 					$result['playbook'] = $playbook;
 				}
@@ -116,42 +116,42 @@ function dbw_connector_register_abilities() {
 	);
 
 	wp_register_ability(
-		'dbw/blocks-describe',
+		'wpmcp/blocks-describe',
 		array(
 			'label'       => 'Block-Details',
 			'description' => 'Full schema for named blocks: every attribute with its meaning, type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules and a minimal example. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
 					'names' => array(
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
-						'description' => 'Block names, e.g. ["dbw-base/hero", "dbw-base/usp-list"].',
+						'description' => 'Block names as listed by blocks-catalog, e.g. ["core/heading", "acme/hero"].',
 					),
 				),
 				'required'   => array( 'names' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				$names = array_slice( array_filter( (array) ( $input['names'] ?? array() ), 'is_string' ), 0, 15 );
 				if ( empty( $names ) ) {
-					return new \WP_Error( 'dbw_bad_request', 'Provide at least one block name.' );
+					return new \WP_Error( 'wpmcp_bad_request', 'Provide at least one block name.' );
 				}
-				dbw_connector_log( 'dbw/blocks-describe', array( 'summary' => implode( ', ', $names ) ) );
-				return array( 'blocks' => dbw_connector_describe_blocks( $names ) );
+				wpmcp_log( 'wpmcp/blocks-describe', array( 'summary' => implode( ', ', $names ) ) );
+				return array( 'blocks' => wpmcp_describe_blocks( $names ) );
 			},
 			'meta' => $read_only,
 		)
 	);
 
 	wp_register_ability(
-		'dbw/content-list',
+		'wpmcp/content-list',
 		array(
 			'label'       => 'Inhalte auflisten',
 			'description' => 'List pages, posts and custom post types with status, URL and block count. Use uses_block to find real examples of a block in use on this very site — reading two or three existing pages teaches the site\'s tone and section rhythm faster than any guideline.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -165,7 +165,7 @@ function dbw_connector_register_abilities() {
 					),
 					'uses_block' => array(
 						'type'        => 'string',
-						'description' => 'Only content containing this block, e.g. "dbw-base/case-study-grid".',
+						'description' => 'Only content containing this block, e.g. "core/gallery".',
 					),
 					'status'     => array(
 						'type'        => 'string',
@@ -184,21 +184,21 @@ function dbw_connector_register_abilities() {
 				),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				dbw_connector_log( 'dbw/content-list' );
-				return dbw_connector_list_content( is_array( $input ) ? $input : array() );
+				wpmcp_log( 'wpmcp/content-list' );
+				return wpmcp_list_content( is_array( $input ) ? $input : array() );
 			},
 			'meta' => $read_only,
 		)
 	);
 
 	wp_register_ability(
-		'dbw/content-read',
+		'wpmcp/content-read',
 		array(
 			'label'       => 'Seite als Blockbaum lesen',
 			'description' => 'Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" with a path for the section you care about, and only use "full" when you really need the whole page. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write operations. Attributes left at their default are omitted, so what you see is what was actually decided.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -225,17 +225,17 @@ function dbw_connector_register_abilities() {
 				'required'   => array( 'post_id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				$result = dbw_connector_read_content(
+				$result = wpmcp_read_content(
 					(int) ( $input['post_id'] ?? 0 ),
 					(string) ( $input['mode'] ?? 'outline' ),
 					(string) ( $input['path'] ?? '' ),
 					! empty( $input['include_defaults'] )
 				);
 				if ( ! is_wp_error( $result ) ) {
-					dbw_connector_log(
-						'dbw/content-read',
+					wpmcp_log(
+						'wpmcp/content-read',
 						array(
 							'post_id' => (int) ( $input['post_id'] ?? 0 ),
 							'summary' => 'mode=' . (string) ( $input['mode'] ?? 'outline' ),
@@ -249,11 +249,11 @@ function dbw_connector_register_abilities() {
 	);
 
 	wp_register_ability(
-		'dbw/content-write',
+		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
 			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. If validation fails, the errors name the exact block path and reason — fix and call again.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -268,7 +268,7 @@ function dbw_connector_register_abilities() {
 					),
 					'tree'    => array(
 						'type'        => 'array',
-						'description' => 'Full replacement tree. Each node: {"name":"dbw-base/section","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html".',
+						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html".',
 						'items'       => array( 'type' => 'object' ),
 					),
 					'dry_run' => array(
@@ -280,9 +280,9 @@ function dbw_connector_register_abilities() {
 				'required'   => array( 'post_id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				return dbw_connector_write_content( is_array( $input ) ? $input : array() );
+				return wpmcp_write_content( is_array( $input ) ? $input : array() );
 			},
 			'meta' => array(
 				'annotations' => array(
@@ -296,11 +296,11 @@ function dbw_connector_register_abilities() {
 	);
 
 	wp_register_ability(
-		'dbw/content-duplicate',
+		'wpmcp/content-duplicate',
 		array(
 			'label'       => 'Seite duplizieren',
 			'description' => 'Duplicate a page including its blocks, taxonomies and meta. The copy is always a draft. This is the preferred way to create a new page: an existing page already carries the site\'s structure, tone and section rhythm, so adapting a copy beats assembling one from scratch. Find a good source with content-list first.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -316,9 +316,9 @@ function dbw_connector_register_abilities() {
 				'required'   => array( 'post_id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				return dbw_connector_duplicate_post(
+				return wpmcp_duplicate_post(
 					(int) ( $input['post_id'] ?? 0 ),
 					(string) ( $input['title'] ?? '' )
 				);
@@ -335,11 +335,11 @@ function dbw_connector_register_abilities() {
 	);
 
 	wp_register_ability(
-		'dbw/content-preview',
+		'wpmcp/content-preview',
 		array(
 			'label'       => 'Vorschau',
 			'description' => 'Check your own work: returns the server-rendered HTML of the page, its heading outline, and a signed preview URL that works without a login for 15 minutes. Read the headings and HTML to verify structure; open the preview URL in a browser to actually look at the result. Always do this after writing.',
-			'category'    => 'dbw-connector',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -356,9 +356,9 @@ function dbw_connector_register_abilities() {
 				'required'   => array( 'post_id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'dbw_connector_can',
+			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				return dbw_connector_preview_content(
+				return wpmcp_preview_content(
 					(int) ( $input['post_id'] ?? 0 ),
 					! isset( $input['include_html'] ) || (bool) $input['include_html']
 				);

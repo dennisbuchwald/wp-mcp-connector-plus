@@ -7,11 +7,11 @@
  * (fetched into tests/wp-shim), so round-trip results here mean the same
  * thing they would mean on a live site.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 define( 'ABSPATH', __DIR__ . '/' );
-define( 'DBW_CONNECTOR_VERSION', 'test' );
+define( 'WPMCP_VERSION', 'test' );
 
 require_once __DIR__ . '/wp-shim/class-wp-block-parser-block.php';
 require_once __DIR__ . '/wp-shim/class-wp-block-parser-frame.php';
@@ -97,8 +97,22 @@ function is_wp_error( $thing ) {
 	return $thing instanceof WP_Error;
 }
 
+$GLOBALS['dbw_filters'] = array();
+
+function add_filter( $tag, $callback, $priority = 10, $args = 1 ) {
+	$GLOBALS['dbw_filters'][ $tag ][] = $callback;
+	return true;
+}
+
 function apply_filters( $tag, $value ) {
+	foreach ( $GLOBALS['dbw_filters'][ $tag ] ?? array() as $callback ) {
+		$value = $callback( $value );
+	}
 	return $value;
+}
+
+function add_action( $tag, $callback, $priority = 10, $args = 1 ) {
+	return true;
 }
 
 function wp_strip_all_tags( $text ) {
@@ -396,4 +410,19 @@ $registry->register(
 		'title'      => 'Group',
 		'attributes' => array(),
 	)
+);
+
+/*
+ * Register this kit's open containers the way a real theme or plugin would.
+ * The plugin ships only the WordPress core containers; everything else
+ * arrives through this filter, so exercising it here also tests it.
+ */
+add_filter(
+	'wpmcp_open_containers',
+	function ( $blocks ) {
+		$blocks[] = 'dbw-base/section';
+		$blocks[] = 'dbw-base/popup';
+		$blocks[] = 'dbw-base/scroll-scale-section';
+		return $blocks;
+	}
 );

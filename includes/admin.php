@@ -1,10 +1,10 @@
 <?php
 /**
  * Admin surface: connection details, the live-edit switch, and the audit
- * log — so a customer question about what the AI changed has an answer
+ * log — so the question "what did the AI change on my site?" has an answer
  * that does not require database access.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -14,24 +14,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Register the admin page under Tools.
  */
-function dbw_connector_admin_menu() {
+function wpmcp_admin_menu() {
 	add_management_page(
-		'dbw Connector',
-		'dbw Connector',
+		__( 'WP MCP Connector Plus', 'wp-mcp-connector-plus' ),
+		__( 'MCP Connector', 'wp-mcp-connector-plus' ),
 		'manage_options',
-		'dbw-connector',
-		'dbw_connector_render_admin_page'
+		'wp-mcp-connector-plus',
+		'wpmcp_render_admin_page'
 	);
 }
-add_action( 'admin_menu', 'dbw_connector_admin_menu' );
+add_action( 'admin_menu', 'wpmcp_admin_menu' );
 
 /**
  * Register settings.
  */
-function dbw_connector_admin_init() {
+function wpmcp_admin_init() {
 	register_setting(
-		'dbw_connector_settings',
-		'dbw_connector_live_edit',
+		'wpmcp_settings',
+		'wpmcp_live_edit',
 		array(
 			'type'              => 'boolean',
 			'sanitize_callback' => function ( $value ) {
@@ -41,80 +41,78 @@ function dbw_connector_admin_init() {
 		)
 	);
 }
-add_action( 'admin_init', 'dbw_connector_admin_init' );
+add_action( 'admin_init', 'wpmcp_admin_init' );
 
 /**
  * Render the admin page.
  */
-function dbw_connector_render_admin_page() {
+function wpmcp_render_admin_page() {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
 
 	global $wpdb;
-	$table = dbw_connector_audit_table();
+	$table = wpmcp_audit_table();
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- custom plugin table, no core API available.
 	$entries = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id DESC LIMIT 100" );
 
-	$ai_users = get_users( array( 'role' => DBW_CONNECTOR_ROLE ) );
-	$endpoint = rest_url( 'dbw-connector/v1/mcp' );
+	$ai_users = get_users( array( 'role' => WPMCP_ROLE ) );
+	$endpoint = rest_url( 'wpmcp/v1/mcp' );
 	?>
 	<div class="wrap">
-		<h1>dbw Connector</h1>
+		<h1><?php esc_html_e( 'WP MCP Connector Plus', 'wp-mcp-connector-plus' ); ?></h1>
 
-		<h2>Verbindung</h2>
+		<h2><?php esc_html_e( 'Connection', 'wp-mcp-connector-plus' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row">MCP-Endpunkt</th>
+				<th scope="row"><?php esc_html_e( 'MCP endpoint', 'wp-mcp-connector-plus' ); ?></th>
 				<td><code><?php echo esc_html( $endpoint ); ?></code></td>
 			</tr>
 			<tr>
-				<th scope="row">KI-Benutzer</th>
+				<th scope="row"><?php esc_html_e( 'Agent user', 'wp-mcp-connector-plus' ); ?></th>
 				<td>
 					<?php if ( empty( $ai_users ) ) : ?>
 						<p>
-							Noch kein Benutzer mit der Rolle <code>dbw KI-Redakteur</code>.
-							Lege einen an (Benutzer &rarr; Neu hinzuf&uuml;gen), weise ihm diese Rolle zu
-							und erzeuge in seinem Profil ein Anwendungspasswort.
+							<?php esc_html_e( 'No user has the AI Editor role yet. Create one under Users → Add New, give it that role, then generate an application password in its profile.', 'wp-mcp-connector-plus' ); ?>
 						</p>
 					<?php else : ?>
 						<ul>
 							<?php foreach ( $ai_users as $user ) : ?>
 								<li>
 									<code><?php echo esc_html( $user->user_login ); ?></code>
-									&ndash; <a href="<?php echo esc_url( get_edit_user_link( $user->ID ) ); ?>">Anwendungspasswort verwalten</a>
+									&ndash;
+									<a href="<?php echo esc_url( get_edit_user_link( $user->ID ) ); ?>">
+										<?php esc_html_e( 'manage application passwords', 'wp-mcp-connector-plus' ); ?>
+									</a>
 								</li>
 							<?php endforeach; ?>
 						</ul>
 					<?php endif; ?>
 					<p class="description">
-						Anwendungspassw&ouml;rter sind ausschlie&szlig;lich f&uuml;r diese Rolle freigeschaltet.
-						F&uuml;r alle anderen Benutzer bleiben sie deaktiviert.
+						<?php esc_html_e( 'Application passwords are enabled for this role only. For every other user they stay exactly as your site configured them.', 'wp-mcp-connector-plus' ); ?>
 					</p>
 				</td>
 			</tr>
 		</table>
 
-		<h2>Einstellungen</h2>
+		<h2><?php esc_html_e( 'Settings', 'wp-mcp-connector-plus' ); ?></h2>
 		<form method="post" action="options.php">
-			<?php settings_fields( 'dbw_connector_settings' ); ?>
+			<?php settings_fields( 'wpmcp_settings' ); ?>
 			<table class="form-table" role="presentation">
 				<tr>
-					<th scope="row">Ver&ouml;ffentlichte Seiten bearbeiten</th>
+					<th scope="row"><?php esc_html_e( 'Edit published content', 'wp-mcp-connector-plus' ); ?></th>
 					<td>
 						<label>
-							<input type="checkbox" name="dbw_connector_live_edit" value="1"
-								<?php checked( dbw_connector_live_edit_enabled() ); ?>
-								<?php disabled( defined( 'DBW_CONNECTOR_LIVE_EDIT' ) ); ?> />
-							Die KI darf ver&ouml;ffentlichte Inhalte direkt &auml;ndern
+							<input type="checkbox" name="wpmcp_live_edit" value="1"
+								<?php checked( wpmcp_live_edit_enabled() ); ?>
+								<?php disabled( defined( 'WPMCP_LIVE_EDIT' ) ); ?> />
+							<?php esc_html_e( 'Allow agents to change published pages directly', 'wp-mcp-connector-plus' ); ?>
 						</label>
 						<p class="description">
-							Aus: Die KI arbeitet nur an Entw&uuml;rfen und neuen Seiten &ndash; Live-Seiten sind
-							f&uuml;r sie schreibgesch&uuml;tzt. Ver&ouml;ffentlichen kann sie in keinem Fall,
-							das bleibt beim Menschen. Jede Schreibung erzeugt eine Revision.
-							<?php if ( defined( 'DBW_CONNECTOR_LIVE_EDIT' ) ) : ?>
-								<br><strong>Per Konstante in der wp-config.php festgelegt.</strong>
+							<?php esc_html_e( 'Off: agents work on drafts and new pages only, and published content is read-only to them. Publishing is never possible either way, that stays with a human. Every write creates a revision.', 'wp-mcp-connector-plus' ); ?>
+							<?php if ( defined( 'WPMCP_LIVE_EDIT' ) ) : ?>
+								<br><strong><?php esc_html_e( 'Currently fixed by a constant in wp-config.php.', 'wp-mcp-connector-plus' ); ?></strong>
 							<?php endif; ?>
 						</p>
 					</td>
@@ -123,21 +121,21 @@ function dbw_connector_render_admin_page() {
 			<?php submit_button(); ?>
 		</form>
 
-		<h2>Protokoll</h2>
-		<p class="description">Die letzten 100 Zugriffe.</p>
+		<h2><?php esc_html_e( 'Activity log', 'wp-mcp-connector-plus' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'The last 100 calls.', 'wp-mcp-connector-plus' ); ?></p>
 		<table class="widefat striped">
 			<thead>
 				<tr>
-					<th>Zeit (UTC)</th>
-					<th>Aktion</th>
-					<th>Seite</th>
-					<th>Modus</th>
-					<th>Ergebnis</th>
+					<th><?php esc_html_e( 'Time (UTC)', 'wp-mcp-connector-plus' ); ?></th>
+					<th><?php esc_html_e( 'Ability', 'wp-mcp-connector-plus' ); ?></th>
+					<th><?php esc_html_e( 'Content', 'wp-mcp-connector-plus' ); ?></th>
+					<th><?php esc_html_e( 'Mode', 'wp-mcp-connector-plus' ); ?></th>
+					<th><?php esc_html_e( 'Result', 'wp-mcp-connector-plus' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
 			<?php if ( empty( $entries ) ) : ?>
-				<tr><td colspan="5">Noch keine Eintr&auml;ge.</td></tr>
+				<tr><td colspan="5"><?php esc_html_e( 'Nothing logged yet.', 'wp-mcp-connector-plus' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $entries as $entry ) : ?>
 					<tr>
@@ -152,11 +150,20 @@ function dbw_connector_render_admin_page() {
 								&mdash;
 							<?php endif; ?>
 						</td>
-						<td><?php echo $entry->dry_run ? 'Testlauf' : esc_html( $entry->operation ?: '&mdash;' ); ?></td>
+						<td>
+							<?php
+							echo $entry->dry_run
+								? esc_html__( 'dry run', 'wp-mcp-connector-plus' )
+								: esc_html( $entry->operation ? $entry->operation : '—' );
+							?>
+						</td>
 						<td>
 							<?php echo esc_html( $entry->summary ); ?>
 							<?php if ( $entry->revision_id ) : ?>
-								<br><a href="<?php echo esc_url( (string) get_edit_post_link( (int) $entry->revision_id ) ); ?>">Revision ansehen</a>
+								<br>
+								<a href="<?php echo esc_url( (string) get_edit_post_link( (int) $entry->revision_id ) ); ?>">
+									<?php esc_html_e( 'view revision', 'wp-mcp-connector-plus' ); ?>
+								</a>
 							<?php endif; ?>
 						</td>
 					</tr>

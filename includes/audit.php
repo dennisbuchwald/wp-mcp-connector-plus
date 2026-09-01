@@ -3,7 +3,7 @@
  * Audit log: every connector action lands in a dedicated table, so any
  * customer question "what did the AI do to my site?" has a precise answer.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -15,19 +15,19 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return string
  */
-function dbw_connector_audit_table() {
+function wpmcp_audit_table() {
 	global $wpdb;
-	return $wpdb->prefix . 'dbw_connector_log';
+	return $wpdb->prefix . 'wpmcp_log';
 }
 
 /**
  * Create the audit table (activation).
  */
-function dbw_connector_create_audit_table() {
+function wpmcp_create_audit_table() {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-	$table   = dbw_connector_audit_table();
+	$table   = wpmcp_audit_table();
 	$charset = $wpdb->get_charset_collate();
 
 	dbDelta(
@@ -51,14 +51,14 @@ function dbw_connector_create_audit_table() {
 /**
  * Write one audit entry. Never throws — logging must not break the action.
  *
- * @param string $ability     Ability name (e.g. 'dbw/content-write').
+ * @param string $ability     Ability name (e.g. 'wpmcp/content-write').
  * @param array  $data        Optional: post_id, operation, dry_run, summary, revision_id.
  */
-function dbw_connector_log( $ability, array $data = array() ) {
+function wpmcp_log( $ability, array $data = array() ) {
 	global $wpdb;
 
 	$wpdb->insert(
-		dbw_connector_audit_table(),
+		wpmcp_audit_table(),
 		array(
 			'created_at'  => current_time( 'mysql', true ),
 			'user_id'     => get_current_user_id(),

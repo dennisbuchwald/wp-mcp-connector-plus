@@ -8,7 +8,7 @@
  *
  * Usage: php tests/run-integration.php [path/to/dbw-base-core]
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -82,7 +82,7 @@ function check( $condition, $message, $detail = '' ) {
 // --- Catalogue ---------------------------------------------------------
 echo "\n\033[1mKatalog\033[0m\n";
 
-$catalog = dbw_connector_build_catalog( 'dbw' );
+$catalog = wpmcp_build_catalog( 'site' );
 check( count( $catalog ) > 40, sprintf( 'Katalog enthält %d Blöcke', count( $catalog ) ) );
 
 $roles = array_count_values( array_column( $catalog, 'role' ) );
@@ -163,7 +163,7 @@ check(
 echo "\n\033[1mBlock-Details\033[0m\n";
 
 $heavy    = array( 'dbw-base/hero', 'dbw-base/card-item', 'dbw-base/footer-info' );
-$detailed = dbw_connector_describe_blocks( $heavy );
+$detailed = wpmcp_describe_blocks( $heavy );
 
 foreach ( $detailed as $block ) {
 	if ( isset( $block['error'] ) ) {
@@ -205,7 +205,7 @@ check(
 // --- Deprecated enum values -------------------------------------------
 echo "\n\033[1mDeprecated-Werte\033[0m\n";
 
-$section = dbw_connector_describe_blocks( array( 'dbw-base/section' ) )[0];
+$section = wpmcp_describe_blocks( array( 'dbw-base/section' ) )[0];
 $bg      = null;
 foreach ( $section['attributes'] as $group ) {
 	if ( isset( $group['backgroundColor'] ) ) {
@@ -225,7 +225,7 @@ if ( $bg ) {
 
 // A stored legacy value must still validate.
 $blocks = parse_blocks( '<!-- wp:dbw-base/section {"backgroundColor":"dark-grey"} /-->' );
-$v      = dbw_connector_validate_blocks( $blocks );
+$v      = wpmcp_validate_blocks( $blocks );
 check( empty( $v['errors'] ), 'Gespeicherter Legacy-Wert bleibt gültig (Bestandsschutz)' );
 check( ! empty( $v['warnings'] ), 'Gespeicherter Legacy-Wert erzeugt eine Warnung' );
 
@@ -266,10 +266,10 @@ $valid_page = array(
 );
 
 $errors = array();
-$built  = dbw_connector_tree_to_blocks( $valid_page, '', $errors );
+$built  = wpmcp_tree_to_blocks( $valid_page, '', $errors );
 check( empty( $errors ), 'Realistische Seite lässt sich in Blöcke übersetzen', implode( '; ', $errors ) );
 
-$v = dbw_connector_validate_blocks( $built );
+$v = wpmcp_validate_blocks( $built );
 check( empty( $v['errors'] ), 'Realistische Seite besteht die Validierung', implode( ' | ', $v['errors'] ) );
 
 $markup = serialize_blocks( $built );
@@ -277,12 +277,12 @@ check( str_contains( $markup, 'wp:dbw-base/hero' ), 'Serialisierung erzeugt gül
 
 $reparsed = parse_blocks( $markup );
 check(
-	dbw_connector_count_blocks( $reparsed ) === dbw_connector_count_blocks( $built ),
+	wpmcp_count_blocks( $reparsed ) === wpmcp_count_blocks( $built ),
 	'Roundtrip der realistischen Seite ist verlustfrei'
 );
 
 // Wrong nesting must be caught with the real schemas.
-$bad = dbw_connector_tree_to_blocks(
+$bad = wpmcp_tree_to_blocks(
 	array(
 		array(
 			'name'  => 'dbw-base/card-item',
@@ -292,10 +292,10 @@ $bad = dbw_connector_tree_to_blocks(
 	'',
 	$errors
 );
-$v = dbw_connector_validate_blocks( $bad );
+$v = wpmcp_validate_blocks( $bad );
 check( ! empty( $v['errors'] ), 'Falsche Verschachtelung wird mit echten Schemas erkannt' );
 
-$bad = dbw_connector_tree_to_blocks(
+$bad = wpmcp_tree_to_blocks(
 	array(
 		array(
 			'name'        => 'dbw-base/cards',
@@ -311,7 +311,7 @@ $bad = dbw_connector_tree_to_blocks(
 	'',
 	$errors
 );
-$v = dbw_connector_validate_blocks( $bad );
+$v = wpmcp_validate_blocks( $bad );
 check( ! empty( $v['errors'] ), 'Falsches Kind in geschlossenem Container wird erkannt' );
 
 // --- Result ------------------------------------------------------------

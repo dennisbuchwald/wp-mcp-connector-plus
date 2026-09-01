@@ -4,7 +4,7 @@
  * WP_Block_Type_Registry. Deliberately strict: unknown attribute, wrong
  * type or enum violation is an error — hallucination protection.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param string $path       Human-readable tree path for messages.
  * @return array { errors: string[], warnings: string[] }
  */
-function dbw_connector_validate_attrs( $block_name, array $attrs, $path ) {
+function wpmcp_validate_attrs( $block_name, array $attrs, $path ) {
 	$errors   = array();
 	$warnings = array();
 
@@ -33,8 +33,8 @@ function dbw_connector_validate_attrs( $block_name, array $attrs, $path ) {
 		}
 
 		if ( ! isset( $defs[ $key ] ) ) {
-			// Core blocks register many attrs dynamically; only enforce for dbw/theme blocks.
-			if ( dbw_connector_is_dbw_block( $block_name ) ) {
+			// Core blocks register many attributes dynamically; only enforce this for site kit blocks.
+			if ( wpmcp_is_site_block( $block_name ) ) {
 				$errors[] = sprintf( '%s: unknown attribute "%s" on %s.', $path, $key, $block_name );
 			}
 			continue;
@@ -42,7 +42,7 @@ function dbw_connector_validate_attrs( $block_name, array $attrs, $path ) {
 
 		$def = $defs[ $key ];
 
-		$type_error = dbw_connector_check_type( $value, $def['type'] ?? null );
+		$type_error = wpmcp_check_type( $value, $def['type'] ?? null );
 		if ( $type_error ) {
 			$errors[] = sprintf( '%s: attribute "%s" %s.', $path, $key, $type_error );
 			continue;
@@ -81,7 +81,7 @@ function dbw_connector_validate_attrs( $block_name, array $attrs, $path ) {
 						$warnings[] = sprintf( '%s: "%s[%d].%s" is not a declared item property.', $path, $key, $i, $ikey );
 						continue;
 					}
-					$ierr = dbw_connector_check_type( $ival, $props[ $ikey ]['type'] ?? null );
+					$ierr = wpmcp_check_type( $ival, $props[ $ikey ]['type'] ?? null );
 					if ( $ierr ) {
 						$errors[] = sprintf( '%s: "%s[%d].%s" %s.', $path, $key, $i, $ikey, $ierr );
 					}
@@ -103,7 +103,7 @@ function dbw_connector_validate_attrs( $block_name, array $attrs, $path ) {
  * @param string|array|null $type  Declared type(s).
  * @return string|null Error fragment or null if OK.
  */
-function dbw_connector_check_type( $value, $type ) {
+function wpmcp_check_type( $value, $type ) {
 	if ( null === $type ) {
 		return null;
 	}
@@ -151,11 +151,11 @@ function dbw_connector_check_type( $value, $type ) {
 }
 
 /**
- * Is this one of our own (dbw core or per-project theme) blocks?
+ * Is this a block from the site kit (theme or plugin), rather than a WordPress core block?
  *
  * @param string $block_name Block name.
  * @return bool
  */
-function dbw_connector_is_dbw_block( $block_name ) {
+function wpmcp_is_site_block( $block_name ) {
 	return 0 !== strpos( $block_name, 'core/' ) && false !== strpos( $block_name, '/' );
 }

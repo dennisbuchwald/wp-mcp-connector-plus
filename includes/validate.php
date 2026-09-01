@@ -9,7 +9,7 @@
  * 4. design      no free colours or sizes where theme.json locks them
  * 5. roundtrip   serialize -> parse -> compare, then render smoke test
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -22,11 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param array $blocks Parsed blocks to validate.
  * @return array { errors: string[], warnings: string[], serialized: string }
  */
-function dbw_connector_validate_blocks( array $blocks ) {
+function wpmcp_validate_blocks( array $blocks ) {
 	$errors   = array();
 	$warnings = array();
 
-	dbw_connector_walk_validate( $blocks, null, array(), $errors, $warnings );
+	wpmcp_walk_validate( $blocks, null, array(), $errors, $warnings );
 
 	$serialized = '';
 
@@ -35,18 +35,18 @@ function dbw_connector_validate_blocks( array $blocks ) {
 		$serialized = serialize_blocks( $blocks );
 
 		$reparsed = parse_blocks( $serialized );
-		if ( dbw_connector_count_blocks( $reparsed ) !== dbw_connector_count_blocks( $blocks ) ) {
+		if ( wpmcp_count_blocks( $reparsed ) !== wpmcp_count_blocks( $blocks ) ) {
 			$errors[] = 'Roundtrip check failed: serialising and re-parsing changes the block count. The tree was not written.';
 		} else {
-			$before = dbw_connector_block_names( $blocks );
-			$after  = dbw_connector_block_names( $reparsed );
+			$before = wpmcp_block_names( $blocks );
+			$after  = wpmcp_block_names( $reparsed );
 			if ( $before !== $after ) {
 				$errors[] = 'Roundtrip check failed: block order or names change when re-parsed. The tree was not written.';
 			}
 		}
 
 		if ( empty( $errors ) ) {
-			$render = dbw_connector_render_smoke_test( $serialized );
+			$render = wpmcp_render_smoke_test( $serialized );
 			if ( is_wp_error( $render ) ) {
 				$errors[] = 'Render check failed: ' . $render->get_error_message();
 			} elseif ( ! empty( $render['notices'] ) ) {
@@ -74,7 +74,7 @@ function dbw_connector_validate_blocks( array $blocks ) {
  * @param array       $warnings Warnings (by reference).
  * @param string      $prefix   Path prefix.
  */
-function dbw_connector_walk_validate( array $blocks, $parent, array $ancestry, array &$errors, array &$warnings, $prefix = '' ) {
+function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$errors, array &$warnings, $prefix = '' ) {
 	$registry = \WP_Block_Type_Registry::get_instance();
 	$index    = 0;
 
@@ -104,19 +104,19 @@ function dbw_connector_walk_validate( array $blocks, $parent, array $ancestry, a
 
 		// Stage 2: attributes.
 		$attrs  = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
-		$result = dbw_connector_validate_attrs( $name, $attrs, $path );
+		$result = wpmcp_validate_attrs( $name, $attrs, $path );
 		$errors   = array_merge( $errors, $result['errors'] );
 		$warnings = array_merge( $warnings, $result['warnings'] );
 
 		// Stage 3: structure.
-		dbw_connector_validate_nesting( $type, $name, $parent, $ancestry, $path, $errors );
-		dbw_connector_validate_allowed_children( $type, $name, $block, $path, $errors );
+		wpmcp_validate_nesting( $type, $name, $parent, $ancestry, $path, $errors );
+		wpmcp_validate_allowed_children( $type, $name, $block, $path, $errors );
 
 		// Stage 4: design contract.
-		dbw_connector_validate_design( $name, $attrs, $path, $errors, $warnings );
+		wpmcp_validate_design( $name, $attrs, $path, $errors, $warnings );
 
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-			dbw_connector_walk_validate(
+			wpmcp_walk_validate(
 				$block['innerBlocks'],
 				$name,
 				array_merge( $ancestry, array( $name ) ),
@@ -140,7 +140,7 @@ function dbw_connector_walk_validate( array $blocks, $parent, array $ancestry, a
  * @param string         $path     Path.
  * @param array          $errors   Errors (by reference).
  */
-function dbw_connector_validate_nesting( $type, $name, $parent, array $ancestry, $path, array &$errors ) {
+function wpmcp_validate_nesting( $type, $name, $parent, array $ancestry, $path, array &$errors ) {
 	if ( ! empty( $type->parent ) && is_array( $type->parent ) ) {
 		if ( null === $parent || ! in_array( $parent, $type->parent, true ) ) {
 			$errors[] = sprintf(
@@ -174,7 +174,7 @@ function dbw_connector_validate_nesting( $type, $name, $parent, array $ancestry,
  * @param string         $path   Path.
  * @param array          $errors Errors (by reference).
  */
-function dbw_connector_validate_allowed_children( $type, $name, array $block, $path, array &$errors ) {
+function wpmcp_validate_allowed_children( $type, $name, array $block, $path, array &$errors ) {
 	$allowed = $type->allowed_blocks ?? null;
 	if ( empty( $allowed ) || ! is_array( $allowed ) ) {
 		return;
@@ -209,14 +209,14 @@ function dbw_connector_validate_allowed_children( $type, $name, array $block, $p
  * @param array  $errors   Errors (by reference).
  * @param array  $warnings Warnings (by reference).
  */
-function dbw_connector_validate_design( $name, array $attrs, $path, array &$errors, array &$warnings ) {
+function wpmcp_validate_design( $name, array $attrs, $path, array &$errors, array &$warnings ) {
 	$settings     = function_exists( 'wp_get_global_settings' ) ? wp_get_global_settings() : array();
 	$custom_color = $settings['color']['custom'] ?? true;
 	$custom_size  = $settings['typography']['customFontSize'] ?? true;
 
 	$style = $attrs['style'] ?? null;
 	if ( is_array( $style ) && false === $custom_color ) {
-		$found = dbw_connector_find_hex_values( $style );
+		$found = wpmcp_find_hex_values( $style );
 		foreach ( $found as $hex ) {
 			$errors[] = sprintf(
 				'%s: literal colour "%s" in style — theme.json disables custom colours. Use a preset slug from site-info.designTokens.colors.',
@@ -240,9 +240,9 @@ function dbw_connector_validate_design( $name, array $attrs, $path, array &$erro
 			continue;
 		}
 		if ( preg_match( '/color$/i', $key ) && preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $value ) ) {
-			if ( dbw_connector_is_dbw_block( $name ) ) {
+			if ( wpmcp_is_site_block( $name ) ) {
 				$errors[] = sprintf(
-					'%s: attribute "%s" is a hex value ("%s"). dbw blocks expect preset colour slugs.',
+					'%s: attribute "%s" is a hex value ("%s"). Site kit blocks expect preset colour slugs.',
 					$path,
 					$key,
 					$value
@@ -260,7 +260,7 @@ function dbw_connector_validate_design( $name, array $attrs, $path, array &$erro
  * @param array $style Style array.
  * @return string[]
  */
-function dbw_connector_find_hex_values( array $style ) {
+function wpmcp_find_hex_values( array $style ) {
 	$found = array();
 	array_walk_recursive(
 		$style,
@@ -280,7 +280,7 @@ function dbw_connector_find_hex_values( array $style ) {
  * @param string $serialized Serialized block markup.
  * @return array|\WP_Error { notices: string[] }
  */
-function dbw_connector_render_smoke_test( $serialized ) {
+function wpmcp_render_smoke_test( $serialized ) {
 	$notices = array();
 
 	set_error_handler( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_handler
@@ -304,7 +304,7 @@ function dbw_connector_render_smoke_test( $serialized ) {
 		}
 		restore_error_handler();
 		return new \WP_Error(
-			'dbw_render_failed',
+			'wpmcp_render_failed',
 			sprintf( '%s in %s:%d', $e->getMessage(), basename( $e->getFile() ), $e->getLine() )
 		);
 	}

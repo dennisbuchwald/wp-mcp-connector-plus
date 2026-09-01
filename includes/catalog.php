@@ -6,7 +6,7 @@
  * Everything is derived live from WP_Block_Type_Registry, so per-project
  * theme blocks and core updates are picked up without maintenance here.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -14,35 +14,48 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Containers that accept arbitrary children. Closed containers declare
- * `allowedBlocks` in their block.json and need no entry here; this list
- * only covers the open ones, which cannot express "anything" in schema.
+ * Containers that accept arbitrary children.
  *
- * Extend via the filter when a project adds an open container block.
+ * A closed container declares `allowedBlocks` in its block.json and is
+ * detected automatically. An open container cannot express "anything" in
+ * schema, and whether a block has InnerBlocks at all is not readable
+ * server-side — so open containers have to be named.
+ *
+ * Ships with the WordPress core containers. Add your own kit's open
+ * containers from your theme or plugin:
+ *
+ *     add_filter( 'wpmcp_open_containers', function ( $blocks ) {
+ *         $blocks[] = 'acme/section';
+ *         return $blocks;
+ *     } );
  *
  * @return string[]
  */
-function dbw_connector_open_containers() {
+function wpmcp_open_containers() {
 	return apply_filters(
-		'dbw_connector_open_containers',
+		'wpmcp_open_containers',
 		array(
-			'dbw-base/section',
-			'dbw-base/popup',
-			'dbw-base/scroll-scale-section',
 			'core/group',
 			'core/columns',
 			'core/column',
+			'core/cover',
 		)
 	);
 }
 
 /**
- * Block names never worth offering to the AI (editor plumbing, deprecated).
+ * Blocks not worth offering to an agent — editor plumbing, deprecated
+ * blocks, anything that only makes sense through the UI.
+ *
+ *     add_filter( 'wpmcp_hidden_blocks', function ( $blocks ) {
+ *         $blocks[] = 'acme/internal-widget';
+ *         return $blocks;
+ *     } );
  *
  * @return string[]
  */
-function dbw_connector_hidden_blocks() {
-	return apply_filters( 'dbw_connector_hidden_blocks', array( 'dbw-base/career-quiz' ) );
+function wpmcp_hidden_blocks() {
+	return apply_filters( 'wpmcp_hidden_blocks', array() );
 }
 
 /**
@@ -52,7 +65,7 @@ function dbw_connector_hidden_blocks() {
  *
  * @return array<string, string[]>
  */
-function dbw_connector_child_map() {
+function wpmcp_child_map() {
 	static $map = null;
 	if ( null !== $map ) {
 		return $map;
@@ -77,12 +90,12 @@ function dbw_connector_child_map() {
  * @param \WP_Block_Type $type Block type.
  * @return string
  */
-function dbw_connector_block_role( $type ) {
+function wpmcp_block_role( $type ) {
 	if ( ! empty( $type->parent ) ) {
 		return 'child';
 	}
-	$children = dbw_connector_child_map();
-	if ( isset( $children[ $type->name ] ) || ! empty( $type->allowed_blocks ) || in_array( $type->name, dbw_connector_open_containers(), true ) ) {
+	$children = wpmcp_child_map();
+	if ( isset( $children[ $type->name ] ) || ! empty( $type->allowed_blocks ) || in_array( $type->name, wpmcp_open_containers(), true ) ) {
 		return 'container';
 	}
 	return 'standalone';
@@ -94,7 +107,7 @@ function dbw_connector_block_role( $type ) {
  * @param \WP_Block_Type $type Block type.
  * @return array { mode: string, blocks: string[] }
  */
-function dbw_connector_accepts( $type ) {
+function wpmcp_accepts( $type ) {
 	if ( ! empty( $type->allowed_blocks ) && is_array( $type->allowed_blocks ) ) {
 		return array(
 			'mode'   => 'only',
@@ -102,7 +115,7 @@ function dbw_connector_accepts( $type ) {
 		);
 	}
 
-	$children = dbw_connector_child_map();
+	$children = wpmcp_child_map();
 	if ( isset( $children[ $type->name ] ) ) {
 		return array(
 			'mode'   => 'only',
@@ -110,7 +123,7 @@ function dbw_connector_accepts( $type ) {
 		);
 	}
 
-	if ( in_array( $type->name, dbw_connector_open_containers(), true ) ) {
+	if ( in_array( $type->name, wpmcp_open_containers(), true ) ) {
 		return array(
 			'mode'   => 'any',
 			'blocks' => array(),
@@ -127,11 +140,11 @@ function dbw_connector_accepts( $type ) {
  * Should this block appear in the catalogue at all?
  *
  * @param \WP_Block_Type $type  Block type.
- * @param string         $scope 'dbw' (own blocks) or 'all'.
+ * @param string         $scope 'site' (blocks registered by this site's theme/plugins) or 'all'.
  * @return bool
  */
-function dbw_connector_include_block( $type, $scope ) {
-	if ( in_array( $type->name, dbw_connector_hidden_blocks(), true ) ) {
+function wpmcp_include_block( $type, $scope ) {
+	if ( in_array( $type->name, wpmcp_hidden_blocks(), true ) ) {
 		return false;
 	}
 	if ( isset( $type->supports['inserter'] ) && false === $type->supports['inserter'] && empty( $type->parent ) ) {
@@ -140,28 +153,28 @@ function dbw_connector_include_block( $type, $scope ) {
 	if ( 'all' === $scope ) {
 		return true;
 	}
-	return dbw_connector_is_dbw_block( $type->name );
+	return wpmcp_is_site_block( $type->name );
 }
 
 /**
  * K1: the compact catalogue — one entry per block, cheap enough to always
  * have in context.
  *
- * @param string $scope 'dbw' or 'all'.
+ * @param string $scope 'site' or 'all'.
  * @return array
  */
-function dbw_connector_build_catalog( $scope = 'dbw' ) {
+function wpmcp_build_catalog( $scope = 'site' ) {
 	$blocks = array();
 
 	foreach ( \WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
-		if ( ! dbw_connector_include_block( $type, $scope ) ) {
+		if ( ! wpmcp_include_block( $type, $scope ) ) {
 			continue;
 		}
 
 		$entry = array(
 			'name'  => $name,
 			'title' => (string) $type->title,
-			'role'  => dbw_connector_block_role( $type ),
+			'role'  => wpmcp_block_role( $type ),
 		);
 
 		$description = trim( (string) $type->description );
@@ -173,12 +186,12 @@ function dbw_connector_build_catalog( $scope = 'dbw' ) {
 			$entry['parent'] = array_values( (array) $type->parent );
 		}
 
-		$accepts = dbw_connector_accepts( $type );
+		$accepts = wpmcp_accepts( $type );
 		if ( 'none' !== $accepts['mode'] ) {
 			$entry['accepts'] = ( 'any' === $accepts['mode'] ) ? 'any' : $accepts['blocks'];
 		}
 
-		$variants = dbw_connector_key_variants( $type );
+		$variants = wpmcp_key_variants( $type );
 		if ( ! empty( $variants ) ) {
 			$entry['variants'] = $variants;
 		}
@@ -203,7 +216,7 @@ function dbw_connector_build_catalog( $scope = 'dbw' ) {
  * @param \WP_Block_Type $type Block type.
  * @return array<string, string[]>
  */
-function dbw_connector_key_variants( $type ) {
+function wpmcp_key_variants( $type ) {
 	if ( ! is_array( $type->attributes ) ) {
 		return array();
 	}
@@ -230,7 +243,7 @@ function dbw_connector_key_variants( $type ) {
  * @param string[] $names Block names.
  * @return array
  */
-function dbw_connector_describe_blocks( array $names ) {
+function wpmcp_describe_blocks( array $names ) {
 	$registry = \WP_Block_Type_Registry::get_instance();
 	$out      = array();
 
@@ -248,8 +261,8 @@ function dbw_connector_describe_blocks( array $names ) {
 			'name'        => $name,
 			'title'       => (string) $type->title,
 			'description' => (string) $type->description,
-			'role'        => dbw_connector_block_role( $type ),
-			'attributes'  => dbw_connector_describe_attributes( $type ),
+			'role'        => wpmcp_block_role( $type ),
+			'attributes'  => wpmcp_describe_attributes( $type ),
 		);
 
 		if ( ! empty( $type->parent ) ) {
@@ -259,7 +272,7 @@ function dbw_connector_describe_blocks( array $names ) {
 			$entry['mustHaveAncestor'] = array_values( (array) $type->ancestor );
 		}
 
-		$accepts = dbw_connector_accepts( $type );
+		$accepts = wpmcp_accepts( $type );
 		if ( 'any' === $accepts['mode'] ) {
 			$entry['accepts'] = 'any';
 		} elseif ( 'only' === $accepts['mode'] ) {
@@ -278,7 +291,7 @@ function dbw_connector_describe_blocks( array $names ) {
 			}
 		}
 
-		$entry['example'] = dbw_connector_block_example( $type, $accepts );
+		$entry['example'] = wpmcp_block_example( $type, $accepts );
 
 		$out[] = $entry;
 	}
@@ -292,7 +305,7 @@ function dbw_connector_describe_blocks( array $names ) {
  * @param \WP_Block_Type $type Block type.
  * @return array
  */
-function dbw_connector_describe_attributes( $type ) {
+function wpmcp_describe_attributes( $type ) {
 	if ( ! is_array( $type->attributes ) ) {
 		return array();
 	}
@@ -331,7 +344,7 @@ function dbw_connector_describe_attributes( $type ) {
 			$item['itemProperties'] = $props;
 		}
 
-		$groups[ dbw_connector_attribute_group( $key, $description ) ][ $key ] = $item;
+		$groups[ wpmcp_attribute_group( $key, $description ) ][ $key ] = $item;
 	}
 
 	return array_filter(
@@ -349,7 +362,7 @@ function dbw_connector_describe_attributes( $type ) {
  * @param string $description Attribute description.
  * @return string
  */
-function dbw_connector_attribute_group( $key, $description ) {
+function wpmcp_attribute_group( $key, $description ) {
 	if ( 0 === stripos( $description, 'legacy' ) ) {
 		return 'legacy';
 	}
@@ -373,7 +386,7 @@ function dbw_connector_attribute_group( $key, $description ) {
  * @param array          $accepts Accept rules.
  * @return array
  */
-function dbw_connector_block_example( $type, array $accepts ) {
+function wpmcp_block_example( $type, array $accepts ) {
 	$attrs = array();
 
 	if ( is_array( $type->attributes ) ) {
@@ -414,7 +427,7 @@ function dbw_connector_block_example( $type, array $accepts ) {
  *
  * @return string
  */
-function dbw_connector_playbook() {
+function wpmcp_playbook() {
 	$theme = get_stylesheet_directory();
 
 	$candidates = array(
@@ -423,7 +436,7 @@ function dbw_connector_playbook() {
 	);
 
 	$parts = array();
-	foreach ( apply_filters( 'dbw_connector_playbook_files', $candidates ) as $file ) {
+	foreach ( apply_filters( 'wpmcp_playbook_files', $candidates ) as $file ) {
 		if ( is_readable( $file ) ) {
 			$content = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- local theme file, not remote.
 			if ( is_string( $content ) && '' !== trim( $content ) ) {
@@ -440,7 +453,7 @@ function dbw_connector_playbook() {
  *
  * @return array
  */
-function dbw_connector_design_tokens() {
+function wpmcp_design_tokens() {
 	if ( ! function_exists( 'wp_get_global_settings' ) ) {
 		return array();
 	}

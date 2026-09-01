@@ -8,15 +8,15 @@
  * engages when the query parameter is present (one isset() per request,
  * zero cost otherwise).
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const DBW_CONNECTOR_PREVIEW_PARAM = 'dbw_ai_preview';
-const DBW_CONNECTOR_PREVIEW_TTL   = 900; // 15 minutes.
+const WPMCP_PREVIEW_PARAM = 'wpmcp_preview';
+const WPMCP_PREVIEW_TTL   = 900; // 15 minutes.
 
 /**
  * Build the token for a post + expiry timestamp.
@@ -25,7 +25,7 @@ const DBW_CONNECTOR_PREVIEW_TTL   = 900; // 15 minutes.
  * @param int $expires Unix timestamp.
  * @return string
  */
-function dbw_connector_preview_token( $post_id, $expires ) {
+function wpmcp_preview_token( $post_id, $expires ) {
 	return hash_hmac( 'sha256', $post_id . '|' . $expires, wp_salt( 'auth' ) );
 }
 
@@ -35,15 +35,15 @@ function dbw_connector_preview_token( $post_id, $expires ) {
  * @param int $post_id Post ID.
  * @return array { url: string, expires: int }
  */
-function dbw_connector_preview_url( $post_id ) {
-	$expires = time() + DBW_CONNECTOR_PREVIEW_TTL;
+function wpmcp_preview_url( $post_id ) {
+	$expires = time() + WPMCP_PREVIEW_TTL;
 	$url     = add_query_arg(
 		array(
 			'p'                          => (int) $post_id,
 			'post_type'                  => get_post_type( $post_id ) ?: 'page',
-			DBW_CONNECTOR_PREVIEW_PARAM  => '1',
+			WPMCP_PREVIEW_PARAM  => '1',
 			'exp'                        => $expires,
-			'tok'                        => dbw_connector_preview_token( (int) $post_id, $expires ),
+			'tok'                        => wpmcp_preview_token( (int) $post_id, $expires ),
 		),
 		home_url( '/' )
 	);
@@ -58,9 +58,9 @@ function dbw_connector_preview_url( $post_id ) {
  * the preview parameter is present — this is the only frontend code path
  * of the whole plugin.
  */
-function dbw_connector_maybe_allow_preview() {
+function wpmcp_maybe_allow_preview() {
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- token-signed public preview, no session.
-	if ( ! isset( $_GET[ DBW_CONNECTOR_PREVIEW_PARAM ] ) ) {
+	if ( ! isset( $_GET[ WPMCP_PREVIEW_PARAM ] ) ) {
 		return;
 	}
 
@@ -76,7 +76,7 @@ function dbw_connector_maybe_allow_preview() {
 	if ( $expires < time() ) {
 		return;
 	}
-	if ( ! hash_equals( dbw_connector_preview_token( $post_id, $expires ), $token ) ) {
+	if ( ! hash_equals( wpmcp_preview_token( $post_id, $expires ), $token ) ) {
 		return;
 	}
 
@@ -107,4 +107,4 @@ function dbw_connector_maybe_allow_preview() {
 		1
 	);
 }
-add_action( 'init', 'dbw_connector_maybe_allow_preview' );
+add_action( 'init', 'wpmcp_maybe_allow_preview' );

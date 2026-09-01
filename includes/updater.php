@@ -3,14 +3,14 @@
  * Updates straight from GitHub, so a customer site can be kept current
  * from the WordPress update screen instead of by SFTP.
  *
- * Release flow: bump the version in dbw-connector.php, tag it, publish a
+ * Release flow: bump the version in wp-mcp-connector-plus.php, tag it, publish a
  * GitHub release. Sites pick it up within a day, or immediately via
  * "Nach Updates suchen" on the plugin page.
  *
  * The repository ships its own vendor/ directory, because WordPress
  * installs the ZIP as-is and never runs Composer.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -19,15 +19,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * GitHub repository the updates come from.
- * Override with DBW_CONNECTOR_REPO in wp-config.php when testing a fork.
+ * Override with WPMCP_REPO in wp-config.php when testing a fork.
  *
  * @return string
  */
-function dbw_connector_repo_url() {
-	if ( defined( 'DBW_CONNECTOR_REPO' ) && DBW_CONNECTOR_REPO ) {
-		return DBW_CONNECTOR_REPO;
+function wpmcp_repo_url() {
+	if ( defined( 'WPMCP_REPO' ) && WPMCP_REPO ) {
+		return WPMCP_REPO;
 	}
-	return 'https://github.com/dbwmedia/dbw-connector';
+	return 'https://github.com/dbwmedia/wp-mcp-connector-plus';
 }
 
 /**
@@ -36,7 +36,7 @@ function dbw_connector_repo_url() {
  * Only runs where WordPress actually checks for updates (admin, cron,
  * WP-CLI) — a normal page view must not pay for this.
  */
-function dbw_connector_init_updater() {
+function wpmcp_init_updater() {
 	if ( ! is_admin() && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 		return;
 	}
@@ -46,9 +46,9 @@ function dbw_connector_init_updater() {
 	}
 
 	$checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-		dbw_connector_repo_url(),
-		DBW_CONNECTOR_FILE,
-		'dbw-connector'
+		wpmcp_repo_url(),
+		WPMCP_FILE,
+		'wp-mcp-connector-plus'
 	);
 
 	/*
@@ -66,11 +66,11 @@ function dbw_connector_init_updater() {
 
 	/*
 	 * Private repositories need a token. Put this in wp-config.php:
-	 *   define( 'DBW_CONNECTOR_GITHUB_TOKEN', 'ghp_...' );
+	 *   define( 'WPMCP_GITHUB_TOKEN', 'ghp_...' );
 	 * A fine-grained token with read access to this one repository is enough.
 	 */
-	if ( defined( 'DBW_CONNECTOR_GITHUB_TOKEN' ) && DBW_CONNECTOR_GITHUB_TOKEN ) {
-		$checker->setAuthentication( DBW_CONNECTOR_GITHUB_TOKEN );
+	if ( defined( 'WPMCP_GITHUB_TOKEN' ) && WPMCP_GITHUB_TOKEN ) {
+		$checker->setAuthentication( WPMCP_GITHUB_TOKEN );
 	}
 }
-add_action( 'init', 'dbw_connector_init_updater' );
+add_action( 'init', 'wpmcp_init_updater' );

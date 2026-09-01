@@ -3,43 +3,43 @@
  * Authentication: dedicated AI role with minimal capabilities, and a
  * surgical re-enable of Application Passwords for that role only.
  *
- * Context: dbw-base-core hard-disables Application Passwords globally
- * (security-hardening.php). We keep that stance for every human user and
- * open exactly one slit: users holding the dbw_ai_editor role may use
+ * Context: some hardened setups (and security plugins) disable Application
+ * Passwords globally. We keep that stance for every human user and
+ * open exactly one slit: users holding the wpmcp_ai_editor role may use
  * Application Passwords. XML-RPC, login hiding and REST discovery
  * hardening stay untouched.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const DBW_CONNECTOR_ROLE = 'dbw_ai_editor';
+const WPMCP_ROLE = 'wpmcp_ai_editor';
 
 /**
  * Marker capability — everything connector-specific checks this, so access
  * can also be granted to an admin for debugging via a role editor.
  */
-const DBW_CONNECTOR_CAP = 'dbw_connector_access';
+const WPMCP_CAP = 'wpmcp_access';
 
 /**
  * Register the AI editor role. Draft-only by design: no publish_*, no
  * delete_*, no upload_files, no settings. Publishing stays human.
  *
  * edit_published_posts/pages are granted at role level but stripped at
- * runtime unless live-edit is enabled (see dbw_connector_filter_caps).
+ * runtime unless live-edit is enabled (see wpmcp_filter_caps).
  */
-function dbw_connector_register_role() {
+function wpmcp_register_role() {
 	// Re-create on every activation so cap changes ship with updates.
-	remove_role( DBW_CONNECTOR_ROLE );
+	remove_role( WPMCP_ROLE );
 	add_role(
-		DBW_CONNECTOR_ROLE,
-		'dbw KI-Redakteur',
+		WPMCP_ROLE,
+		__( 'AI Editor', 'wp-mcp-connector-plus' ),
 		array(
 			'read'                  => true,
-			DBW_CONNECTOR_CAP       => true,
+			WPMCP_CAP              => true,
 			'edit_posts'            => true,
 			'edit_others_posts'     => true,
 			'edit_published_posts'  => true,
@@ -56,11 +56,11 @@ function dbw_connector_register_role() {
  *
  * @return bool
  */
-function dbw_connector_live_edit_enabled() {
-	if ( defined( 'DBW_CONNECTOR_LIVE_EDIT' ) ) {
-		return (bool) DBW_CONNECTOR_LIVE_EDIT;
+function wpmcp_live_edit_enabled() {
+	if ( defined( 'WPMCP_LIVE_EDIT' ) ) {
+		return (bool) WPMCP_LIVE_EDIT;
 	}
-	return (bool) get_option( 'dbw_connector_live_edit', false );
+	return (bool) get_option( 'wpmcp_live_edit', false );
 }
 
 /**
@@ -73,16 +73,16 @@ function dbw_connector_live_edit_enabled() {
  * @param \WP_User $user    The user object.
  * @return array
  */
-function dbw_connector_filter_caps( $allcaps, $caps, $args, $user ) {
-	if ( empty( $allcaps[ DBW_CONNECTOR_CAP ] ) ) {
+function wpmcp_filter_caps( $allcaps, $caps, $args, $user ) {
+	if ( empty( $allcaps[ WPMCP_CAP ] ) ) {
 		return $allcaps;
 	}
-	if ( ! dbw_connector_live_edit_enabled() ) {
+	if ( ! wpmcp_live_edit_enabled() ) {
 		unset( $allcaps['edit_published_posts'], $allcaps['edit_published_pages'] );
 	}
 	return $allcaps;
 }
-add_filter( 'user_has_cap', 'dbw_connector_filter_caps', 10, 4 );
+add_filter( 'user_has_cap', 'wpmcp_filter_caps', 10, 4 );
 
 /**
  * Is the given user an AI connector user?
@@ -90,12 +90,12 @@ add_filter( 'user_has_cap', 'dbw_connector_filter_caps', 10, 4 );
  * @param int|\WP_User $user User ID or object.
  * @return bool
  */
-function dbw_connector_is_ai_user( $user ) {
+function wpmcp_is_ai_user( $user ) {
 	$user = is_object( $user ) ? $user : get_userdata( (int) $user );
 	if ( ! $user instanceof \WP_User ) {
 		return false;
 	}
-	return ! empty( $user->allcaps[ DBW_CONNECTOR_CAP ] ) || in_array( DBW_CONNECTOR_ROLE, (array) $user->roles, true );
+	return ! empty( $user->allcaps[ WPMCP_CAP ] ) || in_array( WPMCP_ROLE, (array) $user->roles, true );
 }
 
 /**
@@ -115,10 +115,10 @@ add_filter( 'wp_is_application_passwords_available', '__return_true', 100 );
  * @param \WP_User $user      The user.
  * @return bool
  */
-function dbw_connector_app_passwords_for_user( $available, $user ) {
-	return dbw_connector_is_ai_user( $user );
+function wpmcp_app_passwords_for_user( $available, $user ) {
+	return wpmcp_is_ai_user( $user );
 }
-add_filter( 'wp_is_application_passwords_available_for_user', 'dbw_connector_app_passwords_for_user', 100, 2 );
+add_filter( 'wp_is_application_passwords_available_for_user', 'wpmcp_app_passwords_for_user', 100, 2 );
 
 /**
  * Transport-level permission for the MCP endpoint: authenticated AI user
@@ -126,6 +126,6 @@ add_filter( 'wp_is_application_passwords_available_for_user', 'dbw_connector_app
  *
  * @return bool
  */
-function dbw_connector_transport_permission() {
-	return is_user_logged_in() && current_user_can( DBW_CONNECTOR_CAP );
+function wpmcp_transport_permission() {
+	return is_user_logged_in() && current_user_can( WPMCP_CAP );
 }

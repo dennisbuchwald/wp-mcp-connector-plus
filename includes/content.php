@@ -7,7 +7,7 @@
  * - every real write goes through the validation pipeline first
  * - every real write leaves a revision, so rollback is one click
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return string[]
  */
-function dbw_connector_allowed_post_types() {
+function wpmcp_allowed_post_types() {
 	$types = array();
 	foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $type ) {
 		if ( ! $type->public && 'page' !== $type->name ) {
@@ -30,7 +30,7 @@ function dbw_connector_allowed_post_types() {
 		}
 		$types[] = $type->name;
 	}
-	return apply_filters( 'dbw_connector_allowed_post_types', $types );
+	return apply_filters( 'wpmcp_allowed_post_types', $types );
 }
 
 /**
@@ -39,16 +39,16 @@ function dbw_connector_allowed_post_types() {
  * @param int $post_id Post ID.
  * @return \WP_Post|\WP_Error
  */
-function dbw_connector_get_readable_post( $post_id ) {
+function wpmcp_get_readable_post( $post_id ) {
 	$post = get_post( (int) $post_id );
 	if ( ! $post ) {
-		return new \WP_Error( 'dbw_not_found', sprintf( 'No post with ID %d.', (int) $post_id ) );
+		return new \WP_Error( 'wpmcp_not_found', sprintf( 'No post with ID %d.', (int) $post_id ) );
 	}
-	if ( ! in_array( $post->post_type, dbw_connector_allowed_post_types(), true ) ) {
-		return new \WP_Error( 'dbw_forbidden_type', sprintf( 'Post type "%s" is not exposed to the connector.', $post->post_type ) );
+	if ( ! in_array( $post->post_type, wpmcp_allowed_post_types(), true ) ) {
+		return new \WP_Error( 'wpmcp_forbidden_type', sprintf( 'Post type "%s" is not exposed to the connector.', $post->post_type ) );
 	}
 	if ( ! current_user_can( 'edit_post', $post->ID ) && 'publish' !== $post->post_status ) {
-		return new \WP_Error( 'dbw_forbidden', sprintf( 'No permission to read post %d.', $post->ID ) );
+		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to read post %d.', $post->ID ) );
 	}
 	return $post;
 }
@@ -60,23 +60,23 @@ function dbw_connector_get_readable_post( $post_id ) {
  * @param int $post_id Post ID.
  * @return \WP_Post|\WP_Error
  */
-function dbw_connector_get_writable_post( $post_id ) {
-	$post = dbw_connector_get_readable_post( $post_id );
+function wpmcp_get_writable_post( $post_id ) {
+	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
 
 	if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-		if ( 'publish' === $post->post_status && ! dbw_connector_live_edit_enabled() ) {
+		if ( 'publish' === $post->post_status && ! wpmcp_live_edit_enabled() ) {
 			return new \WP_Error(
-				'dbw_live_edit_disabled',
+				'wpmcp_live_edit_disabled',
 				sprintf(
 					'Post %d is published and live editing is switched off for this site. Duplicate it with content-duplicate and edit the draft instead.',
 					$post->ID
 				)
 			);
 		}
-		return new \WP_Error( 'dbw_forbidden', sprintf( 'No permission to edit post %d.', $post->ID ) );
+		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to edit post %d.', $post->ID ) );
 	}
 
 	return $post;
@@ -88,11 +88,11 @@ function dbw_connector_get_writable_post( $post_id ) {
  * @param array $args { post_type, status, search, uses_block, per_page, page }.
  * @return array
  */
-function dbw_connector_list_content( array $args ) {
+function wpmcp_list_content( array $args ) {
 	$per_page = min( 100, max( 1, (int) ( $args['per_page'] ?? 20 ) ) );
 
 	$query_args = array(
-		'post_type'      => $args['post_type'] ?? dbw_connector_allowed_post_types(),
+		'post_type'      => $args['post_type'] ?? wpmcp_allowed_post_types(),
 		'post_status'    => $args['status'] ?? array( 'publish', 'draft', 'pending', 'future', 'private' ),
 		'posts_per_page' => $per_page,
 		'paged'          => max( 1, (int) ( $args['page'] ?? 1 ) ),
@@ -121,7 +121,7 @@ function dbw_connector_list_content( array $args ) {
 			'url'      => get_permalink( $post ),
 			'parent'   => $post->post_parent,
 			'modified' => $post->post_modified_gmt,
-			'blocks'   => dbw_connector_count_blocks( parse_blocks( $post->post_content ) ),
+			'blocks'   => wpmcp_count_blocks( parse_blocks( $post->post_content ) ),
 		);
 	}
 
@@ -142,8 +142,8 @@ function dbw_connector_list_content( array $args ) {
  * @param bool   $include_defaults Keep default-valued attributes.
  * @return array|\WP_Error
  */
-function dbw_connector_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false ) {
-	$post = dbw_connector_get_readable_post( $post_id );
+function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false ) {
+	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
@@ -156,32 +156,32 @@ function dbw_connector_read_content( $post_id, $mode = 'outline', $path = '', $i
 		'type'       => $post->post_type,
 		'status'     => $post->post_status,
 		'url'        => get_permalink( $post ),
-		'blockCount' => dbw_connector_count_blocks( $blocks ),
+		'blockCount' => wpmcp_count_blocks( $blocks ),
 		'mode'       => $mode,
 	);
 
 	if ( 'outline' === $mode ) {
-		$result['outline'] = dbw_connector_blocks_to_outline( $blocks );
+		$result['outline'] = wpmcp_blocks_to_outline( $blocks );
 		return $result;
 	}
 
 	if ( 'subtree' === $mode ) {
-		$segments = dbw_connector_path_parse( $path );
+		$segments = wpmcp_path_parse( $path );
 		if ( null === $segments || empty( $segments ) ) {
-			return new \WP_Error( 'dbw_bad_path', 'Mode "subtree" needs a path like "2" or "2.0.1".' );
+			return new \WP_Error( 'wpmcp_bad_path', 'Mode "subtree" needs a path like "2" or "2.0.1".' );
 		}
-		$node = dbw_connector_blocks_at_path( $blocks, $segments );
+		$node = wpmcp_blocks_at_path( $blocks, $segments );
 		if ( null === $node ) {
-			return new \WP_Error( 'dbw_path_not_found', sprintf( 'Path "%s" does not exist in post %d.', $path, $post->ID ) );
+			return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Path "%s" does not exist in post %d.', $path, $post->ID ) );
 		}
 		$prefix = $segments;
 		array_pop( $prefix );
-		$tree           = dbw_connector_blocks_to_tree( array( $node ), $prefix, $include_defaults );
+		$tree           = wpmcp_blocks_to_tree( array( $node ), $prefix, $include_defaults );
 		$result['tree'] = $tree;
 		return $result;
 	}
 
-	$result['tree'] = dbw_connector_blocks_to_tree( $blocks, array(), $include_defaults );
+	$result['tree'] = wpmcp_blocks_to_tree( $blocks, array(), $include_defaults );
 
 	return $result;
 }
@@ -192,24 +192,24 @@ function dbw_connector_read_content( $post_id, $mode = 'outline', $path = '', $i
  * @param array $args { post_id, tree?, ops?, dry_run }.
  * @return array|\WP_Error
  */
-function dbw_connector_write_content( array $args ) {
+function wpmcp_write_content( array $args ) {
 	$post_id = (int) ( $args['post_id'] ?? 0 );
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 
-	$post = dbw_connector_get_writable_post( $post_id );
+	$post = wpmcp_get_writable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
 
 	$before_blocks = parse_blocks( $post->post_content );
-	$before_count  = dbw_connector_count_blocks( $before_blocks );
+	$before_count  = wpmcp_count_blocks( $before_blocks );
 
 	$has_tree = isset( $args['tree'] ) && is_array( $args['tree'] );
 	$has_ops  = isset( $args['ops'] ) && is_array( $args['ops'] ) && ! empty( $args['ops'] );
 
 	if ( $has_tree === $has_ops ) {
 		return new \WP_Error(
-			'dbw_bad_request',
+			'wpmcp_bad_request',
 			'Provide either "tree" (replace the whole page) or "ops" (patch operations), not both and not neither.'
 		);
 	}
@@ -218,7 +218,7 @@ function dbw_connector_write_content( array $args ) {
 
 	if ( $has_tree ) {
 		$errors = array();
-		$blocks = dbw_connector_tree_to_blocks( $args['tree'], '', $errors );
+		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors );
 		if ( ! empty( $errors ) ) {
 			return array(
 				'ok'       => false,
@@ -228,7 +228,7 @@ function dbw_connector_write_content( array $args ) {
 			);
 		}
 	} else {
-		$applied = dbw_connector_apply_ops( $before_blocks, $args['ops'] );
+		$applied = wpmcp_apply_ops( $before_blocks, $args['ops'] );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
@@ -236,8 +236,8 @@ function dbw_connector_write_content( array $args ) {
 		$op_summary = $applied['summary'];
 	}
 
-	$validation = dbw_connector_validate_blocks( $blocks );
-	$after_count = dbw_connector_count_blocks( $blocks );
+	$validation = wpmcp_validate_blocks( $blocks );
+	$after_count = wpmcp_count_blocks( $blocks );
 
 	$diff = array(
 		'blocksBefore' => $before_count,
@@ -270,8 +270,8 @@ function dbw_connector_write_content( array $args ) {
 	);
 
 	if ( ! empty( $validation['errors'] ) ) {
-		dbw_connector_log(
-			'dbw/content-write',
+		wpmcp_log(
+			'wpmcp/content-write',
 			array(
 				'post_id'   => $post->ID,
 				'operation' => $has_tree ? 'tree' : 'ops',
@@ -284,8 +284,8 @@ function dbw_connector_write_content( array $args ) {
 
 	if ( $dry_run ) {
 		$response['message'] = 'Dry run only — nothing was saved. Call again with dry_run: false to write.';
-		dbw_connector_log(
-			'dbw/content-write',
+		wpmcp_log(
+			'wpmcp/content-write',
 			array(
 				'post_id'   => $post->ID,
 				'operation' => $has_tree ? 'tree' : 'ops',
@@ -316,10 +316,10 @@ function dbw_connector_write_content( array $args ) {
 
 	$response['message']    = 'Saved.';
 	$response['revisionId'] = $revision_id;
-	$response['preview']    = dbw_connector_preview_url( $post->ID );
+	$response['preview']    = wpmcp_preview_url( $post->ID );
 
-	dbw_connector_log(
-		'dbw/content-write',
+	wpmcp_log(
+		'wpmcp/content-write',
 		array(
 			'post_id'     => $post->ID,
 			'operation'   => $has_tree ? 'tree' : 'ops',
@@ -343,15 +343,15 @@ function dbw_connector_write_content( array $args ) {
  * @param string $title   Optional new title.
  * @return array|\WP_Error
  */
-function dbw_connector_duplicate_post( $post_id, $title = '' ) {
-	$post = dbw_connector_get_readable_post( $post_id );
+function wpmcp_duplicate_post( $post_id, $title = '' ) {
+	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
 
 	$type_object = get_post_type_object( $post->post_type );
 	if ( ! $type_object || ! current_user_can( $type_object->cap->create_posts ) ) {
-		return new \WP_Error( 'dbw_forbidden', sprintf( 'No permission to create %s content.', $post->post_type ) );
+		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to create %s content.', $post->post_type ) );
 	}
 
 	$new_title = '' !== trim( (string) $title ) ? trim( (string) $title ) : $post->post_title . ' (Kopie)';
@@ -397,8 +397,8 @@ function dbw_connector_duplicate_post( $post_id, $title = '' ) {
 		}
 	}
 
-	dbw_connector_log(
-		'dbw/content-duplicate',
+	wpmcp_log(
+		'wpmcp/content-duplicate',
 		array(
 			'post_id'   => $new_id,
 			'operation' => 'duplicate',
@@ -412,7 +412,7 @@ function dbw_connector_duplicate_post( $post_id, $title = '' ) {
 		'sourceId' => $post->ID,
 		'title'    => $new_title,
 		'status'   => 'draft',
-		'preview'  => dbw_connector_preview_url( (int) $new_id ),
+		'preview'  => wpmcp_preview_url( (int) $new_id ),
 		'message'  => 'Created as a draft. A human publishes it.',
 	);
 }
@@ -425,13 +425,13 @@ function dbw_connector_duplicate_post( $post_id, $title = '' ) {
  * @param bool $include_html Whether to return the rendered HTML.
  * @return array|\WP_Error
  */
-function dbw_connector_preview_content( $post_id, $include_html = true ) {
-	$post = dbw_connector_get_readable_post( $post_id );
+function wpmcp_preview_content( $post_id, $include_html = true ) {
+	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
 
-	$preview = dbw_connector_preview_url( $post->ID );
+	$preview = wpmcp_preview_url( $post->ID );
 
 	$result = array(
 		'id'          => $post->ID,
@@ -443,7 +443,7 @@ function dbw_connector_preview_content( $post_id, $include_html = true ) {
 	);
 
 	if ( $include_html ) {
-		$rendered = dbw_connector_render_post_html( $post );
+		$rendered = wpmcp_render_post_html( $post );
 		if ( is_wp_error( $rendered ) ) {
 			$result['renderError'] = $rendered->get_error_message();
 		} else {
@@ -455,8 +455,8 @@ function dbw_connector_preview_content( $post_id, $include_html = true ) {
 		}
 	}
 
-	dbw_connector_log(
-		'dbw/content-preview',
+	wpmcp_log(
+		'wpmcp/content-preview',
 		array(
 			'post_id'   => $post->ID,
 			'operation' => 'preview',
@@ -474,8 +474,8 @@ function dbw_connector_preview_content( $post_id, $include_html = true ) {
  * @param \WP_Post $post Post.
  * @return array|\WP_Error
  */
-function dbw_connector_render_post_html( $post ) {
-	$smoke = dbw_connector_render_smoke_test( $post->post_content );
+function wpmcp_render_post_html( $post ) {
+	$smoke = wpmcp_render_smoke_test( $post->post_content );
 	if ( is_wp_error( $smoke ) ) {
 		return $smoke;
 	}
@@ -488,14 +488,14 @@ function dbw_connector_render_post_html( $post ) {
 		foreach ( $matches as $match ) {
 			$headings[] = array(
 				'level' => (int) $match[1],
-				'text'  => dbw_connector_shorten( wp_strip_all_tags( $match[2] ), 120 ),
+				'text'  => wpmcp_shorten( wp_strip_all_tags( $match[2] ), 120 ),
 			);
 		}
 	}
 
 	$max = 60000;
 	if ( strlen( $html ) > $max ) {
-		$html = substr( $html, 0, $max ) . "\n<!-- truncated by dbw-connector -->";
+		$html = substr( $html, 0, $max ) . "\n<!-- truncated by wp-mcp-connector-plus -->";
 	}
 
 	return array(
@@ -511,13 +511,13 @@ function dbw_connector_render_post_html( $post ) {
  *
  * @return array
  */
-function dbw_connector_site_info() {
+function wpmcp_site_info() {
 	global $wp_version;
 
 	$theme = wp_get_theme();
 
 	$post_types = array();
-	foreach ( dbw_connector_allowed_post_types() as $name ) {
+	foreach ( wpmcp_allowed_post_types() as $name ) {
 		$object = get_post_type_object( $name );
 		if ( $object ) {
 			$post_types[] = array(
@@ -532,7 +532,7 @@ function dbw_connector_site_info() {
 		'siteUrl'         => home_url(),
 		'wpVersion'       => $wp_version,
 		'phpVersion'      => PHP_VERSION,
-		'connectorVersion'=> DBW_CONNECTOR_VERSION,
+		'connectorVersion'=> WPMCP_VERSION,
 		'theme'           => array(
 			'name'    => $theme->get( 'Name' ),
 			'version' => $theme->get( 'Version' ),
@@ -541,9 +541,9 @@ function dbw_connector_site_info() {
 		'requiredCore'    => defined( 'DBW_REQUIRED_CORE_VERSION' ) ? DBW_REQUIRED_CORE_VERSION : null,
 		'clientName'      => defined( 'DBW_CLIENT_NAME' ) ? DBW_CLIENT_NAME : null,
 		'postTypes'       => $post_types,
-		'designTokens'    => dbw_connector_design_tokens(),
-		'liveEdit'        => dbw_connector_live_edit_enabled(),
-		'blockCount'      => count( dbw_connector_build_catalog( 'dbw' ) ),
+		'designTokens'    => wpmcp_design_tokens(),
+		'liveEdit'        => wpmcp_live_edit_enabled(),
+		'blockCount'      => count( wpmcp_build_catalog( 'site' ) ),
 	);
 
 	if ( function_exists( 'dbw_get_settings' ) ) {

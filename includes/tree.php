@@ -6,7 +6,7 @@
  * Design rule: the model never sees or writes serialized block markup.
  * Serialization happens here, in PHP, after validation.
  *
- * @package dbw-connector
+ * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param bool  $include_defaults Whether to keep attributes equal to their default.
  * @return array
  */
-function dbw_connector_blocks_to_tree( array $blocks, array $prefix = array(), $include_defaults = false ) {
+function wpmcp_blocks_to_tree( array $blocks, array $prefix = array(), $include_defaults = false ) {
 	$out = array();
 	$i   = 0;
 
@@ -30,7 +30,7 @@ function dbw_connector_blocks_to_tree( array $blocks, array $prefix = array(), $
 		if ( null === $block['blockName'] ) {
 			if ( '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
 				$out[] = array(
-					'path' => dbw_connector_path_string( array_merge( $prefix, array( $i ) ) ),
+					'path' => wpmcp_path_string( array_merge( $prefix, array( $i ) ) ),
 					'name' => null,
 					'html' => $block['innerHTML'],
 				);
@@ -43,11 +43,11 @@ function dbw_connector_blocks_to_tree( array $blocks, array $prefix = array(), $
 		$attrs = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
 
 		if ( ! $include_defaults ) {
-			$attrs = dbw_connector_strip_defaults( $block['blockName'], $attrs );
+			$attrs = wpmcp_strip_defaults( $block['blockName'], $attrs );
 		}
 
 		$node = array(
-			'path'  => dbw_connector_path_string( $path ),
+			'path'  => wpmcp_path_string( $path ),
 			'name'  => $block['blockName'],
 			'attrs' => (object) $attrs,
 		);
@@ -57,7 +57,7 @@ function dbw_connector_blocks_to_tree( array $blocks, array $prefix = array(), $
 		$html         = (string) ( $block['innerHTML'] ?? '' );
 
 		if ( $has_children ) {
-			$node['innerBlocks'] = dbw_connector_blocks_to_tree( $inner_blocks, $path, $include_defaults );
+			$node['innerBlocks'] = wpmcp_blocks_to_tree( $inner_blocks, $path, $include_defaults );
 
 			// Mixed content (wrapper markup around children, e.g. core/group):
 			// keep the original interleaving so we can rebuild it byte-exactly.
@@ -83,7 +83,7 @@ function dbw_connector_blocks_to_tree( array $blocks, array $prefix = array(), $
  * @param array  $errors Collected errors (by reference).
  * @return array Blocks ready for serialize_blocks().
  */
-function dbw_connector_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
+function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
 	$blocks = array();
 
 	foreach ( array_values( $nodes ) as $i => $node ) {
@@ -122,19 +122,19 @@ function dbw_connector_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
 
 		$children = array();
 		if ( ! empty( $node['innerBlocks'] ) && is_array( $node['innerBlocks'] ) ) {
-			$children = dbw_connector_tree_to_blocks( $node['innerBlocks'], $path, $errors );
+			$children = wpmcp_tree_to_blocks( $node['innerBlocks'], $path, $errors );
 		}
 
 		$html     = (string) ( $node['html'] ?? '' );
 		$template = ( isset( $node['htmlTemplate'] ) && is_array( $node['htmlTemplate'] ) ) ? $node['htmlTemplate'] : null;
 
-		$inner_content = dbw_connector_build_inner_content( $children, $html, $template, $path, $errors );
+		$inner_content = wpmcp_build_inner_content( $children, $html, $template, $path, $errors );
 
 		$blocks[] = array(
 			'blockName'    => $name,
 			'attrs'        => $attrs,
 			'innerBlocks'  => $children,
-			'innerHTML'    => dbw_connector_inner_html_from_content( $inner_content ),
+			'innerHTML'    => wpmcp_inner_html_from_content( $inner_content ),
 			'innerContent' => $inner_content,
 		);
 	}
@@ -152,14 +152,14 @@ function dbw_connector_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
  * @param array       $errors   Errors (by reference).
  * @return array
  */
-function dbw_connector_build_inner_content( array $children, $html, $template, $path, array &$errors ) {
+function wpmcp_build_inner_content( array $children, $html, $template, $path, array &$errors ) {
 	$child_count = count( $children );
 
 	if ( 0 === $child_count ) {
 		return ( '' === $html ) ? array() : array( $html );
 	}
 
-	// Children only (the dbw InnerBlocks.Content pattern): pure null slots.
+	// Children only (the InnerBlocks.Content pattern): pure null slots.
 	if ( '' === trim( $html ) && null === $template ) {
 		return array_fill( 0, $child_count, null );
 	}
@@ -191,7 +191,7 @@ function dbw_connector_build_inner_content( array $children, $html, $template, $
 
 	// Markup plus children but no template: we cannot know the interleaving.
 	$errors[] = sprintf(
-		'%s: block has both "html" and "innerBlocks" but no "htmlTemplate". Build containers from dbw blocks (e.g. dbw-base/section) or keep the htmlTemplate from content-read.',
+		'%s: block has both "html" and "innerBlocks" but no "htmlTemplate". Use a container block from the site kit, or keep the htmlTemplate you got from content-read.',
 		$path
 	);
 
@@ -204,7 +204,7 @@ function dbw_connector_build_inner_content( array $children, $html, $template, $
  * @param array $inner_content Inner content chunks.
  * @return string
  */
-function dbw_connector_inner_html_from_content( array $inner_content ) {
+function wpmcp_inner_html_from_content( array $inner_content ) {
 	$html = '';
 	foreach ( $inner_content as $chunk ) {
 		if ( is_string( $chunk ) ) {
@@ -222,7 +222,7 @@ function dbw_connector_inner_html_from_content( array $inner_content ) {
  * @param array  $attrs      Attributes.
  * @return array
  */
-function dbw_connector_strip_defaults( $block_name, array $attrs ) {
+function wpmcp_strip_defaults( $block_name, array $attrs ) {
 	$type = \WP_Block_Type_Registry::get_instance()->get_registered( $block_name );
 	if ( ! $type || ! is_array( $type->attributes ) ) {
 		return $attrs;
@@ -247,7 +247,7 @@ function dbw_connector_strip_defaults( $block_name, array $attrs ) {
  * @param int   $depth  Current depth.
  * @return array
  */
-function dbw_connector_blocks_to_outline( array $blocks, array $prefix = array(), $depth = 0 ) {
+function wpmcp_blocks_to_outline( array $blocks, array $prefix = array(), $depth = 0 ) {
 	$out = array();
 	$i   = 0;
 
@@ -262,18 +262,18 @@ function dbw_connector_blocks_to_outline( array $blocks, array $prefix = array()
 		$name = $block['blockName'] ?? '(html)';
 
 		$entry = array(
-			'path' => dbw_connector_path_string( $path ),
+			'path' => wpmcp_path_string( $path ),
 			'name' => $name,
 		);
 
-		$label = dbw_connector_block_label( $block );
+		$label = wpmcp_block_label( $block );
 		if ( '' !== $label ) {
 			$entry['label'] = $label;
 		}
 
 		$children = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : array();
 		if ( ! empty( $children ) ) {
-			$entry['children'] = dbw_connector_blocks_to_outline( $children, $path, $depth + 1 );
+			$entry['children'] = wpmcp_blocks_to_outline( $children, $path, $depth + 1 );
 		}
 
 		$out[] = $entry;
@@ -289,19 +289,19 @@ function dbw_connector_blocks_to_outline( array $blocks, array $prefix = array()
  * @param array $block Parsed block.
  * @return string
  */
-function dbw_connector_block_label( array $block ) {
+function wpmcp_block_label( array $block ) {
 	$attrs = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
 
 	$candidates = array( 'heading', 'sectionHeading', 'title', 'headline', 'question', 'name', 'label', 'text', 'quote', 'eyebrow' );
 	foreach ( $candidates as $key ) {
 		if ( ! empty( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ) {
-			return dbw_connector_shorten( wp_strip_all_tags( $attrs[ $key ] ) );
+			return wpmcp_shorten( wp_strip_all_tags( $attrs[ $key ] ) );
 		}
 	}
 
 	$html = (string) ( $block['innerHTML'] ?? '' );
 	if ( '' !== trim( $html ) ) {
-		return dbw_connector_shorten( wp_strip_all_tags( $html ) );
+		return wpmcp_shorten( wp_strip_all_tags( $html ) );
 	}
 
 	return '';
@@ -314,7 +314,7 @@ function dbw_connector_block_label( array $block ) {
  * @param int    $max  Max characters.
  * @return string
  */
-function dbw_connector_shorten( $text, $max = 80 ) {
+function wpmcp_shorten( $text, $max = 80 ) {
 	$text = trim( preg_replace( '/\s+/', ' ', $text ) );
 	if ( mb_strlen( $text ) <= $max ) {
 		return $text;
@@ -328,7 +328,7 @@ function dbw_connector_shorten( $text, $max = 80 ) {
  * @param array $path Path segments.
  * @return string
  */
-function dbw_connector_path_string( array $path ) {
+function wpmcp_path_string( array $path ) {
 	return implode( '.', $path );
 }
 
@@ -338,7 +338,7 @@ function dbw_connector_path_string( array $path ) {
  * @param string $path Path like "2.0.1".
  * @return int[]|null Null when malformed.
  */
-function dbw_connector_path_parse( $path ) {
+function wpmcp_path_parse( $path ) {
 	$path = trim( (string) $path );
 	if ( '' === $path ) {
 		return array();
@@ -356,7 +356,7 @@ function dbw_connector_path_parse( $path ) {
  * @param array $path   Path segments.
  * @return array|null
  */
-function dbw_connector_blocks_at_path( array $blocks, array $path ) {
+function wpmcp_blocks_at_path( array $blocks, array $path ) {
 	$current = null;
 	$list    = $blocks;
 
@@ -390,7 +390,7 @@ function dbw_connector_blocks_at_path( array $blocks, array $path ) {
  * @param array $ops    List of ops: { op, path, block?, blocks?, attrs?, to? }.
  * @return array|\WP_Error { blocks: array, summary: array }
  */
-function dbw_connector_apply_ops( array $blocks, array $ops ) {
+function wpmcp_apply_ops( array $blocks, array $ops ) {
 	$summary = array(
 		'inserted' => 0,
 		'replaced' => 0,
@@ -401,28 +401,28 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 
 	foreach ( $ops as $n => $op ) {
 		if ( ! is_array( $op ) ) {
-			return new \WP_Error( 'dbw_bad_op', sprintf( 'Operation %d must be an object.', $n ) );
+			return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d must be an object.', $n ) );
 		}
 
 		$kind = $op['op'] ?? '';
-		$path = dbw_connector_path_parse( $op['path'] ?? '' );
+		$path = wpmcp_path_parse( $op['path'] ?? '' );
 
 		if ( null === $path ) {
-			return new \WP_Error( 'dbw_bad_path', sprintf( 'Operation %d: malformed path "%s".', $n, (string) ( $op['path'] ?? '' ) ) );
+			return new \WP_Error( 'wpmcp_bad_path', sprintf( 'Operation %d: malformed path "%s".', $n, (string) ( $op['path'] ?? '' ) ) );
 		}
 
 		switch ( $kind ) {
 			case 'insert':
 				$nodes = isset( $op['blocks'] ) ? $op['blocks'] : ( isset( $op['block'] ) ? array( $op['block'] ) : null );
 				if ( ! is_array( $nodes ) ) {
-					return new \WP_Error( 'dbw_bad_op', sprintf( 'Operation %d (insert): "block" or "blocks" required.', $n ) );
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (insert): "block" or "blocks" required.', $n ) );
 				}
 				$errors = array();
-				$new    = dbw_connector_tree_to_blocks( $nodes, 'op' . $n, $errors );
+				$new    = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors );
 				if ( ! empty( $errors ) ) {
-					return new \WP_Error( 'dbw_bad_block', implode( ' ', $errors ) );
+					return new \WP_Error( 'wpmcp_bad_block', implode( ' ', $errors ) );
 				}
-				$result = dbw_connector_splice( $blocks, $path, $new, 0 );
+				$result = wpmcp_splice( $blocks, $path, $new, 0 );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
@@ -433,14 +433,14 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 			case 'replace':
 				$nodes = isset( $op['blocks'] ) ? $op['blocks'] : ( isset( $op['block'] ) ? array( $op['block'] ) : null );
 				if ( ! is_array( $nodes ) ) {
-					return new \WP_Error( 'dbw_bad_op', sprintf( 'Operation %d (replace): "block" or "blocks" required.', $n ) );
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (replace): "block" or "blocks" required.', $n ) );
 				}
 				$errors = array();
-				$new    = dbw_connector_tree_to_blocks( $nodes, 'op' . $n, $errors );
+				$new    = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors );
 				if ( ! empty( $errors ) ) {
-					return new \WP_Error( 'dbw_bad_block', implode( ' ', $errors ) );
+					return new \WP_Error( 'wpmcp_bad_block', implode( ' ', $errors ) );
 				}
-				$result = dbw_connector_splice( $blocks, $path, $new, 1 );
+				$result = wpmcp_splice( $blocks, $path, $new, 1 );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
@@ -449,7 +449,7 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 				break;
 
 			case 'remove':
-				$result = dbw_connector_splice( $blocks, $path, array(), 1 );
+				$result = wpmcp_splice( $blocks, $path, array(), 1 );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
@@ -461,9 +461,9 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 				$attrs = $op['attrs'] ?? null;
 				$attrs = is_object( $attrs ) ? (array) $attrs : $attrs;
 				if ( ! is_array( $attrs ) ) {
-					return new \WP_Error( 'dbw_bad_op', sprintf( 'Operation %d (set_attrs): "attrs" object required.', $n ) );
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (set_attrs): "attrs" object required.', $n ) );
 				}
-				$result = dbw_connector_patch_attrs( $blocks, $path, $attrs );
+				$result = wpmcp_patch_attrs( $blocks, $path, $attrs );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
@@ -472,19 +472,19 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 				break;
 
 			case 'move':
-				$to = dbw_connector_path_parse( $op['to'] ?? '' );
+				$to = wpmcp_path_parse( $op['to'] ?? '' );
 				if ( null === $to ) {
-					return new \WP_Error( 'dbw_bad_path', sprintf( 'Operation %d (move): malformed "to" path.', $n ) );
+					return new \WP_Error( 'wpmcp_bad_path', sprintf( 'Operation %d (move): malformed "to" path.', $n ) );
 				}
-				$node = dbw_connector_blocks_at_path( $blocks, $path );
+				$node = wpmcp_blocks_at_path( $blocks, $path );
 				if ( null === $node ) {
-					return new \WP_Error( 'dbw_path_not_found', sprintf( 'Operation %d (move): path "%s" not found.', $n, dbw_connector_path_string( $path ) ) );
+					return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Operation %d (move): path "%s" not found.', $n, wpmcp_path_string( $path ) ) );
 				}
-				$removed = dbw_connector_splice( $blocks, $path, array(), 1 );
+				$removed = wpmcp_splice( $blocks, $path, array(), 1 );
 				if ( is_wp_error( $removed ) ) {
 					return $removed;
 				}
-				$inserted = dbw_connector_splice( $removed, $to, array( $node ), 0 );
+				$inserted = wpmcp_splice( $removed, $to, array( $node ), 0 );
 				if ( is_wp_error( $inserted ) ) {
 					return $inserted;
 				}
@@ -494,7 +494,7 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
 
 			default:
 				return new \WP_Error(
-					'dbw_bad_op',
+					'wpmcp_bad_op',
 					sprintf( 'Operation %d: unknown op "%s". Use insert, replace, remove, set_attrs or move.', $n, (string) $kind )
 				);
 		}
@@ -515,29 +515,29 @@ function dbw_connector_apply_ops( array $blocks, array $ops ) {
  * @param int   $delete      How many to remove at the position.
  * @return array|\WP_Error
  */
-function dbw_connector_splice( array $blocks, array $path, array $replacement, $delete ) {
+function wpmcp_splice( array $blocks, array $path, array $replacement, $delete ) {
 	if ( empty( $path ) ) {
-		return new \WP_Error( 'dbw_bad_path', 'Path must not be empty.' );
+		return new \WP_Error( 'wpmcp_bad_path', 'Path must not be empty.' );
 	}
 
 	$index = array_pop( $path );
 
 	if ( empty( $path ) ) {
-		return dbw_connector_splice_list( $blocks, $index, $replacement, $delete );
+		return wpmcp_splice_list( $blocks, $index, $replacement, $delete );
 	}
 
-	$parent = dbw_connector_blocks_at_path( $blocks, $path );
+	$parent = wpmcp_blocks_at_path( $blocks, $path );
 	if ( null === $parent ) {
-		return new \WP_Error( 'dbw_path_not_found', sprintf( 'Parent path "%s" not found.', dbw_connector_path_string( $path ) ) );
+		return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Parent path "%s" not found.', wpmcp_path_string( $path ) ) );
 	}
 
 	$children = is_array( $parent['innerBlocks'] ?? null ) ? $parent['innerBlocks'] : array();
-	$updated  = dbw_connector_splice_list( $children, $index, $replacement, $delete );
+	$updated  = wpmcp_splice_list( $children, $index, $replacement, $delete );
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
 	}
 
-	return dbw_connector_set_children( $blocks, $path, $updated );
+	return wpmcp_set_children( $blocks, $path, $updated );
 }
 
 /**
@@ -550,7 +550,7 @@ function dbw_connector_splice( array $blocks, array $path, array $replacement, $
  * @param int   $delete      Delete count.
  * @return array|\WP_Error
  */
-function dbw_connector_splice_list( array $list, $index, array $replacement, $delete ) {
+function wpmcp_splice_list( array $list, $index, array $replacement, $delete ) {
 	$visible = array();
 	foreach ( $list as $real => $block ) {
 		if ( null !== $block['blockName'] || '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
@@ -559,13 +559,13 @@ function dbw_connector_splice_list( array $list, $index, array $replacement, $de
 	}
 
 	if ( $index < 0 || $index > count( $visible ) ) {
-		return new \WP_Error( 'dbw_path_not_found', sprintf( 'Index %d is out of range (%d blocks).', $index, count( $visible ) ) );
+		return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Index %d is out of range (%d blocks).', $index, count( $visible ) ) );
 	}
 
 	// Appending past the last element.
 	if ( $index === count( $visible ) ) {
 		if ( $delete > 0 ) {
-			return new \WP_Error( 'dbw_path_not_found', sprintf( 'Index %d does not exist.', $index ) );
+			return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Index %d does not exist.', $index ) );
 		}
 		return array_merge( $list, $replacement );
 	}
@@ -587,8 +587,8 @@ function dbw_connector_splice_list( array $list, $index, array $replacement, $de
  * @param array $children New children.
  * @return array|\WP_Error
  */
-function dbw_connector_set_children( array $blocks, array $path, array $children ) {
-	return dbw_connector_mutate_at( $blocks, $path, function ( $block ) use ( $children ) {
+function wpmcp_set_children( array $blocks, array $path, array $children ) {
+	return wpmcp_mutate_at( $blocks, $path, function ( $block ) use ( $children ) {
 		$old_count = count( is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : array() );
 		$block['innerBlocks'] = $children;
 
@@ -597,7 +597,7 @@ function dbw_connector_set_children( array $blocks, array $path, array $children
 		if ( count( $children ) !== $old_count ) {
 			$errors  = array();
 			$html    = '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ? '' : (string) $block['innerHTML'];
-			$content = dbw_connector_build_inner_content(
+			$content = wpmcp_build_inner_content(
 				$children,
 				$html,
 				empty( $content ) ? null : $content,
@@ -606,7 +606,7 @@ function dbw_connector_set_children( array $blocks, array $path, array $children
 			);
 		}
 		$block['innerContent'] = $content;
-		$block['innerHTML']    = dbw_connector_inner_html_from_content( $content );
+		$block['innerHTML']    = wpmcp_inner_html_from_content( $content );
 
 		return $block;
 	} );
@@ -620,8 +620,8 @@ function dbw_connector_set_children( array $blocks, array $path, array $children
  * @param array $attrs  Attributes to merge.
  * @return array|\WP_Error
  */
-function dbw_connector_patch_attrs( array $blocks, array $path, array $attrs ) {
-	return dbw_connector_mutate_at( $blocks, $path, function ( $block ) use ( $attrs ) {
+function wpmcp_patch_attrs( array $blocks, array $path, array $attrs ) {
+	return wpmcp_mutate_at( $blocks, $path, function ( $block ) use ( $attrs ) {
 		$current = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
 		foreach ( $attrs as $key => $value ) {
 			if ( null === $value ) {
@@ -643,9 +643,9 @@ function dbw_connector_patch_attrs( array $blocks, array $path, array $attrs ) {
  * @param callable $callback Receives and returns a block array.
  * @return array|\WP_Error
  */
-function dbw_connector_mutate_at( array $blocks, array $path, callable $callback ) {
+function wpmcp_mutate_at( array $blocks, array $path, callable $callback ) {
 	if ( empty( $path ) ) {
-		return new \WP_Error( 'dbw_bad_path', 'Path must not be empty.' );
+		return new \WP_Error( 'wpmcp_bad_path', 'Path must not be empty.' );
 	}
 
 	$index   = array_shift( $path );
@@ -657,7 +657,7 @@ function dbw_connector_mutate_at( array $blocks, array $path, callable $callback
 	}
 
 	if ( ! isset( $visible[ $index ] ) ) {
-		return new \WP_Error( 'dbw_path_not_found', sprintf( 'Index %d not found.', $index ) );
+		return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Index %d not found.', $index ) );
 	}
 
 	$real = $visible[ $index ];
@@ -668,7 +668,7 @@ function dbw_connector_mutate_at( array $blocks, array $path, callable $callback
 	}
 
 	$children = is_array( $blocks[ $real ]['innerBlocks'] ?? null ) ? $blocks[ $real ]['innerBlocks'] : array();
-	$updated  = dbw_connector_mutate_at( $children, $path, $callback );
+	$updated  = wpmcp_mutate_at( $children, $path, $callback );
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
 	}
@@ -684,7 +684,7 @@ function dbw_connector_mutate_at( array $blocks, array $path, callable $callback
  * @param array $blocks Parsed blocks.
  * @return int
  */
-function dbw_connector_count_blocks( array $blocks ) {
+function wpmcp_count_blocks( array $blocks ) {
 	$count = 0;
 	foreach ( $blocks as $block ) {
 		if ( null === $block['blockName'] && '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
@@ -692,7 +692,7 @@ function dbw_connector_count_blocks( array $blocks ) {
 		}
 		++$count;
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-			$count += dbw_connector_count_blocks( $block['innerBlocks'] );
+			$count += wpmcp_count_blocks( $block['innerBlocks'] );
 		}
 	}
 	return $count;
@@ -704,14 +704,14 @@ function dbw_connector_count_blocks( array $blocks ) {
  * @param array $blocks Parsed blocks.
  * @return string[]
  */
-function dbw_connector_block_names( array $blocks ) {
+function wpmcp_block_names( array $blocks ) {
 	$names = array();
 	foreach ( $blocks as $block ) {
 		if ( ! empty( $block['blockName'] ) ) {
 			$names[] = $block['blockName'];
 		}
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-			$names = array_merge( $names, dbw_connector_block_names( $block['innerBlocks'] ) );
+			$names = array_merge( $names, wpmcp_block_names( $block['innerBlocks'] ) );
 		}
 	}
 	return $names;
