@@ -7,6 +7,21 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.5.1] - 2026-09-02
+
+Aus einem Fehlerbericht: In einer duplizierten Seite fehlte das JSON-LD-Schema, das rohe JSON stand als Text im Block. Gemeldet als Folge der `replace`-Operationen.
+
+### Behoben
+
+- **Duplizieren erhaelt den Inhalt unveraendert.** `content-duplicate` legte die Kopie mit `wp_insert_post()` an, und WordPress filtert dabei fuer Konten ohne `unfiltered_html`. Das `<script type="application/ld+json">` der Vorlage war damit schon weg, bevor ueberhaupt eine Bearbeitung stattfand. Die Kopie geht jetzt denselben erhaltenden Weg wie jede Aenderung an einer bestehenden Seite.
+- Der gemeldete Zusammenhang war nicht der richtige: Die Art der Operation spielt keine Rolle. Ein Test haelt das fest - eine reine Attributaenderung, eine Blockersetzung und viele Operationen in einer Transaktion erhalten das Script gleichermassen. Auch die Rueckmeldung war korrekt: Ohne Script im Ausgangszustand gibt es nichts zu erhalten, also gab es auch nichts zu warnen.
+
+### Warum das nicht schon in 0.3.0 mitkam
+
+0.3.0 formulierte die Regel als Zaehlung: Markup, das vorher da war, darf nicht verschwinden. Eine Kopie hat kein Vorher - nach dieser Regel sieht ihr gesamter Inhalt wie neu eingebrachtes Markup aus. Der Duplizier-Pfad braucht deshalb die einfachere Zusage: Eine Kopie ist eine Kopie.
+
+---
+
 ## [0.5.0] - 2026-09-02
 
 Aus einer echten Aufgabe: eine Telefonnummer ueber 18 Seiten vereinheitlichen, 31 Fundstellen.

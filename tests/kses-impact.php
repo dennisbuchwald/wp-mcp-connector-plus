@@ -77,6 +77,44 @@ $frame = '<!-- wp:core/html --><iframe src="https://example.test"></iframe><!-- 
 $i     = wpmcp_kses_impact( $clean . $schema, $clean . $schema . $frame );
 check( true === $i['introduces'], 'ein neuer iframe neben einem bestehenden Script ist neu' );
 
+echo "\n\033[1mOperationsart ist irrelevant\033[0m\n";
+
+// The report suspected that a replace op somewhere on the page makes the
+// preservation fail. The decision never looks at operations at all — it
+// compares the markup before and after. These prove it.
+$page_with_schema = $clean . $schema . $clean;
+
+// set_attrs-like: same markup, one attribute different.
+$after = str_replace( '<p>Text</p>', '<p>Neu</p>', $page_with_schema );
+$i     = wpmcp_kses_impact( $page_with_schema, $after );
+check( true === $i['alters'] && false === $i['introduces'], 'Attributaenderung: Script wird erhalten' );
+
+// replace-like: a whole block swapped for different markup.
+$after = str_replace(
+	'<!-- wp:core/paragraph --><p>Text</p><!-- /wp:core/paragraph -->',
+	'<!-- wp:core/heading --><h2>Ersetzt</h2><!-- /wp:core/heading -->',
+	$page_with_schema
+);
+$i = wpmcp_kses_impact( $page_with_schema, $after );
+check( true === $i['alters'] && false === $i['introduces'], 'Blockersetzung: Script wird ebenso erhalten' );
+
+// Many operations at once, including removals.
+$after = '<!-- wp:core/heading --><h2>A</h2><!-- /wp:core/heading -->' . $schema;
+$i     = wpmcp_kses_impact( $page_with_schema, $after );
+check( false === $i['introduces'], 'viele Operationen gleichzeitig aendern daran nichts' );
+
+echo "\n\033[1mDie eigentliche Ursache\033[0m\n";
+
+// A duplicate starts from nothing, so by the counting rule its content
+// would look like newly introduced markup — which is why duplication has
+// to be treated as the copy it is, not as agent-authored content.
+$i = wpmcp_kses_impact( '', $page_with_schema );
+check(
+	true === $i['introduces'],
+	'ein Duplikat sieht nach der Zaehlregel wie neu eingebrachtes Markup aus',
+	'deshalb darf der Duplizier-Pfad nicht dieselbe Regel anwenden'
+);
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mFilter-Analyse in Ordnung.\033[0m\n";

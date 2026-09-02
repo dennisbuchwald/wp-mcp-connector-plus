@@ -504,6 +504,34 @@ function wpmcp_kses_impact( $before, $after ) {
 }
 
 /**
+ * Insert a post without the content filter.
+ *
+ * A duplicate is a byte-for-byte copy of a post that already exists on
+ * this site. Filtering it would strip markup the original is allowed to
+ * hold — the copy would silently differ from what was copied, which is
+ * the one thing a duplicate must never do. The agent supplies no content
+ * here, only an id, so there is nothing it could smuggle in.
+ *
+ * @param array $postarr Arguments for wp_insert_post.
+ * @return int|\WP_Error
+ */
+function wpmcp_insert_post_preserving( array $postarr ) {
+	$filters = array( 'content_save_pre', 'content_filtered_save_pre' );
+
+	foreach ( $filters as $filter ) {
+		remove_filter( $filter, 'wp_filter_post_kses' );
+	}
+
+	$result = wp_insert_post( $postarr, true );
+
+	foreach ( $filters as $filter ) {
+		add_filter( $filter, 'wp_filter_post_kses' );
+	}
+
+	return $result;
+}
+
+/**
  * Save without the kses filter, for the one case where it does harm.
  *
  * Only ever used when the content introduces no filtered markup beyond
@@ -613,7 +641,7 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 
 	$new_title = '' !== trim( (string) $title ) ? trim( (string) $title ) : $post->post_title . ' (Kopie)';
 
-	$new_id = wp_insert_post(
+	$new_id = wpmcp_insert_post_preserving(
 		wp_slash(
 			array(
 				'post_title'     => $new_title,
@@ -627,8 +655,7 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 				'post_status'    => 'draft', // Always a draft: publishing stays human.
 				'post_author'    => get_current_user_id(),
 			)
-		),
-		true
+		)
 	);
 
 	if ( is_wp_error( $new_id ) ) {
