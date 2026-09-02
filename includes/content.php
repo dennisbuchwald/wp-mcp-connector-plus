@@ -340,23 +340,41 @@ function wpmcp_write_content( array $args ) {
 		);
 	}
 
+	// What WordPress will do to this content on save, known before saving.
+	$impact = wpmcp_kses_impact( $post->post_content, $validation['serialized'] );
+	$errors = $validation['errors'];
+
+	if ( $impact['alters'] ) {
+		if ( $impact['introduces'] ) {
+			$errors[] = sprintf(
+				'This change adds markup WordPress will not store from an agent account (%s). Structured data, embeds and inline scripts cannot be written this way. Remove it, or have a human add it in the editor.',
+				implode( ', ', $impact['affected'] )
+			);
+		} else {
+			$warnings[] = sprintf(
+				'The page already contains markup WordPress would normally strip from an agent account (%s). It is preserved: the save keeps what was there rather than destroying it, and nothing new of that kind is added.',
+				implode( ', ', $impact['affected'] )
+			);
+		}
+	}
+
 	$response = array(
-		'ok'       => empty( $validation['errors'] ),
+		'ok'       => empty( $errors ),
 		'dryRun'   => $dry_run,
 		'postId'   => $post->ID,
 		'diff'     => $diff,
-		'errors'   => $validation['errors'],
+		'errors'   => $errors,
 		'warnings' => $warnings,
 	);
 
-	if ( ! empty( $validation['errors'] ) ) {
+	if ( ! empty( $errors ) ) {
 		wpmcp_log(
 			'wpmcp/content-write',
 			array(
 				'post_id'   => $post->ID,
 				'operation' => $has_tree ? 'tree' : 'ops',
 				'dry_run'   => true,
-				'summary'   => sprintf( 'Rejected: %d validation error(s).', count( $validation['errors'] ) ),
+				'summary'   => sprintf( 'Rejected: %d validation error(s).', count( $errors ) ),
 			)
 		);
 		return $response;
@@ -378,13 +396,16 @@ function wpmcp_write_content( array $args ) {
 
 	// Real write. wp_slash() is essential: without it WordPress strips
 	// backslashes out of the block attribute JSON.
-	$updated = wp_update_post(
-		array(
-			'ID'           => $post->ID,
-			'post_content' => wp_slash( $validation['serialized'] ),
-		),
-		true
+	$postarr = array(
+		'ID'           => $post->ID,
+		'post_content' => wp_slash( $validation['serialized'] ),
 	);
+
+	// Editing one block must not destroy markup in another that the agent
+	// never touched. Safe because nothing of that kind is being added.
+	$updated = ( $impact['alters'] && ! $impact['introduces'] )
+		? wpmcp_update_post_preserving( $postarr )
+		: wp_update_post( $postarr, true );
 
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
@@ -417,6 +438,83 @@ function wpmcp_write_content( array $args ) {
 	);
 
 	return $response;
+}
+
+/**
+ * Markup WordPress strips from accounts without `unfiltered_html`.
+ *
+ * @return string[]
+ */
+function wpmcp_filtered_constructs() {
+	return array( '<script', '<iframe', '<style', '<form', '<object', '<embed' );
+}
+
+/**
+ * Would saving this content lose anything, and if so, was it already there?
+ *
+ * The agent account deliberately has no `unfiltered_html`, so WordPress
+ * runs its content through wp_kses_post on save. That is right for
+ * anything the agent writes. It is wrong for content that was already
+ * stored: editing one block of a page would quietly destroy a JSON-LD
+ * script in another, which is not the agent's doing and not the site
+ * owner's intention.
+ *
+ * @param string $before Content currently stored.
+ * @param string $after  Content about to be written.
+ * @return array {
+ *     @type bool     $alters     Whether the save would change the content.
+ *     @type bool     $introduces Whether the change adds filtered markup.
+ *     @type string[] $affected   Which constructs are involved.
+ * }
+ */
+function wpmcp_kses_impact( $before, $after ) {
+	$filtered = function_exists( 'wp_kses_post' ) ? wp_kses_post( $after ) : $after;
+
+	$affected   = array();
+	$introduces = false;
+
+	foreach ( wpmcp_filtered_constructs() as $needle ) {
+		$in_after  = substr_count( $after, $needle );
+		$in_before = substr_count( (string) $before, $needle );
+		if ( $in_after > 0 ) {
+			$affected[] = $needle;
+		}
+		if ( $in_after > $in_before ) {
+			$introduces = true;
+		}
+	}
+
+	return array(
+		'alters'     => ( $filtered !== $after ),
+		'introduces' => $introduces,
+		'affected'   => $affected,
+	);
+}
+
+/**
+ * Save without the kses filter, for the one case where it does harm.
+ *
+ * Only ever used when the content introduces no filtered markup beyond
+ * what the page already held: the agent cannot smuggle a script in this
+ * way, it can only fail to destroy one that was there already.
+ *
+ * @param array $postarr Arguments for wp_update_post.
+ * @return int|\WP_Error
+ */
+function wpmcp_update_post_preserving( array $postarr ) {
+	$filters = array( 'content_save_pre', 'content_filtered_save_pre' );
+
+	foreach ( $filters as $filter ) {
+		remove_filter( $filter, 'wp_filter_post_kses' );
+	}
+
+	$result = wp_update_post( $postarr, true );
+
+	foreach ( $filters as $filter ) {
+		add_filter( $filter, 'wp_filter_post_kses' );
+	}
+
+	return $result;
 }
 
 /**

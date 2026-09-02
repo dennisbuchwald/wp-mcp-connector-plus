@@ -249,12 +249,16 @@ not enough:
 - **Before:** pass `expected_modified` (returned by `content-read`) and the
   write is refused if someone edited the page in the meantime, rather than
   silently overwriting them.
-- **After:** the stored content is compared against what was sent. Accounts
-  without `unfiltered_html` — which the agent deliberately is — have their
-  content run through `wp_kses_post` on save, which removes script tags,
-  iframes and some attributes. Structured data and embeds therefore cannot
-  be written, and the response says so instead of leaving it unnoticed.
-  The same check runs after duplicating.
+- **Around it:** accounts without `unfiltered_html` — which the agent
+  deliberately is — have their content run through `wp_kses_post` on save,
+  which removes scripts and iframes. Writing such markup is therefore an
+  error, reported in the dry run before anything is saved. Markup of that
+  kind already on the page is *preserved*: WordPress saves the whole page
+  on every write, so without this, editing one block would destroy the
+  structured data in another. The agent can add none of it and can destroy
+  none of it.
+- **After:** the stored content is compared against what was sent, and any
+  remaining difference is reported. The same check runs after duplicating.
 
 ## Safety model
 
@@ -382,6 +386,7 @@ tests/fetch-shim.sh                              # once: fetch the real WP block
 php tests/run-tests.php                          # 97 unit tests
 php tests/register-abilities.php                 # abilities actually register
 php tests/verify-stored.php                      # saved content matches what was sent
+php tests/kses-impact.php                        # existing markup survives an unrelated edit
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -410,7 +415,7 @@ Each suite exists because of a specific failure:
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
-**v0.2.2.** Running on two live sites for reading, including a full QA pass
+**v0.3.0.** Running on two live sites for reading, including a full QA pass
 over a draft built from a real design system — the agent fetched block
 schemas to learn the defaults, and could then tell a deliberately set value
 from an unset one. The write path is exercised by tests but has not yet

@@ -7,6 +7,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.3.0] - 2026-09-02
+
+### Behoben
+
+- **Eine Aenderung an einem Block zerstoerte Markup in einem anderen** - Auf einer Live-Seite loeschte das Einfuegen eines CTA-Banners das JSON-LD-Schema, das weiter unten in einem unberuehrten `core/html`-Block lag. Ursache: WordPress speichert bei jedem Schreibvorgang die ganze Seite und filtert sie fuer Konten ohne `unfiltered_html`. Seit 0.2.0 wurde der Verlust wenigstens gemeldet - aber erst, nachdem er passiert war.
+  - **Bestehendes Markup wird jetzt erhalten.** Bringt eine Aenderung nichts von der gefilterten Art neu ein, speichert der Konnektor ohne den Filter. Der Agent kann so nichts einschleusen, er kann nur nichts mehr zerstoeren, was schon da war.
+  - **Neu geschriebene Scripts oder iframes bleiben ein Fehler** und werden bereits im Testlauf abgelehnt, nicht erst beim Speichern. Gezaehlt wie bei den geerbten Fehlern: ein zweites Script neben einem bestehenden gilt als neu.
+  - Verweigern waere die falsche Antwort gewesen. Der Agent koennte eine solche Seite dann nie wieder anfassen - dasselbe Aussperr-Problem wie in 0.2.3, nur mit anderer Ursache.
+
+---
+
 ## [0.2.3] - 2026-09-02
 
 ### Behoben
@@ -87,6 +98,6 @@ Erste Version.
 ### Bekannte Einschraenkungen
 
 - Kein Medien-Upload, kein Beitragsbild, keine Taxonomien, kein Titel nach dem Anlegen, keine SEO-Metadaten.
-- Strukturierte Daten (JSON-LD in `core/html`) koennen nicht geschrieben werden, siehe 0.2.0.
+- Strukturierte Daten (JSON-LD in `core/html`) koennen nicht neu geschrieben werden; bestehende bleiben seit 0.3.0 erhalten.
 - Kein Rueckgaengig durch den Agenten; jede Aenderung erzeugt aber eine Revision.
 - Erfordert WordPress 6.9 oder neuer und Inhalte aus Gutenberg-Bloecken.
