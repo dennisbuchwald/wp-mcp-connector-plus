@@ -210,6 +210,11 @@ function wpmcp_register_abilities() {
 						'default'     => false,
 						'description' => 'Also return attributes that still hold their default value.',
 					),
+					'include_meta'     => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Also return SEO fields (Rank Math, Yoast), featured image, excerpt and template. Read-only.',
+					),
 				),
 				'required'   => array( 'post_id' ),
 			),
@@ -222,7 +227,8 @@ function wpmcp_register_abilities() {
 					(string) ( $input['mode'] ?? 'outline' ),
 					(string) ( $input['path'] ?? '' ),
 					! empty( $input['include_defaults'] ),
-					$paths
+					$paths,
+					! empty( $input['include_meta'] )
 				);
 				if ( ! is_wp_error( $result ) ) {
 					wpmcp_log(
@@ -359,6 +365,84 @@ function wpmcp_register_abilities() {
 				);
 			},
 			'meta' => $read_only,
+		)
+	);
+	wp_register_ability(
+		'wpmcp/content-revisions',
+		array(
+			'label'       => 'Revisionen',
+			'description' => 'The saved history of a page: revision ids, when each was made, by whom, and how many blocks it held. Use it to find the state to go back to when a change turned out wrong — content-restore takes an id from here.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'post_id' => array(
+						'type'        => 'integer',
+						'description' => 'The post/page ID.',
+					),
+					'limit'   => array(
+						'type'        => 'integer',
+						'default'     => 15,
+						'description' => 'How many revisions to return, newest first (max 50).',
+					),
+				),
+				'required'   => array( 'post_id' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				wpmcp_log( 'wpmcp/content-revisions', array( 'post_id' => (int) ( $input['post_id'] ?? 0 ) ) );
+				return wpmcp_list_revisions(
+					(int) ( $input['post_id'] ?? 0 ),
+					(int) ( $input['limit'] ?? 15 )
+				);
+			},
+			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/content-restore',
+		array(
+			'label'       => 'Revision wiederherstellen',
+			'description' => 'Undo: put a page back to one of its own revisions, listed by content-revisions. Dry run by default, and the current state becomes a revision of its own first, so restoring is itself reversible. This is also the only way to bring back markup that content-write cannot produce — a restored state is one the page already held, not something the agent authored.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'post_id'     => array(
+						'type'        => 'integer',
+						'description' => 'The post/page ID.',
+					),
+					'revision_id' => array(
+						'type'        => 'integer',
+						'description' => 'Revision to restore, from content-revisions. Must belong to this post.',
+					),
+					'dry_run'     => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Report what would change without restoring. Defaults to true.',
+					),
+				),
+				'required'   => array( 'post_id', 'revision_id' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_restore_revision(
+					(int) ( $input['post_id'] ?? 0 ),
+					(int) ( $input['revision_id'] ?? 0 ),
+					! isset( $input['dry_run'] ) || (bool) $input['dry_run']
+				);
+			},
+			'meta' => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => true,
+				),
+				'show_in_rest' => true,
+			),
 		)
 	);
 }

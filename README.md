@@ -199,7 +199,7 @@ and the problem is on the client side.
 
 ## The abilities
 
-Six are always present. The two write abilities exist only above the
+Seven are always present. The three write abilities exist only above the
 read-only access level — at that level they are not registered, so the
 agent never sees them.
 
@@ -213,14 +213,21 @@ agent never sees them.
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `move`) or a full tree replacement. Dry run by default. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. |
+| `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
+| `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
 
 ### Deliberately not covered
 
 The agent works on the block tree, and only on that. It cannot upload
 media, set a featured image, change categories or tags, edit a post title
-after creation, or touch SEO metadata. A generated draft is therefore
-complete as *content* but not as a finished editorial artefact — those
-fields stay with a human, or with a later version of this plugin.
+after creation, or *write* SEO metadata — it can read those fields with
+`include_meta`, which is enough for a review but not for authoring. A
+generated draft is therefore complete as *content* but not as a finished
+editorial artefact.
+
+Slug, status and post type stay untouched by design: a slug is what a URL
+hangs on, and making that writable is a separate decision with its own
+safeguards, not a side effect of a convenience feature.
 
 ### Context budget
 
@@ -415,7 +422,7 @@ Each suite exists because of a specific failure:
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
-**v0.3.0.** Running on two live sites for reading, including a full QA pass
+**v0.4.0.** Running on two live sites for reading, including a full QA pass
 over a draft built from a real design system — the agent fetched block
 schemas to learn the defaults, and could then tell a deliberately set value
 from an unset one. The write path is exercised by tests but has not yet

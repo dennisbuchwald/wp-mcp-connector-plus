@@ -7,6 +7,30 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.4.0] - 2026-09-02
+
+Aus Befunden der laufenden Nutzung.
+
+### Hinzugefuegt
+
+- **Rueckgaengig** - zwei neue Faehigkeiten: `content-revisions` listet die Historie einer Seite mit Zeitstempel, Autor und Blockzahl, `content-restore` setzt sie auf eine dieser Revisionen zurueck. Bisher musste ein Mensch in den Editor, wenn ein Schreibvorgang schiefging.
+  - Das Wiederherstellen darf Markup zurueckbringen, das `content-write` verweigert. Eine Revision ist kein vom Agenten verfasster Inhalt, sondern ein Zustand, in dem die Seite schon war - er kann ihn nicht erfinden, nur wieder herstellen. Genau der Fall, in dem der Agent seinen eigenen Fehler bisher nicht beheben konnte.
+  - Testlauf als Standard, und der aktuelle Stand wird vorher selbst zur Revision. Wiederherstellen ist damit ebenfalls umkehrbar.
+  - Eine Revision, die zu einer anderen Seite gehoert, wird abgelehnt.
+  - `content-revisions` ist auch ohne Schreibrecht verfuegbar, `content-restore` nicht.
+- **SEO-Felder lesbar** - `content-read` liefert mit `include_meta` die Felder von Rank Math und Yoast, dazu Beitragsbild, Textauszug und Template. Bei einem QS-Audit waren sechs von sieben SEO-Pruefpunkten vorher nicht pruefbar.
+  - Eine Erlaubnisliste, nicht alles: In Post-Meta liegen Lizenzschluessel, Tokens und interner Plugin-Zustand, und nichts davon gehoert in den Kontext eines Modells. Erweiterbar per Filter `wpmcp_readable_meta_keys`.
+  - Nur lesend. Schreiben waere eine eigene Entscheidung, siehe unten.
+- **`slug` und `parent` in jeder Leseantwort** - Bei einem Entwurf lautet die Permalink-URL nur `?page_id=1689`, der Slug liess sich daraus nicht ableiten. Bisher brauchte es dafuer einen zweiten Aufruf.
+- **Hinweis bei leeren Containern** - Ein Container mit deklarierten erlaubten Kindern, der keine enthaelt, rendert als leere Sektion. Auf einer echten Seite waren das Vorlagenreste mit Titel, aber ohne Inhalt.
+
+### Nicht umgesetzt
+
+- **Schreibzugriff auf Meta-Felder** (Slug, Beitragsbild, SEO-Titel). Der Slug ist der Teil, an dem eine URL haengt, und dieses Plugin verspricht ausdruecklich, Slug, Status und Post-Type nie anzufassen. Das aufzuweichen waere eine eigene Entscheidung mit eigener Absicherung, kein Nebeneffekt eines Komfort-Features.
+- **Simulation aller Seiteneffekte im Testlauf** war bereits in 0.3.0 der Punkt: Was WordPress beim Speichern veraendern wuerde, wird vorher gemeldet.
+
+---
+
 ## [0.3.0] - 2026-09-02
 
 ### Behoben
@@ -99,5 +123,5 @@ Erste Version.
 
 - Kein Medien-Upload, kein Beitragsbild, keine Taxonomien, kein Titel nach dem Anlegen, keine SEO-Metadaten.
 - Strukturierte Daten (JSON-LD in `core/html`) koennen nicht neu geschrieben werden; bestehende bleiben seit 0.3.0 erhalten.
-- Kein Rueckgaengig durch den Agenten; jede Aenderung erzeugt aber eine Revision.
+- Kein Rueckgaengig durch den Agenten (seit 0.4.0 moeglich); jede Aenderung erzeugt eine Revision.
 - Erfordert WordPress 6.9 oder neuer und Inhalte aus Gutenberg-Bloecken.

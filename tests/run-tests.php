@@ -536,6 +536,27 @@ $v     = wpmcp_validate_blocks( $after, $before );
 t_ok( empty( $v['errors'] ), 'weniger Verstoesse als vorher ist kein Fehler' );
 
 // ---------------------------------------------------------------------
+t_group( 'Leere Container' );
+
+$blocks = parse_blocks( '<!-- wp:dbw-base/cards /-->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok( empty( $v['errors'] ), 'leerer Container ist kein Fehler' );
+t_ok( ! empty( $v['warnings'] ), 'wird aber gemeldet' );
+t_ok(
+	false !== strpos( implode( ' ', $v['warnings'] ), 'renders as an empty section' ),
+	'die Meldung nennt die Folge'
+);
+
+$blocks = parse_blocks( '<!-- wp:dbw-base/cards --><!-- wp:dbw-base/card-item /--><!-- /wp:dbw-base/cards -->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok( empty( $v['warnings'] ), 'gefuellter Container meldet nichts' );
+
+// Open containers legitimately hold nothing yet.
+$blocks = parse_blocks( '<!-- wp:dbw-base/section /-->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok( empty( $v['warnings'] ), 'offener Container wird nicht bemaengelt' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

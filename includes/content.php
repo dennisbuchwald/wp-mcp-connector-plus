@@ -174,7 +174,7 @@ function wpmcp_list_content( array $args ) {
  * @param bool   $include_defaults Keep default-valued attributes.
  * @return array|\WP_Error
  */
-function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false, array $paths = array() ) {
+function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false, array $paths = array(), $with_meta = false ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -188,12 +188,20 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 		'type'       => $post->post_type,
 		'status'     => $post->post_status,
 		'url'        => get_permalink( $post ),
+		// A draft's permalink is only ?page_id=…, so the slug has to be
+		// stated rather than left to be derived from the URL.
+		'slug'       => $post->post_name,
+		'parent'     => (int) $post->post_parent,
 		'blockCount' => wpmcp_count_blocks( $blocks ),
 		'mode'       => $mode,
 		// Hand this back in content-write to be told if someone edited the
 		// page in the meantime, instead of silently overwriting them.
 		'modified'   => $post->post_modified_gmt,
 	);
+
+	if ( $with_meta ) {
+		$result['meta'] = wpmcp_read_meta( $post );
+	}
 
 	if ( 'outline' === $mode ) {
 		$result['outline'] = wpmcp_blocks_to_outline( $blocks );
@@ -757,6 +765,222 @@ function wpmcp_render_post_html( $post ) {
 		'headings' => $headings,
 		'notices'  => $smoke['notices'] ?? array(),
 	);
+}
+
+/**
+ * Post meta worth showing an agent, by key.
+ *
+ * An allowlist rather than everything: post meta is where plugins keep
+ * licence keys, tokens and internal state, and none of that belongs in a
+ * model's context. These are the fields a person doing an editorial review
+ * would look at.
+ *
+ * @return array<string, string> Meta key => readable label.
+ */
+function wpmcp_readable_meta_keys() {
+	return apply_filters(
+		'wpmcp_readable_meta_keys',
+		array(
+			// Rank Math.
+			'rank_math_title'          => 'SEO title',
+			'rank_math_description'    => 'Meta description',
+			'rank_math_focus_keyword'  => 'Focus keyword',
+			'rank_math_canonical_url'  => 'Canonical URL',
+			'rank_math_robots'         => 'Robots',
+			'rank_math_facebook_image' => 'Social image',
+			'rank_math_schema_type'    => 'Schema type',
+			// Yoast.
+			'_yoast_wpseo_title'         => 'SEO title',
+			'_yoast_wpseo_metadesc'      => 'Meta description',
+			'_yoast_wpseo_focuskw'       => 'Focus keyword',
+			'_yoast_wpseo_canonical'     => 'Canonical URL',
+			'_yoast_wpseo_meta-robots-noindex' => 'Robots: noindex',
+			'_yoast_wpseo_opengraph-image'     => 'Social image',
+		)
+	);
+}
+
+/**
+ * The allowlisted meta of a post, plus the fields WordPress itself keeps.
+ *
+ * Read-only. Writing these is a separate decision: a slug change moves a
+ * URL, and this plugin promises never to do that.
+ *
+ * @param \WP_Post $post Post.
+ * @return array
+ */
+function wpmcp_read_meta( $post ) {
+	$fields = array();
+
+	foreach ( wpmcp_readable_meta_keys() as $key => $label ) {
+		$value = get_post_meta( $post->ID, $key, true );
+		if ( '' === $value || null === $value || array() === $value ) {
+			continue;
+		}
+		$fields[ $key ] = array(
+			'label' => $label,
+			'value' => is_scalar( $value ) ? $value : wp_json_encode( $value ),
+		);
+	}
+
+	$thumbnail = get_post_thumbnail_id( $post->ID );
+
+	return array(
+		'seo'           => $fields,
+		'featuredImage' => $thumbnail ? (int) $thumbnail : null,
+		'excerpt'       => $post->post_excerpt,
+		'template'      => get_page_template_slug( $post->ID ),
+	);
+}
+
+/**
+ * The revisions of a post, newest first.
+ *
+ * @param int $post_id Post ID.
+ * @param int $limit   How many to return.
+ * @return array|\WP_Error
+ */
+function wpmcp_list_revisions( $post_id, $limit = 15 ) {
+	$post = wpmcp_get_readable_post( $post_id );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+
+	$revisions = wp_get_post_revisions(
+		$post->ID,
+		array( 'numberposts' => max( 1, min( 50, (int) $limit ) ) )
+	);
+
+	$items = array();
+	foreach ( $revisions as $revision ) {
+		$author = get_userdata( (int) $revision->post_author );
+
+		$items[] = array(
+			'id'         => (int) $revision->ID,
+			'date'       => $revision->post_modified_gmt,
+			'author'     => $author ? $author->display_name : null,
+			'autosave'   => wp_is_post_autosave( $revision ) ? true : false,
+			'blockCount' => wpmcp_count_blocks( parse_blocks( $revision->post_content ) ),
+		);
+	}
+
+	return array(
+		'postId'    => $post->ID,
+		'title'     => get_the_title( $post ),
+		'current'   => array(
+			'modified'   => $post->post_modified_gmt,
+			'blockCount' => wpmcp_count_blocks( parse_blocks( $post->post_content ) ),
+		),
+		'revisions' => $items,
+	);
+}
+
+/**
+ * Put a post back to the content of one of its revisions.
+ *
+ * The undo the agent lacked. Without it, a write that went wrong could
+ * only be repaired by a human in the editor — and the one case where that
+ * hurt most was a write that stripped markup the agent is not allowed to
+ * write back, which left it unable to fix its own mistake.
+ *
+ * Restoring may therefore reintroduce markup that content-write refuses:
+ * it is not agent-authored content but a state this very post was already
+ * in, saved by whoever saved it. The agent cannot craft it, only return
+ * to it.
+ *
+ * @param int  $post_id     Post ID.
+ * @param int  $revision_id Revision to restore.
+ * @param bool $dry_run     Report what would change without doing it.
+ * @return array|\WP_Error
+ */
+function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
+	$post = wpmcp_get_writable_post( $post_id );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+
+	$revision = wp_get_post_revision( (int) $revision_id );
+	if ( ! $revision ) {
+		return new \WP_Error( 'wpmcp_not_found', sprintf( 'No revision with ID %d.', (int) $revision_id ) );
+	}
+
+	// A revision of a different post would be a way around every check.
+	if ( (int) $revision->post_parent !== $post->ID ) {
+		return new \WP_Error(
+			'wpmcp_wrong_revision',
+			sprintf( 'Revision %d belongs to post %d, not %d.', (int) $revision_id, (int) $revision->post_parent, $post->ID )
+		);
+	}
+
+	$before = parse_blocks( $post->post_content );
+	$after  = parse_blocks( $revision->post_content );
+
+	$diff = array(
+		'blocksBefore' => wpmcp_count_blocks( $before ),
+		'blocksAfter'  => wpmcp_count_blocks( $after ),
+	);
+	$diff['delta'] = $diff['blocksAfter'] - $diff['blocksBefore'];
+
+	$result = array(
+		'ok'         => true,
+		'dryRun'     => (bool) $dry_run,
+		'postId'     => $post->ID,
+		'revisionId' => (int) $revision_id,
+		'revisionAt' => $revision->post_modified_gmt,
+		'diff'       => $diff,
+		'warnings'   => array(),
+	);
+
+	if ( $dry_run ) {
+		$result['message'] = 'Dry run only — nothing was restored. Call again with dry_run: false to restore.';
+		wpmcp_log(
+			'wpmcp/content-restore',
+			array(
+				'post_id'     => $post->ID,
+				'operation'   => 'restore',
+				'dry_run'     => true,
+				'summary'     => sprintf( 'Dry run: would restore revision %d (%+d blocks).', (int) $revision_id, $diff['delta'] ),
+				'revision_id' => (int) $revision_id,
+			)
+		);
+		return $result;
+	}
+
+	// Saved without the content filter on purpose: this is a state the post
+	// already held, and filtering it again would repeat the very damage a
+	// restore is meant to undo.
+	$updated = wpmcp_update_post_preserving(
+		array(
+			'ID'           => $post->ID,
+			'post_content' => wp_slash( $revision->post_content ),
+		)
+	);
+
+	if ( is_wp_error( $updated ) ) {
+		return $updated;
+	}
+
+	$stored = wpmcp_verify_stored( $post->ID, $revision->post_content );
+	if ( ! empty( $stored ) ) {
+		$result['warnings']       = $stored;
+		$result['contentAltered'] = true;
+	}
+
+	$result['message'] = 'Restored.';
+	$result['preview'] = wpmcp_preview_url( $post->ID );
+
+	wpmcp_log(
+		'wpmcp/content-restore',
+		array(
+			'post_id'     => $post->ID,
+			'operation'   => 'restore',
+			'dry_run'     => false,
+			'summary'     => sprintf( 'Restored revision %d (%+d blocks).', (int) $revision_id, $diff['delta'] ),
+			'revision_id' => (int) $revision_id,
+		)
+	);
+
+	return $result;
 }
 
 /**

@@ -178,7 +178,7 @@ foreach ( $GLOBALS['abilities'] as $name => $args ) {
 // --- The promise the access levels make ---------------------------------
 echo "\n\033[1mZugriffsstufen\033[0m\n";
 
-$write_tools = array( 'wpmcp/content-write', 'wpmcp/content-duplicate' );
+$write_tools = array( 'wpmcp/content-write', 'wpmcp/content-duplicate', 'wpmcp/content-restore' );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'read';
 $read_names = wpmcp_ability_names();
@@ -192,7 +192,8 @@ check( false === wpmcp_can_write(), 'Lesestufe meldet: kein Schreibzugriff' );
 check( false === wpmcp_live_edit_enabled(), 'Lesestufe erlaubt kein Live-Edit' );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
-check( count( array_intersect( $write_tools, wpmcp_ability_names() ) ) === 2, 'Entwurfsstufe bietet die Schreib-Werkzeuge an' );
+check( count( array_intersect( $write_tools, wpmcp_ability_names() ) ) === 3, 'Entwurfsstufe bietet die Schreib-Werkzeuge an' );
+check( in_array( 'wpmcp/content-revisions', $read_names, true ), 'Revisionen lesen geht auch ohne Schreibrecht' );
 check( false === wpmcp_live_edit_enabled(), 'Entwurfsstufe erlaubt kein Live-Edit' );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'full';

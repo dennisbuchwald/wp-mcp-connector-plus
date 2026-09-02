@@ -203,6 +203,16 @@ function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$e
 		wpmcp_validate_nesting( $type, $name, $parent, $ancestry, $path, $errors );
 		wpmcp_validate_allowed_children( $type, $name, $block, $path, $errors );
 
+		// A closed container with nothing in it renders as nothing. Usually
+		// a leftover from a template that was adapted but not emptied.
+		if ( ! empty( $type->allowed_blocks ) && empty( $block['innerBlocks'] ) ) {
+			$warnings[] = sprintf(
+				'%s: "%s" is a container and holds no blocks. It renders as an empty section — either fill it or remove it.',
+				$path,
+				$name
+			);
+		}
+
 		// Stage 4: design contract.
 		wpmcp_validate_design( $name, $attrs, $path, $errors, $warnings );
 
