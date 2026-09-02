@@ -145,6 +145,15 @@ $i = wpmcp_kses_impact( $clean . $schema, $clean . $schema . $frame );
 check( array( '<iframe' ) === $i['added'], 'gemeldet wird nur das Neue', implode( ', ', $i['added'] ) );
 check( count( $i['affected'] ) === 2, 'waehrend "betroffen" beides nennt', implode( ', ', $i['affected'] ) );
 
+echo "\n\033[1mDie Tuer fuer Reparaturen\033[0m\n";
+
+check( false === wpmcp_filtered_markup_allowed( null ), 'ist standardmaessig zu' );
+
+add_filter( 'wpmcp_allow_filtered_markup', '__return_true' );
+check( true === wpmcp_filtered_markup_allowed( null ), 'und laesst sich per Filter oeffnen' );
+$GLOBALS['dbw_filters']['wpmcp_allow_filtered_markup'] = array();
+check( false === wpmcp_filtered_markup_allowed( null ), 'und wieder schliessen' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mFilter-Analyse in Ordnung.\033[0m\n";

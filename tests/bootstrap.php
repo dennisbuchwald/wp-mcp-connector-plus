@@ -115,6 +115,14 @@ function add_action( $tag, $callback, $priority = 10, $args = 1 ) {
 	return true;
 }
 
+function __return_true() {
+	return true;
+}
+
+function __return_false() {
+	return false;
+}
+
 function wp_strip_all_tags( $text ) {
 	return trim( strip_tags( (string) $text ) );
 }
