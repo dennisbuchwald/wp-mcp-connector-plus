@@ -1,16 +1,18 @@
 <?php
 /**
  * Plugin Name:       WP MCP Connector Plus
- * Plugin URI:        https://github.com/dennisbuchwald/wp-mcp-connector-plus
+ * Plugin URI:        https://dennisbuchwald.de/apps/wp-mcp-connector-plus
  * Description:       MCP server for WordPress that lets AI agents operate a site the way an editor does: reads and writes pages as a Gutenberg block tree, exposes the block kit with its schemas and nesting rules, and validates every change before it is saved.
  * Version:           0.1.0
  * Requires at least: 6.9
+ * Tested up to:      7.0
  * Requires PHP:      8.1
- * Author:            dbw media
- * Author URI:        https://dbw-media.de
+ * Author:            Dennis Buchwald
+ * Author URI:        https://dennisbuchwald.de
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       wp-mcp-connector-plus
+ * Text Domain:       dbw-wp-mcp-connector-plus
+ * Domain Path:       /languages
  * Update URI:        https://github.com/dennisbuchwald/wp-mcp-connector-plus
  *
  * @package wp-mcp-connector-plus
@@ -45,10 +47,10 @@ function wpmcp_requirements_notice() {
 	global $wp_version;
 	printf(
 		'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
-		esc_html__( 'WP MCP Connector Plus is inactive.', 'wp-mcp-connector-plus' ),
+		esc_html__( 'WP MCP Connector Plus is inactive.', 'dbw-wp-mcp-connector-plus' ),
 		sprintf(
 			/* translators: %s: current WordPress version */
-			esc_html__( 'It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector.', 'wp-mcp-connector-plus' ),
+			esc_html__( 'It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector.', 'dbw-wp-mcp-connector-plus' ),
 			esc_html( $wp_version )
 		)
 	);
@@ -90,27 +92,67 @@ add_action( 'wp_abilities_api_init', 'wpmcp_load_abilities' );
  * The mcp-adapter release this plugin was built and tested against.
  * It is still 0.x and has had breaking changes between minor versions.
  */
-const WPMCP_MCP_ADAPTER_VERSION = '0.6.1';
+/**
+ * mcp-adapter releases this plugin has been checked against. Used only for
+ * the diagnostic message — compatibility itself is decided by the API
+ * shape below, not by a version string.
+ */
+const WPMCP_MCP_ADAPTER_TESTED = array( '0.4.1', '0.6.1' );
+
+/**
+ * Is the loaded mcp-adapter one we can drive?
+ *
+ * The adapter ships inside other plugins too (Rank Math SEO bundles it,
+ * for one), and whichever copy loads first wins the autoloader. Pinning an
+ * exact version would mean refusing to run on a large share of real sites
+ * for no reason: the surface we touch — one method, two class constants,
+ * two hooks — is identical across the versions in the wild.
+ *
+ * So check what we actually depend on instead of what it calls itself.
+ *
+ * @return bool
+ */
+function wpmcp_adapter_is_usable() {
+	$needed = array(
+		'\\WP\\MCP\\Core\\McpAdapter',
+		'\\WP\\MCP\\Transport\\HttpTransport',
+		'\\WP\\MCP\\Infrastructure\\ErrorHandling\\ErrorLogMcpErrorHandler',
+	);
+	foreach ( $needed as $class ) {
+		if ( ! class_exists( $class ) ) {
+			return false;
+		}
+	}
+
+	if ( ! method_exists( '\\WP\\MCP\\Core\\McpAdapter', 'create_server' ) ) {
+		return false;
+	}
+
+	// We pass thirteen positional arguments; anything narrower is a
+	// different API and must not be called.
+	try {
+		$method = new ReflectionMethod( '\\WP\\MCP\\Core\\McpAdapter', 'create_server' );
+	} catch ( \ReflectionException $e ) {
+		return false;
+	}
+
+	return $method->getNumberOfParameters() >= 13;
+}
 
 /**
  * Boot the MCP adapter singleton (it arms its own rest_api_init handler)
- * and register our curated server. The adapter's own default server —
- * generic discover/execute meta-tools — is switched off, so a client sees
- * only the eight content abilities and nothing else.
+ * and register our curated server.
+ *
+ * Our server has its own id and route, so it sits alongside any server
+ * another plugin registers rather than replacing it.
  */
 function wpmcp_boot_mcp() {
-	if ( ! class_exists( '\WP\MCP\Core\McpAdapter' ) ) {
+	if ( ! class_exists( '\\WP\\MCP\\Core\\McpAdapter' ) ) {
 		return; // Composer deps missing — abilities still work via wp-abilities/v1 REST.
 	}
 
-	/*
-	 * Another plugin on this site may bundle its own copy of mcp-adapter
-	 * and win the autoloader race. Refuse to drive a version we were not
-	 * built against rather than fail in subtle ways at request time —
-	 * the abilities themselves keep working over wp-abilities/v1 REST.
-	 */
-	$loaded = defined( '\WP\MCP\Core\McpAdapter::VERSION' ) ? \WP\MCP\Core\McpAdapter::VERSION : 'unknown';
-	if ( $loaded !== WPMCP_MCP_ADAPTER_VERSION ) {
+	if ( ! wpmcp_adapter_is_usable() ) {
+		$loaded = defined( '\\WP\\MCP\\Core\\McpAdapter::VERSION' ) ? \WP\MCP\Core\McpAdapter::VERSION : 'unknown';
 		add_action(
 			'admin_notices',
 			function () use ( $loaded ) {
@@ -119,20 +161,18 @@ function wpmcp_boot_mcp() {
 				}
 				printf(
 					'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
-					esc_html__( 'WP MCP Connector Plus:', 'wp-mcp-connector-plus' ),
+					esc_html__( 'WP MCP Connector Plus:', 'dbw-wp-mcp-connector-plus' ),
 					sprintf(
-						/* translators: 1: expected mcp-adapter version, 2: version actually loaded */
-						esc_html__( 'The MCP server was not started. This plugin expects mcp-adapter %1$s, but %2$s is loaded — most likely bundled by another plugin. The abilities themselves remain reachable over wp-abilities/v1.', 'wp-mcp-connector-plus' ),
-						esc_html( WPMCP_MCP_ADAPTER_VERSION ),
-						esc_html( $loaded )
+						/* translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions */
+						esc_html__( 'The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1.', 'dbw-wp-mcp-connector-plus' ),
+						esc_html( $loaded ),
+						esc_html( implode( ', ', WPMCP_MCP_ADAPTER_TESTED ) )
 					)
 				);
 			}
 		);
 		return;
 	}
-
-	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
 
 	\WP\MCP\Core\McpAdapter::instance();
 
