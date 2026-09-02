@@ -144,22 +144,23 @@ function wpmcp_render_setup_panel( $result ) {
 }
 
 /**
- * Show the generated credentials, once.
+ * Show the generated credentials as a complete quickstart, once.
+ *
+ * Deliberately a full recipe rather than fragments: someone who has never
+ * seen this plugin should get from here to a working session without
+ * reading anything else.
  *
  * @param array $c Connection details.
  */
 function wpmcp_render_connection_result( array $c ) {
-	$command = sprintf(
-		'claude mcp add --transport http %s %s --header "Authorization: %s"',
-		$c['slug'],
-		$c['endpoint'],
-		$c['header']
-	);
+	$slug   = $c['slug'];
+	$file   = '~/.claude/mcp-' . $slug . '.json';
+	$alias  = 'wp-' . $slug;
 
 	$config = wp_json_encode(
 		array(
 			'mcpServers' => array(
-				$c['slug'] => array(
+				$slug => array(
 					'type'    => 'http',
 					'url'     => $c['endpoint'],
 					'headers' => array( 'Authorization' => $c['header'] ),
@@ -168,37 +169,71 @@ function wpmcp_render_connection_result( array $c ) {
 		),
 		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
 	);
+
+	$write_file = "mkdir -p ~/.claude && cat > {$file} <<'JSON'\n{$config}\nJSON\nchmod 600 {$file}";
+	$add_alias  = "echo \"alias {$alias}='claude --mcp-config {$file} --strict-mcp-config'\" >> ~/.zshrc && source ~/.zshrc";
+	$simple     = sprintf(
+		'claude mcp add --transport http %s %s --header "Authorization: %s"',
+		$slug,
+		$c['endpoint'],
+		$c['header']
+	);
 	?>
 	<h2><?php esc_html_e( 'Your connection', 'wp-mcp-connector-plus' ); ?></h2>
 	<div class="notice notice-warning inline">
-		<p><strong><?php esc_html_e( 'Copy this now — it is shown only once.', 'wp-mcp-connector-plus' ); ?></strong></p>
+		<p><strong><?php esc_html_e( 'Copy this now — the password is shown only once and cannot be recovered.', 'wp-mcp-connector-plus' ); ?></strong></p>
 	</div>
 
-	<h3><?php esc_html_e( 'Claude Code, quick', 'wp-mcp-connector-plus' ); ?></h3>
-	<p class="description"><?php esc_html_e( 'Adds this site to your usual set of MCP servers.', 'wp-mcp-connector-plus' ); ?></p>
-	<textarea readonly rows="3" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $command ); ?></textarea>
+	<h3><?php esc_html_e( 'Claude Code — recommended setup', 'wp-mcp-connector-plus' ); ?></h3>
+	<p class="description">
+		<?php esc_html_e( 'Connects this one site and nothing else: no other MCP servers in the session, more context left for the work, and the credentials stay out of your repositories. Run each block in a terminal.', 'wp-mcp-connector-plus' ); ?>
+	</p>
 
-	<h3><?php esc_html_e( 'Claude Code, isolated (recommended)', 'wp-mcp-connector-plus' ); ?></h3>
+	<p><strong><?php esc_html_e( '1. Save the connection', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<textarea readonly rows="14" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $write_file ); ?></textarea>
+
+	<p><strong><?php esc_html_e( '2. Create a shortcut', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<p class="description"><?php esc_html_e( 'For bash, replace ~/.zshrc with ~/.bashrc.', 'wp-mcp-connector-plus' ); ?></p>
+	<textarea readonly rows="3" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $add_alias ); ?></textarea>
+
+	<p><strong><?php esc_html_e( '3. Start working', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<textarea readonly rows="2" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $alias ); ?></textarea>
 	<p class="description">
 		<?php
 		printf(
-			/* translators: %s: suggested file name */
-			esc_html__( 'Save as %s, then start Claude Code with only this site connected. Keeps other MCP servers out of the session and the credentials out of your repositories.', 'wp-mcp-connector-plus' ),
-			'<code>~/.claude/mcp-' . esc_html( $c['slug'] ) . '.json</code>'
+			/* translators: %s: the /mcp command */
+			esc_html__( 'Inside the session, %s shows whether this site is connected.', 'wp-mcp-connector-plus' ),
+			'<code>/mcp</code>'
 		);
 		?>
 	</p>
-	<textarea readonly rows="12" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $config ); ?></textarea>
-	<p><?php esc_html_e( 'Then start it with:', 'wp-mcp-connector-plus' ); ?></p>
+
+	<p><strong><?php esc_html_e( '4. Try it', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<p class="description"><?php esc_html_e( 'Read-only, nothing can change:', 'wp-mcp-connector-plus' ); ?></p>
 	<textarea readonly rows="2" style="width:100%;font-family:monospace" onclick="this.select()"><?php
-		echo esc_textarea(
-			sprintf(
-				"claude --mcp-config ~/.claude/mcp-%s.json --strict-mcp-config",
-				$c['slug']
-			)
-		);
+		esc_html_e( 'Describe this website: which pages exist, and how is the front page built?', 'wp-mcp-connector-plus' );
 	?></textarea>
+
+	<h3><?php esc_html_e( 'Alternative: add it to your usual servers', 'wp-mcp-connector-plus' ); ?></h3>
+	<p class="description">
+		<?php esc_html_e( 'Simpler, but the session then also carries every other MCP server you have configured.', 'wp-mcp-connector-plus' ); ?>
+	</p>
+	<textarea readonly rows="4" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $simple ); ?></textarea>
+
+	<h3><?php esc_html_e( 'Other clients', 'wp-mcp-connector-plus' ); ?></h3>
+	<p class="description">
+		<?php
+		printf(
+			/* translators: 1: endpoint URL, 2: authorization header value */
+			esc_html__( 'Endpoint %1$s with header %2$s.', 'wp-mcp-connector-plus' ),
+			'<code>' . esc_html( $c['endpoint'] ) . '</code>',
+			'<code>Authorization: ' . esc_html( $c['header'] ) . '</code>'
+		);
+		?>
+	</p>
 	<?php
 }
