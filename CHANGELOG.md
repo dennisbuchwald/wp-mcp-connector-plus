@@ -7,6 +7,26 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.5.0] - 2026-09-02
+
+Aus einer echten Aufgabe: eine Telefonnummer ueber 18 Seiten vereinheitlichen, 31 Fundstellen.
+
+### Hinzugefuegt
+
+- **`content-search`** - findet einen String oder regulaeren Ausdruck in einem Aufruf ueber die ganze Seite. Bisher musste dafuer jede Seite einzeln gelesen und von Hand gezaehlt werden.
+  - Zu jedem Treffer: Post, Blockpfad, Blocktyp, Instanz-ID, ob er im Markup oder in einem Attribut sitzt, und der **rohe Text davor und danach**. Ohne Trimmen, ohne Entity-Umwandlung.
+  - Der Kontext ist der eigentliche Zweck. In der Aufgabe hatten fuenf Seiten ein `<br>` vor einem leeren tel-Anker und eine nicht; eine aus den fuenf hochgerechnete Aenderung haette die sechste stillschweigend uebersprungen und Erfolg gemeldet.
+- **`content-fetch-live`** - ruft die oeffentliche URL mit Cache-Buster ab und liefert das ausgelieferte HTML samt Cache-Headern. Die einzige ehrliche Abnahmepruefung: Bei aktivem Page-Cache kann die Datenbank stimmen, waehrend Besucher noch die alte Seite sehen.
+- **Cache leeren nach dem Schreiben** - Objekt-Cache und Page-Cache fuer die betroffene Seite, mit Rueckmeldung im Ergebnis. Laesst sich der Page-Cache nicht ansteuern, steht das da, statt uebergangen zu werden.
+
+### Geaendert
+
+- **`site-info` meldet die tatsaechlich vorhandenen Werkzeuge** statt eines nackten `liveEdit`-Schalters. Ein Flag ohne Werkzeug dahinter ist irrefuehrend: Auf der Lesestufe sind die Schreib-Werkzeuge nicht abgeschaltet, sondern gar nicht registriert. Die Antwort listet jetzt Lese- und Schreibwerkzeuge einzeln, nennt die Stufe und sagt in einem Satz, was das bedeutet.
+- **Jede Lese-Beschreibung nennt ihre Quelle** - Datenbank, gerenderte Ausgabe oder oeffentliche URL. `content-preview` sagt jetzt ausdruecklich, dass es die gespeicherten Inhalte rendert und nicht das, was ein Besucher bekommt.
+- **`blocks-describe` stellt klar, dass es Blocktypen beschreibt**, nicht den Inhalt einer Seite. Im Testlauf wurde es benutzt, um Markup einer konkreten Seite zu ermitteln; dafuer ist `content-read` zustaendig, das `innerHTML` unveraendert liefert.
+
+---
+
 ## [0.4.0] - 2026-09-02
 
 Aus Befunden der laufenden Nutzung.

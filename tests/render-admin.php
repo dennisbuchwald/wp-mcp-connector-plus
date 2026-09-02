@@ -19,7 +19,7 @@ define( 'WPMCP_FILE', dirname( __DIR__ ) . '/wp-mcp-connector-plus.php' );
 $GLOBALS['wp_version'] = '7.0';
 $GLOBALS['stub']       = array(
 	'has_abilities_api' => true,
-	'registered'        => 10,
+	'registered'        => 12,
 	'agent_user'        => null,
 	'passwords'         => 0,
 	'level'             => 'draft',
@@ -113,6 +113,8 @@ function wpmcp_ability_names() {
 		'wpmcp/content-read',
 		'wpmcp/content-preview',
 		'wpmcp/content-revisions',
+		'wpmcp/content-search',
+		'wpmcp/content-fetch-live',
 	);
 	return wpmcp_can_write()
 		? array_merge( $read, array( 'wpmcp/content-write', 'wpmcp/content-duplicate', 'wpmcp/content-restore' ) )
@@ -217,15 +219,15 @@ echo "\n\033[1mZugriffsstufen\033[0m\n";
 
 $GLOBALS['stub']['agent_user'] = new WP_User();
 $GLOBALS['stub']['passwords']  = 1;
-$GLOBALS['stub']['registered'] = 10;
+$GLOBALS['stub']['registered'] = 12;
 
 $html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level'] = 'draft'; } );
 expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );
 expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
 
-$GLOBALS['stub']['registered'] = 7;
+$GLOBALS['stub']['registered'] = 9;
 $html = render_case( 'Stufe: nur lesen', function () { $GLOBALS['stub']['level'] = 'read'; } );
-expect_contains( $html, '7 of 7', 'zaehlt nur die Lese-Abilities' );
+expect_contains( $html, '9 of 9', 'zaehlt nur die Lese-Abilities' );
 
 $GLOBALS['stub']['level']      = 'draft';
 $GLOBALS['stub']['registered'] = 8;

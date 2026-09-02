@@ -103,7 +103,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/blocks-describe',
 		array(
 			'label'       => 'Block-Details',
-			'description' => 'Full schema for named blocks: every attribute with its meaning, type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules and a minimal example. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
+			'description' => 'Describes block TYPES, not the content of any page — schemas and rules, never the markup of a particular instance; for that read the page with content-read, which returns innerHTML verbatim. Full schema for named blocks: every attribute with its meaning, type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules and a minimal example. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -134,7 +134,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-list',
 		array(
 			'label'       => 'Inhalte auflisten',
-			'description' => 'List pages, posts and custom post types with status, URL and block count. Use uses_block to find real examples of a block in use on this very site — reading two or three existing pages teaches the site\'s tone and section rhythm faster than any guideline.',
+			'description' => 'Reads from the database. Lists pages, posts and custom post types with status, URL and block count. Use uses_block to find real examples of a block in use on this very site — reading two or three existing pages teaches the site\'s tone and section rhythm faster than any guideline.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -181,7 +181,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-read',
 		array(
 			'label'       => 'Seite als Blockbaum lesen',
-			'description' => 'Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" for the sections you care about, and only use "full" when you really need the whole page. In subtree mode pass "paths" to fetch several sections in one call rather than one request per section. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write. Attributes left at their default are omitted, so what you see is what was actually decided — check blocks-describe for what those defaults are. The returned "modified" value should be handed to content-write, which then refuses to overwrite someone else\'s edit.',
+			'description' => 'Reads from the database. Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" for the sections you care about, and only use "full" when you really need the whole page. In subtree mode pass "paths" to fetch several sections in one call rather than one request per section. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write. Attributes left at their default are omitted, so what you see is what was actually decided — check blocks-describe for what those defaults are. The returned "modified" value should be handed to content-write, which then refuses to overwrite someone else\'s edit.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -339,7 +339,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-preview',
 		array(
 			'label'       => 'Vorschau',
-			'description' => 'See a page as it actually renders: server-rendered HTML, its heading outline, and a signed preview URL that works without a login for 15 minutes. Use it to check your own work after writing, and equally to inspect any existing page — the block tree says what is configured, this says what a visitor gets, including whether every block renders without error.',
+			'description' => 'Renders the stored content server-side — this is the database put through the block renderer, NOT the page a visitor receives; with a page cache in front the two differ, and content-fetch-live is the one that settles it. Returns the rendered HTML, its heading outline, and a signed preview URL that works without a login for 15 minutes. Use it to check your own work after writing, and equally to inspect any existing page — the block tree says what is configured, this says what a visitor gets, including whether every block renders without error.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -443,6 +443,88 @@ function wpmcp_register_abilities() {
 				),
 				'show_in_rest' => true,
 			),
+		)
+	);
+	wp_register_ability(
+		'wpmcp/content-search',
+		array(
+			'label'       => 'Inhalte durchsuchen',
+			'description' => 'Reads from the database. Finds a string or regular expression across the whole site in one call, and returns for every occurrence: the post, the block path, the block type, its per-instance id, whether the hit sits in the markup or in an attribute, and the raw text around it. Use this before changing anything that appears in several places — the context shows what the markup actually is at each site, so a change never has to be extrapolated from the cases you happened to look at.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'query'         => array(
+						'type'        => 'string',
+						'description' => 'Text to find, or a regular expression when regex is true.',
+					),
+					'regex'         => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Treat the query as a regular expression (without delimiters).',
+					),
+					'post_types'    => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Restrict to these post types. Defaults to all the connector may read.',
+					),
+					'post_status'   => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Restrict to these statuses, e.g. ["publish"].',
+					),
+					'context_chars' => array(
+						'type'        => 'integer',
+						'default'     => 80,
+						'description' => 'Characters of raw context on each side of a hit (max 400).',
+					),
+					'limit'         => array(
+						'type'        => 'integer',
+						'default'     => 200,
+						'description' => 'Maximum hits to return (max 500). The response says if it was cut short.',
+					),
+				),
+				'required'   => array( 'query' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_search_content( is_array( $input ) ? $input : array() );
+			},
+			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/content-fetch-live',
+		array(
+			'label'       => 'Ausgelieferte Seite abrufen',
+			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'post_id'      => array(
+						'type'        => 'integer',
+						'description' => 'The post/page ID.',
+					),
+					'cache_buster' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Append a unique query parameter to bypass caches. Turn off to see exactly what a normal visitor gets.',
+					),
+				),
+				'required'   => array( 'post_id' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_fetch_live(
+					(int) ( $input['post_id'] ?? 0 ),
+					! isset( $input['cache_buster'] ) || (bool) $input['cache_buster']
+				);
+			},
+			'meta' => $read_only,
 		)
 	);
 }

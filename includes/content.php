@@ -434,6 +434,10 @@ function wpmcp_write_content( array $args ) {
 	$response['revisionId'] = $revision_id;
 	$response['preview']    = wpmcp_preview_url( $post->ID );
 
+	// The database is now right; the delivered page may not be. Say which.
+	$response['cache'] = wpmcp_purge_caches( $post->ID );
+	$response['verify'] = 'content-read shows what is stored. Use content-fetch-live to see what a visitor gets.';
+
 	wpmcp_log(
 		'wpmcp/content-write',
 		array(
@@ -984,6 +988,16 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 }
 
 /**
+ * Ability name without the namespace, as the MCP tool is called.
+ *
+ * @param string $name Ability name.
+ * @return string
+ */
+function wpmcp_short_ability_name( $name ) {
+	return str_replace( 'wpmcp/', '', (string) $name );
+}
+
+/**
  * Site fingerprint: versions, modules, post types and design tokens.
  * Meant as the first call of any session, so nothing has to be assumed.
  *
@@ -1020,9 +1034,49 @@ function wpmcp_site_info() {
 		'clientName'      => defined( 'DBW_CLIENT_NAME' ) ? DBW_CLIENT_NAME : null,
 		'postTypes'       => $post_types,
 		'designTokens'    => wpmcp_design_tokens(),
-		'liveEdit'        => wpmcp_live_edit_enabled(),
 		'blockCount'      => count( wpmcp_build_catalog( 'site' ) ),
 	);
+
+	/*
+	 * What this connector can actually do, listed rather than implied.
+	 *
+	 * Reporting a switch like "liveEdit: false" on its own invites the
+	 * reading that writing merely needs enabling, when at the read-only
+	 * level the write tools are not registered at all. A flag without a
+	 * tool behind it is worse than no flag: it cost a real session a
+	 * reconnect cycle and a wrong conclusion.
+	 */
+	$available = wpmcp_ability_names();
+	$writing   = array( 'wpmcp/content-write', 'wpmcp/content-duplicate', 'wpmcp/content-restore' );
+
+	$read_tools  = array_values( array_diff( $available, $writing ) );
+	$write_tools = array_values( array_intersect( $available, $writing ) );
+
+	$levels = wpmcp_access_levels();
+	$level  = wpmcp_access_level();
+
+	$info['capabilities'] = array(
+		'accessLevel' => $level,
+		'read'        => array_map( 'wpmcp_short_ability_name', $read_tools ),
+		'write'       => array_map( 'wpmcp_short_ability_name', $write_tools ),
+		'explains'    => empty( $write_tools )
+			? sprintf(
+				'This site is set to "%s". No write tools are registered — writing is not disabled, it is absent. Nothing you send can change content until the site owner raises the access level.',
+				$levels[ $level ]['label']
+			)
+			: sprintf(
+				'This site is set to "%s". %s',
+				$levels[ $level ]['label'],
+				wpmcp_live_edit_enabled()
+					? 'Drafts and published pages may be edited. Publishing is never possible.'
+					: 'Drafts and new pages may be edited; published pages are read-only. Publishing is never possible.'
+			),
+	);
+
+	// Only meaningful once writing exists at all.
+	if ( ! empty( $write_tools ) ) {
+		$info['capabilities']['publishedPagesWritable'] = wpmcp_live_edit_enabled();
+	}
 
 	if ( function_exists( 'dbw_get_settings' ) ) {
 		$settings = dbw_get_settings();

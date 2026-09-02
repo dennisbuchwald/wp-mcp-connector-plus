@@ -155,6 +155,8 @@ function wpmcp_ability_names() {
 		'wpmcp/content-read',
 		'wpmcp/content-preview',
 		'wpmcp/content-revisions',
+		'wpmcp/content-search',
+		'wpmcp/content-fetch-live',
 	);
 
 	if ( ! wpmcp_can_write() ) {
