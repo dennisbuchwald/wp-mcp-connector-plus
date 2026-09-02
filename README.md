@@ -233,22 +233,49 @@ specific node instead of retrying the whole page.
 
 ## Safety model
 
-Write access to a live website is the sensitive part, so the defaults are
-conservative:
+Write access to a live website is the sensitive part, so what the agent
+may do is a setting, not a fixed assumption. Under *Tools → MCP
+Connector*:
 
-- **The agent cannot publish.** The role has no `publish_*` capability.
-  New pages and duplicates are drafts until a human publishes them —
-  enforced by WordPress, not by plugin logic.
-- **No deleting, no uploads, no settings access.**
-- **Published content is read-only** until you switch live editing on.
-- **Application passwords are enabled for the agent role only**, and left
-  untouched for everyone else.
+| Level | What the agent can do |
+|---|---|
+| **Read only** | Look at the site and explain it. The write tools do not exist. |
+| **Drafts** (default) | Create pages, duplicate existing ones, edit drafts. Published pages are read-only. |
+| **Drafts and published pages** | As above, plus editing published pages directly. |
+
+The mechanism matters more than the list: **anything the level does not
+allow is never registered**, so a disallowed tool is absent from the MCP
+tool list rather than present and refusing. The agent's role capabilities
+follow the same setting, so WordPress enforces the same boundary a second
+time, independently of this plugin's own logic.
+
+Synced patterns are a separate setting (hidden / readable / editable),
+because editing one changes every page that embeds it at once and a
+pattern has no draft state. When one is written, the dry run reports how
+many pieces of content are affected.
+
+Regardless of level:
+
+- **The agent can never publish.** No level grants `publish_*`. New pages
+  and duplicates stay drafts until a human publishes them — enforced by
+  WordPress, not by plugin logic.
+- **No deleting, no uploads, no settings access**, at any level.
 - **Dry run is the default.** Writing requires `dry_run: false`.
 - **Every write creates a revision** — rollback is one click.
 - **Slug, status and post type are never touched**, so URLs stay put.
 - **Everything is logged** under *Tools → MCP Connector*.
 - **Kill switch:** `define( 'WPMCP_DISABLE', true );` in `wp-config.php`
   stops the connector without deactivating the plugin.
+
+To fix the level from code instead of the database, for instance on a
+production site that should never move past read-only:
+
+```php
+define( 'WPMCP_ACCESS_LEVEL', 'read' );   // read | draft | full
+define( 'WPMCP_PATTERN_ACCESS', 'none' ); // none | read | write
+```
+
+Both then show as locked in the admin.
 
 ## Performance
 

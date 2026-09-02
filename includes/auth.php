@@ -37,52 +37,9 @@ function wpmcp_register_role() {
 	add_role(
 		WPMCP_ROLE,
 		__( 'AI Editor', 'wp-mcp-connector-plus' ),
-		array(
-			'read'                  => true,
-			WPMCP_CAP              => true,
-			'edit_posts'            => true,
-			'edit_others_posts'     => true,
-			'edit_published_posts'  => true,
-			'edit_pages'            => true,
-			'edit_others_pages'     => true,
-			'edit_published_pages'  => true,
-		)
+		wpmcp_level_capabilities( wpmcp_access_level() )
 	);
 }
-
-/**
- * Live-edit toggle. Default off: the AI can only touch drafts and create
- * new drafts; published content is read-only for it.
- *
- * @return bool
- */
-function wpmcp_live_edit_enabled() {
-	if ( defined( 'WPMCP_LIVE_EDIT' ) ) {
-		return (bool) WPMCP_LIVE_EDIT;
-	}
-	return (bool) get_option( 'wpmcp_live_edit', false );
-}
-
-/**
- * Strip edit_published_* from AI users at runtime while live-edit is off.
- * Runtime filter instead of role surgery: stateless, survives role resets.
- *
- * @param array    $allcaps All capabilities of the user.
- * @param array    $caps    Required primitive capabilities.
- * @param array    $args    Arguments.
- * @param \WP_User $user    The user object.
- * @return array
- */
-function wpmcp_filter_caps( $allcaps, $caps, $args, $user ) {
-	if ( empty( $allcaps[ WPMCP_CAP ] ) ) {
-		return $allcaps;
-	}
-	if ( ! wpmcp_live_edit_enabled() ) {
-		unset( $allcaps['edit_published_posts'], $allcaps['edit_published_pages'] );
-	}
-	return $allcaps;
-}
-add_filter( 'user_has_cap', 'wpmcp_filter_caps', 10, 4 );
 
 /**
  * Is the given user an AI connector user?

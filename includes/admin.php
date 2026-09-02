@@ -35,13 +35,25 @@ add_action( 'admin_menu', 'wpmcp_admin_menu' );
 function wpmcp_admin_init() {
 	register_setting(
 		'wpmcp_settings',
-		'wpmcp_live_edit',
+		'wpmcp_access_level',
 		array(
-			'type'              => 'boolean',
+			'type'              => 'string',
 			'sanitize_callback' => function ( $value ) {
-				return empty( $value ) ? 0 : 1;
+				return array_key_exists( $value, wpmcp_access_levels() ) ? $value : 'draft';
 			},
-			'default'           => false,
+			'default'           => 'draft',
+		)
+	);
+
+	register_setting(
+		'wpmcp_settings',
+		'wpmcp_pattern_access',
+		array(
+			'type'              => 'string',
+			'sanitize_callback' => function ( $value ) {
+				return in_array( $value, array( 'none', 'read', 'write' ), true ) ? $value : 'read';
+			},
+			'default'           => 'read',
 		)
 	);
 }
@@ -228,19 +240,55 @@ function wpmcp_render_admin_page() {
 			<?php settings_fields( 'wpmcp_settings' ); ?>
 			<table class="form-table" role="presentation">
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Edit published content', 'wp-mcp-connector-plus' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'What the agent may do', 'wp-mcp-connector-plus' ); ?></th>
 					<td>
-						<label>
-							<input type="checkbox" name="wpmcp_live_edit" value="1"
-								<?php checked( wpmcp_live_edit_enabled() ); ?>
-								<?php disabled( defined( 'WPMCP_LIVE_EDIT' ) ); ?> />
-							<?php esc_html_e( 'Allow agents to change published pages directly', 'wp-mcp-connector-plus' ); ?>
-						</label>
+						<?php $current = wpmcp_access_level(); ?>
+						<?php foreach ( wpmcp_access_levels() as $key => $level ) : ?>
+							<p>
+								<label>
+									<input type="radio" name="wpmcp_access_level"
+										value="<?php echo esc_attr( $key ); ?>"
+										<?php checked( $current, $key ); ?>
+										<?php disabled( defined( 'WPMCP_ACCESS_LEVEL' ) ); ?> />
+									<strong><?php echo esc_html( $level['label'] ); ?></strong>
+								</label>
+								<br>
+								<span class="description" style="margin-left:1.7em"><?php echo esc_html( $level['description'] ); ?></span>
+							</p>
+						<?php endforeach; ?>
 						<p class="description">
-							<?php esc_html_e( 'Off: agents work on drafts and new pages only, and published content is read-only to them. Publishing is never possible either way, that stays with a human. Every write creates a revision.', 'wp-mcp-connector-plus' ); ?>
-							<?php if ( defined( 'WPMCP_LIVE_EDIT' ) ) : ?>
+							<strong><?php esc_html_e( 'Publishing is never possible, at any level.', 'wp-mcp-connector-plus' ); ?></strong>
+							<?php esc_html_e( 'Neither is deleting, uploading files or changing settings. Tools the level does not allow are not registered at all, so the agent never sees them. Every write creates a revision.', 'wp-mcp-connector-plus' ); ?>
+							<?php if ( defined( 'WPMCP_ACCESS_LEVEL' ) ) : ?>
 								<br><strong><?php esc_html_e( 'Currently fixed by a constant in wp-config.php.', 'wp-mcp-connector-plus' ); ?></strong>
 							<?php endif; ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Synced patterns', 'wp-mcp-connector-plus' ); ?></th>
+					<td>
+						<?php
+						$pattern_current = wpmcp_pattern_access();
+						$pattern_options = array(
+							'none'  => __( 'Hidden — the agent cannot see what is inside them', 'wp-mcp-connector-plus' ),
+							'read'  => __( 'Readable — the agent can look inside but not change them', 'wp-mcp-connector-plus' ),
+							'write' => __( 'Editable — the agent may change them', 'wp-mcp-connector-plus' ),
+						);
+						?>
+						<?php foreach ( $pattern_options as $key => $label ) : ?>
+							<p>
+								<label>
+									<input type="radio" name="wpmcp_pattern_access"
+										value="<?php echo esc_attr( $key ); ?>"
+										<?php checked( $pattern_current, $key ); ?>
+										<?php disabled( defined( 'WPMCP_PATTERN_ACCESS' ) || ( 'write' === $key && ! wpmcp_can_write() ) ); ?> />
+									<?php echo esc_html( $label ); ?>
+								</label>
+							</p>
+						<?php endforeach; ?>
+						<p class="description">
+							<?php esc_html_e( 'A synced pattern appears on every page that embeds it, so changing one changes all of them at once — and a pattern has no draft state. The dry run says how many pieces of content are affected before anything is saved.', 'wp-mcp-connector-plus' ); ?>
 						</p>
 					</td>
 				</tr>

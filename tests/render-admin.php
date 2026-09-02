@@ -22,6 +22,8 @@ $GLOBALS['stub']       = array(
 	'registered'        => 8,
 	'agent_user'        => null,
 	'passwords'         => 0,
+	'level'             => 'draft',
+	'patterns'          => 'read',
 );
 
 // --- WordPress stubs ----------------------------------------------------
@@ -91,26 +93,41 @@ class WP_Application_Passwords {
 if ( $GLOBALS['stub']['has_abilities_api'] ) {
 	function wp_register_ability( ...$a ) { return true; }
 	function wp_get_ability( $name ) {
-		static $i = 0;
-		return ( ++$i <= $GLOBALS['stub']['registered'] ) ? (object) array( 'name' => $name ) : null;
+		// Deterministic: the first N names of the current level count as
+		// registered. A call counter would leak state between renders.
+		$index = array_search( $name, wpmcp_ability_names(), true );
+		return ( false !== $index && $index < $GLOBALS['stub']['registered'] )
+			? (object) array( 'name' => $name )
+			: null;
 	}
 }
 
 // Pieces of the plugin the admin page calls into.
 function wpmcp_ability_names() {
-	return array(
+	$read = array(
 		'wpmcp/site-info',
 		'wpmcp/blocks-catalog',
 		'wpmcp/blocks-describe',
 		'wpmcp/content-list',
 		'wpmcp/content-read',
-		'wpmcp/content-write',
-		'wpmcp/content-duplicate',
 		'wpmcp/content-preview',
 	);
+	return wpmcp_can_write()
+		? array_merge( $read, array( 'wpmcp/content-write', 'wpmcp/content-duplicate' ) )
+		: $read;
 }
 function wpmcp_adapter_is_usable() { return true; }
-function wpmcp_live_edit_enabled() { return false; }
+function wpmcp_live_edit_enabled() { return 'full' === wpmcp_access_level(); }
+function wpmcp_can_write() { return 'read' !== wpmcp_access_level(); }
+function wpmcp_access_level() { return $GLOBALS['stub']['level'] ?? 'draft'; }
+function wpmcp_pattern_access() { return $GLOBALS['stub']['patterns'] ?? 'read'; }
+function wpmcp_access_levels() {
+	return array(
+		'read'  => array( 'label' => 'Read only', 'description' => 'Look only.' ),
+		'draft' => array( 'label' => 'Drafts', 'description' => 'Drafts and new pages.' ),
+		'full'  => array( 'label' => 'Drafts and published pages', 'description' => 'Also published.' ),
+	);
+}
 function wpmcp_audit_table() { return 'wp_wpmcp_log'; }
 const WPMCP_ROLE = 'wpmcp_ai_editor';
 
@@ -192,6 +209,23 @@ $html = render_case(
 );
 expect_contains( $html, 'expose no tools', 'warnt vor leerer Werkzeugliste' );
 expect_contains( $html, 'dashicons-dismiss', 'markiert den Schritt als Fehler' );
+
+echo "\n\033[1mZugriffsstufen\033[0m\n";
+
+$GLOBALS['stub']['agent_user'] = new WP_User();
+$GLOBALS['stub']['passwords']  = 1;
+$GLOBALS['stub']['registered'] = 8;
+
+$html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level'] = 'draft'; } );
+expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );
+expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
+
+$GLOBALS['stub']['registered'] = 6;
+$html = render_case( 'Stufe: nur lesen', function () { $GLOBALS['stub']['level'] = 'read'; } );
+expect_contains( $html, '6 of 6', 'zaehlt nur die Lese-Abilities' );
+
+$GLOBALS['stub']['level']      = 'draft';
+$GLOBALS['stub']['registered'] = 8;
 
 echo "\n\033[1mVerbindung erzeugen\033[0m\n";
 

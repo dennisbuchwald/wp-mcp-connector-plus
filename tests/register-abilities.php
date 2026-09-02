@@ -16,6 +16,7 @@
 
 define( 'ABSPATH', __DIR__ . '/' );
 
+$GLOBALS['options']    = array( 'wpmcp_access_level' => 'draft' );
 $GLOBALS['hooks']      = array();
 $GLOBALS['categories'] = array();
 $GLOBALS['abilities']  = array();
@@ -87,7 +88,10 @@ function wp_salt( $s = 'auth' ) { return 'test-salt'; }
 function home_url( $p = '' ) { return 'https://example.test' . $p; }
 function add_query_arg( $args, $url ) { return $url . '?' . http_build_query( $args ); }
 function get_post_type( $id ) { return 'page'; }
-function get_option( $n, $d = false ) { return $d; }
+function get_option( $n, $d = false ) {
+	return $GLOBALS['options'][ $n ] ?? $d;
+}
+function get_role( $r ) { return null; }
 
 // --- Load the plugin ----------------------------------------------------
 
@@ -164,6 +168,44 @@ foreach ( $GLOBALS['abilities'] as $name => $args ) {
 	}
 	check( empty( $problems ), "vollständig: {$name}", implode( ', ', $problems ) );
 }
+
+// --- The promise the access levels make ---------------------------------
+echo "\n\033[1mZugriffsstufen\033[0m\n";
+
+$write_tools = array( 'wpmcp/content-write', 'wpmcp/content-duplicate' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'read';
+$read_names = wpmcp_ability_names();
+check(
+	! array_intersect( $write_tools, $read_names ),
+	'Lesestufe bietet keine Schreib-Werkzeuge an',
+	'gefunden: ' . implode( ', ', array_intersect( $write_tools, $read_names ) )
+);
+check( in_array( 'wpmcp/content-read', $read_names, true ), 'Lesestufe kann weiterhin lesen' );
+check( false === wpmcp_can_write(), 'Lesestufe meldet: kein Schreibzugriff' );
+check( false === wpmcp_live_edit_enabled(), 'Lesestufe erlaubt kein Live-Edit' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+check( count( array_intersect( $write_tools, wpmcp_ability_names() ) ) === 2, 'Entwurfsstufe bietet die Schreib-Werkzeuge an' );
+check( false === wpmcp_live_edit_enabled(), 'Entwurfsstufe erlaubt kein Live-Edit' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'full';
+check( true === wpmcp_live_edit_enabled(), 'Vollstufe erlaubt Live-Edit' );
+
+echo "\n\033[1mHarte Grenzen (auf jeder Stufe)\033[0m\n";
+
+$forbidden = array( 'publish_posts', 'publish_pages', 'delete_posts', 'delete_pages', 'upload_files', 'manage_options' );
+foreach ( array( 'read', 'draft', 'full' ) as $level ) {
+	$caps  = array_keys( wpmcp_level_capabilities( $level ) );
+	$found = array_intersect( $forbidden, $caps );
+	check( empty( $found ), "Stufe '{$level}' vergibt keine gefaehrlichen Rechte", 'vergeben: ' . implode( ', ', $found ) );
+}
+
+check( ! in_array( 'edit_posts', array_keys( wpmcp_level_capabilities( 'read' ) ), true ), 'Lesestufe hat gar kein Bearbeitungsrecht' );
+check( in_array( 'edit_published_pages', array_keys( wpmcp_level_capabilities( 'full' ) ), true ), 'Nur die Vollstufe darf Veroeffentlichtes bearbeiten' );
+check( ! in_array( 'edit_published_pages', array_keys( wpmcp_level_capabilities( 'draft' ) ), true ), 'Entwurfsstufe darf Veroeffentlichtes nicht bearbeiten' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
 
 echo "\n";
 if ( 0 === $fail ) {

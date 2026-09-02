@@ -292,6 +292,18 @@ function wpmcp_blocks_to_outline( array $blocks, array $prefix = array(), $depth
 function wpmcp_block_label( array $block ) {
 	$attrs = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
 
+	// A synced pattern shows nothing about itself in the tree — only a
+	// reference id. Resolve it, so the outline says what is in there
+	// instead of leaving the reader to guess.
+	if ( 'core/block' === ( $block['blockName'] ?? '' ) && ! empty( $attrs['ref'] ) ) {
+		$title = get_the_title( (int) $attrs['ref'] );
+		return sprintf(
+			'%s (synced pattern #%d)',
+			'' !== $title ? $title : __( 'untitled', 'wp-mcp-connector-plus' ),
+			(int) $attrs['ref']
+		);
+	}
+
 	$candidates = array( 'heading', 'sectionHeading', 'title', 'headline', 'question', 'name', 'label', 'text', 'quote', 'eyebrow' );
 	foreach ( $candidates as $key ) {
 		if ( ! empty( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ) {

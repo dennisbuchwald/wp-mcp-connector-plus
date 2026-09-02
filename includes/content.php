@@ -30,7 +30,39 @@ function wpmcp_allowed_post_types() {
 		}
 		$types[] = $type->name;
 	}
+
+	// Synced patterns are not a public post type, so they need saying so.
+	if ( 'none' !== wpmcp_pattern_access() ) {
+		$types[] = 'wp_block';
+	}
+
 	return apply_filters( 'wpmcp_allowed_post_types', $types );
+}
+
+/**
+ * How many published posts embed a given synced pattern.
+ *
+ * Editing a pattern changes every one of them at once, so the number
+ * belongs in the dry run before anyone decides to save.
+ *
+ * @param int $pattern_id Pattern post ID.
+ * @return int
+ */
+function wpmcp_pattern_usage_count( $pattern_id ) {
+	global $wpdb;
+
+	$needle = '"ref":' . (int) $pattern_id;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- content search, no core API for this.
+	return (int) $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->posts}
+			 WHERE post_status NOT IN ('trash', 'auto-draft')
+			   AND post_type != 'revision'
+			   AND post_content LIKE %s",
+			'%' . $wpdb->esc_like( $needle ) . '%'
+		)
+	);
 }
 
 /**
@@ -201,6 +233,17 @@ function wpmcp_write_content( array $args ) {
 		return $post;
 	}
 
+	// Synced patterns need their own permission, and their own warning.
+	if ( 'wp_block' === $post->post_type && 'write' !== wpmcp_pattern_access() ) {
+		return new \WP_Error(
+			'wpmcp_pattern_readonly',
+			sprintf(
+				'Post %d is a synced pattern, and pattern editing is switched off for this site. A pattern change would apply to every page embedding it.',
+				$post->ID
+			)
+		);
+	}
+
 	$before_blocks = parse_blocks( $post->post_content );
 	$before_count  = wpmcp_count_blocks( $before_blocks );
 
@@ -249,6 +292,16 @@ function wpmcp_write_content( array $args ) {
 	}
 
 	$warnings = $validation['warnings'];
+
+	if ( 'wp_block' === $post->post_type ) {
+		$uses = wpmcp_pattern_usage_count( $post->ID );
+		if ( $uses > 0 ) {
+			$warnings[] = sprintf(
+				'This is a synced pattern used on %d other piece(s) of content. Saving changes all of them at once, and a pattern has no draft state.',
+				$uses
+			);
+		}
+	}
 
 	// A full-tree write that drops a lot of content is usually a mistake,
 	// not an intention — say so loudly while there is still time.

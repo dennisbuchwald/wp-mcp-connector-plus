@@ -66,6 +66,7 @@ if ( file_exists( WPMCP_DIR . 'vendor/autoload_packages.php' ) ) {
 
 // Always cheap to load: pure function definitions, no hooks with runtime cost.
 require_once WPMCP_DIR . 'includes/auth.php';
+require_once WPMCP_DIR . 'includes/access.php';
 require_once WPMCP_DIR . 'includes/audit.php';
 require_once WPMCP_DIR . 'includes/preview.php';
 require_once WPMCP_DIR . 'includes/updater.php';
@@ -229,24 +230,6 @@ function wpmcp_boot_mcp() {
 	);
 }
 add_action( 'plugins_loaded', 'wpmcp_boot_mcp' );
-
-/**
- * Ability names exposed as MCP tools.
- *
- * @return string[]
- */
-function wpmcp_ability_names() {
-	return array(
-		'wpmcp/site-info',
-		'wpmcp/blocks-catalog',
-		'wpmcp/blocks-describe',
-		'wpmcp/content-list',
-		'wpmcp/content-read',
-		'wpmcp/content-write',
-		'wpmcp/content-duplicate',
-		'wpmcp/content-preview',
-	);
-}
 
 // Admin: audit log page + settings (only in admin context).
 if ( is_admin() ) {
