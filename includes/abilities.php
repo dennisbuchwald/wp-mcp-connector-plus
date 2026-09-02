@@ -14,22 +14,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Register the ability category.
- */
-function wpmcp_register_category() {
-	if ( ! function_exists( 'wp_register_ability_category' ) ) {
-		return;
-	}
-	wp_register_ability_category(
-		'wp-mcp-connector-plus',
-		array(
-			'label'       => 'MCP Connector Plus',
-			'description' => 'Block-tree level access to this WordPress site.',
-		)
-	);
-}
-add_action( 'wp_abilities_api_categories_init', 'wpmcp_register_category' );
 
 /**
  * Shared permission callback for every ability.

@@ -71,6 +71,29 @@ require_once WPMCP_DIR . 'includes/preview.php';
 require_once WPMCP_DIR . 'includes/updater.php';
 
 /**
+ * Ability categories are registered on their own hook, which fires BEFORE
+ * wp_abilities_api_init. It therefore cannot live in includes/abilities.php,
+ * which is only loaded on that later hook — the category would never exist
+ * and every ability registration would be rejected for naming a category
+ * that is not there.
+ *
+ * Kept inline so nothing extra has to load this early.
+ */
+function wpmcp_register_category() {
+	if ( ! function_exists( 'wp_register_ability_category' ) ) {
+		return;
+	}
+	wp_register_ability_category(
+		'wpmcp-connector',
+		array(
+			'label'       => 'MCP Connector Plus',
+			'description' => 'Block-tree level access to this WordPress site.',
+		)
+	);
+}
+add_action( 'wp_abilities_api_categories_init', 'wpmcp_register_category' );
+
+/**
  * The heavy lifting (tree transforms, validation, ability registration) is
  * only loaded in contexts that can actually call abilities: REST requests
  * and WP-CLI. Frontend page views never pay for it — the only frontend

@@ -12,6 +12,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * How many of our abilities actually made it into the registry.
+ *
+ * Registration fails silently if anything is off (a missing category, for
+ * instance), and the only symptom is an MCP server that connects but
+ * offers no tools. Surface it here instead.
+ *
+ * @return int|null Null when the Abilities API cannot be queried.
+ */
+function wpmcp_registered_ability_count() {
+	if ( ! function_exists( 'wp_get_ability' ) ) {
+		return null;
+	}
+	$count = 0;
+	foreach ( wpmcp_ability_names() as $name ) {
+		if ( wp_get_ability( $name ) ) {
+			++$count;
+		}
+	}
+	return $count;
+}
+
+/**
  * Register the admin page under Tools.
  */
 function wpmcp_admin_menu() {
@@ -65,6 +87,41 @@ function wpmcp_render_admin_page() {
 
 		<h2><?php esc_html_e( 'Connection', 'wp-mcp-connector-plus' ); ?></h2>
 		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Status', 'wp-mcp-connector-plus' ); ?></th>
+				<td>
+					<?php
+					$registered = wpmcp_registered_ability_count();
+					$expected   = count( wpmcp_ability_names() );
+					if ( null === $registered ) {
+						printf(
+							'<span style="color:#b32d2e">%s</span>',
+							esc_html__( 'Abilities API not available — the connector cannot run.', 'wp-mcp-connector-plus' )
+						);
+					} elseif ( $registered === $expected ) {
+						printf(
+							'<span style="color:#008a20">%s</span>',
+							sprintf(
+								/* translators: %d: number of abilities */
+								esc_html__( '%d of %d abilities registered.', 'wp-mcp-connector-plus' ),
+								(int) $registered,
+								(int) $expected
+							)
+						);
+					} else {
+						printf(
+							'<span style="color:#b32d2e">%s</span>',
+							sprintf(
+								/* translators: 1: registered count, 2: expected count */
+								esc_html__( 'Only %1$d of %2$d abilities registered. The MCP server will connect but expose no tools.', 'wp-mcp-connector-plus' ),
+								(int) $registered,
+								(int) $expected
+							)
+						);
+					}
+					?>
+				</td>
+			</tr>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'MCP endpoint', 'wp-mcp-connector-plus' ); ?></th>
 				<td><code><?php echo esc_html( $endpoint ); ?></code></td>
