@@ -51,13 +51,35 @@ content — subtly malformed markup that looks fine and breaks silently.
 - Content made of Gutenberg blocks. Page-builder sites (Elementor, WPBakery)
   have no block tree for this to work on.
 
-## Install
+## Setup
 
-Download the ZIP from [Releases](https://github.com/dennisbuchwald/wp-mcp-connector-plus/releases)
+**1. Install.** Download the ZIP from
+[Releases](https://github.com/dennisbuchwald/wp-mcp-connector-plus/releases)
 and upload it under *Plugins → Add New → Upload Plugin*. Dependencies are
 bundled; no Composer on the server required.
 
-For development:
+**2. Open *Tools → MCP Connector*.** The status table tells you whether
+everything needed is actually in place:
+
+| Step | What it checks |
+|---|---|
+| WordPress with the Abilities API | core 6.9+, otherwise nothing can register |
+| Abilities registered | all eight made it into the registry |
+| MCP transport | a usable mcp-adapter, and the endpoint URL |
+| Agent user and credential | the account your agent will use |
+
+Green all the way down means you are ready. A red row names the problem
+rather than leaving you with a server that connects and does nothing.
+
+**3. Click "Generate connection".** This creates the agent user if it does
+not exist, generates an application password, and hands you a ready-made
+command plus a config file — no copying credentials by hand, no base64 in
+your shell history.
+
+The password is shown **once**. Lose it and you generate a new one; there
+is nothing to recover.
+
+For development instead of a release ZIP:
 
 ```bash
 git clone https://github.com/dennisbuchwald/wp-mcp-connector-plus.git
@@ -65,28 +87,47 @@ cd wp-mcp-connector-plus
 composer install
 ```
 
-Activating the plugin creates the **AI Editor** role and an activity log
-table. Then, under *Tools → MCP Connector*:
+## Connecting a client
 
-1. Create a user and give it the **AI Editor** role
-2. Generate an application password in that user's profile
-3. Copy the endpoint shown on the page
+The setup screen gives you both forms. The endpoint is always
+`https://your-site.com/wp-json/wpmcp/v1/mcp`.
 
-## Connect an AI client
+### Claude Code, isolated (recommended)
 
-The endpoint is `https://your-site.com/wp-json/wpmcp/v1/mcp`.
-
-### Claude Code
+Save the JSON from the setup screen as `~/.claude/mcp-your-site.json` —
+outside any repository, so credentials never land in git — and start
+Claude Code with only this site connected:
 
 ```bash
-claude mcp add --transport http wp https://your-site.com/wp-json/wpmcp/v1/mcp --header "Authorization: Basic $(printf '%s' 'ai-editor:APPLICATION PASSWORD' | base64)"
+claude --mcp-config ~/.claude/mcp-your-site.json --strict-mcp-config
+```
+
+`--strict-mcp-config` ignores every other MCP server you have configured.
+Two reasons this is the better default:
+
+- The agent cannot wander into an unrelated tool while editing a website.
+- Fewer tool definitions means more context left for the actual work.
+
+Worth an alias per site:
+
+```bash
+alias wp-acme='claude --mcp-config ~/.claude/mcp-acme.json --strict-mcp-config'
+```
+
+With write access, working on exactly one site at a time is the sane
+operating mode anyway.
+
+### Claude Code, added to your usual set
+
+```bash
+claude mcp add --transport http your-site https://your-site.com/wp-json/wpmcp/v1/mcp --header "Authorization: Basic <from the setup screen>"
 ```
 
 ### Claude Desktop / claude.ai custom connector
 
-Add a custom connector pointing at the same URL and supply the
-`Authorization: Basic …` header. For clients that cannot send headers,
-put [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote)
+Point a custom connector at the same URL and supply the
+`Authorization: Basic …` header. For clients that cannot send headers, put
+[`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote)
 in front as a stdio proxy.
 
 ### Without MCP
@@ -95,6 +136,66 @@ Every ability is also reachable over REST at
 `/wp-json/wp-abilities/v1/abilities/{name}/run`, because they are
 registered with the core Abilities API. The MCP transport is swappable,
 not load-bearing.
+
+## Working with it
+
+You do not call tools yourself — you describe what you want, and the tool
+descriptions steer the agent through a sensible order: look at the site,
+learn the kit, read a reference page, then build.
+
+Start read-only to see what it understands:
+
+> What kind of website is this, and how is the front page built?
+
+Then the kit:
+
+> Explain this site's block kit. Which block would you use for what?
+
+Then real work. Duplicating beats building from scratch, because an
+existing page already carries the site's structure and tone:
+
+> I need a new service page for X. Look at how the existing service pages
+> are built, duplicate the closest one and adapt it. Show me the dry run
+> first.
+
+What happens: the agent reads the catalogue and playbook, looks at a
+reference page or two, duplicates (creating a draft), validates as a dry
+run, writes, and fetches a preview URL to check its own work.
+
+Throughout: drafts only, published pages are read-only unless you switch
+that on, publishing is never possible, and everything lands in the
+activity log.
+
+## Troubleshooting
+
+**Connected, but the agent says there are no tools.** Check the status
+table under *Tools → MCP Connector*. If "Abilities registered" is red,
+the MCP server is running but has nothing to offer.
+
+**"Another plugin loaded mcp-adapter X".** The adapter is a library that
+other plugins bundle too — Rank Math SEO ships one, for instance — and
+whichever copy loads first wins. This plugin checks whether the loaded
+copy exposes the interface it needs and runs with it if so; the notice
+only appears when it genuinely cannot. To see every copy on a site:
+
+```bash
+wp eval 'foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(WP_PLUGIN_DIR)) as $f) { if ($f->getFilename() === "McpAdapter.php") { preg_match("/VERSION\s*=\s*.([0-9.]+)/", file_get_contents($f->getPathname()), $m); echo str_replace(WP_PLUGIN_DIR . "/", "", $f->getPathname()), " -> ", $m[1] ?? "?", "\n"; } }'
+```
+
+**No "Application Passwords" section on the user profile.** Hardened
+setups and security plugins often disable them globally. This plugin
+re-enables them for the agent role only, and leaves every other user
+exactly as your site configured them. If the section is still missing,
+something else is filtering it — check for a security plugin.
+
+**Checking authentication by hand:**
+
+```bash
+curl -u 'agent-user:application password' https://your-site.com/wp-json/wp-abilities/v1/abilities
+```
+
+If that returns a list containing `wpmcp/…` entries, the connection works
+and the problem is on the client side.
 
 ## The eight abilities
 
@@ -219,6 +320,7 @@ and never runs Composer.
 ```bash
 tests/fetch-shim.sh                              # once: fetch the real WP block parser
 php tests/run-tests.php                          # 97 unit tests
+php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
 

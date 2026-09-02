@@ -1,36 +1,18 @@
 <?php
 /**
- * Admin surface: connection details, the live-edit switch, and the audit
- * log — so the question "what did the AI change on my site?" has an answer
- * that does not require database access.
+ * Admin surface: a guided setup that doubles as a diagnostic, the
+ * live-edit switch, and the activity log — so the question "what did the
+ * agent change on my site?" has an answer without database access.
+ *
+ * Each setup step checks a real precondition rather than just telling you
+ * what to do next. A silent registration failure shows up here as a red
+ * step instead of as an MCP server that connects and offers no tools.
  *
  * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
-}
-
-/**
- * How many of our abilities actually made it into the registry.
- *
- * Registration fails silently if anything is off (a missing category, for
- * instance), and the only symptom is an MCP server that connects but
- * offers no tools. Surface it here instead.
- *
- * @return int|null Null when the Abilities API cannot be queried.
- */
-function wpmcp_registered_ability_count() {
-	if ( ! function_exists( 'wp_get_ability' ) ) {
-		return null;
-	}
-	$count = 0;
-	foreach ( wpmcp_ability_names() as $name ) {
-		if ( wp_get_ability( $name ) ) {
-			++$count;
-		}
-	}
-	return $count;
 }
 
 /**
@@ -66,6 +48,126 @@ function wpmcp_admin_init() {
 add_action( 'admin_init', 'wpmcp_admin_init' );
 
 /**
+ * How many of our abilities actually made it into the registry.
+ *
+ * @return int|null Null when the Abilities API cannot be queried.
+ */
+function wpmcp_registered_ability_count() {
+	if ( ! function_exists( 'wp_get_ability' ) ) {
+		return null;
+	}
+	$count = 0;
+	foreach ( wpmcp_ability_names() as $name ) {
+		if ( wp_get_ability( $name ) ) {
+			++$count;
+		}
+	}
+	return $count;
+}
+
+/**
+ * The agent user, if one exists.
+ *
+ * @return \WP_User|null
+ */
+function wpmcp_agent_user() {
+	$users = get_users(
+		array(
+			'role'   => WPMCP_ROLE,
+			'number' => 1,
+		)
+	);
+	return $users ? $users[0] : null;
+}
+
+/**
+ * Does the agent user hold at least one application password?
+ *
+ * @param \WP_User|null $user Agent user.
+ * @return int
+ */
+function wpmcp_agent_password_count( $user ) {
+	if ( ! $user || ! class_exists( '\WP_Application_Passwords' ) ) {
+		return 0;
+	}
+	return count( (array) \WP_Application_Passwords::get_user_application_passwords( $user->ID ) );
+}
+
+/**
+ * The setup steps, each with the state of the thing it checks.
+ *
+ * @return array
+ */
+function wpmcp_setup_steps() {
+	global $wp_version;
+
+	$steps = array();
+
+	// 1. The Abilities API has to exist for any of this to mean anything.
+	$has_api = function_exists( 'wp_register_ability' );
+	$steps[] = array(
+		'title'  => __( 'WordPress with the Abilities API', 'wp-mcp-connector-plus' ),
+		'state'  => $has_api ? 'ok' : 'error',
+		'detail' => $has_api
+			/* translators: %s: WordPress version */
+			? sprintf( __( 'WordPress %s.', 'wp-mcp-connector-plus' ), $wp_version )
+			/* translators: %s: WordPress version */
+			: sprintf( __( 'WordPress %s has no Abilities API. Version 6.9 or newer is required.', 'wp-mcp-connector-plus' ), $wp_version ),
+	);
+
+	// 2. Did our abilities actually register?
+	$registered = wpmcp_registered_ability_count();
+	$expected   = count( wpmcp_ability_names() );
+	$steps[]    = array(
+		'title'  => __( 'Abilities registered', 'wp-mcp-connector-plus' ),
+		'state'  => ( null !== $registered && $registered === $expected ) ? 'ok' : 'error',
+		'detail' => null === $registered
+			? __( 'Cannot be determined without the Abilities API.', 'wp-mcp-connector-plus' )
+			: sprintf(
+				/* translators: 1: registered count, 2: expected count */
+				__( '%1$d of %2$d.', 'wp-mcp-connector-plus' ),
+				(int) $registered,
+				(int) $expected
+			) . ( $registered === $expected ? '' : ' ' . __( 'The MCP server will connect but expose no tools.', 'wp-mcp-connector-plus' ) ),
+	);
+
+	// 3. Is there a usable mcp-adapter? Other plugins bundle their own.
+	$adapter_ok = function_exists( 'wpmcp_adapter_is_usable' ) && wpmcp_adapter_is_usable();
+	$adapter_v  = defined( '\WP\MCP\Core\McpAdapter::VERSION' ) ? \WP\MCP\Core\McpAdapter::VERSION : null;
+	$steps[]    = array(
+		'title'  => __( 'MCP transport', 'wp-mcp-connector-plus' ),
+		'state'  => $adapter_ok ? 'ok' : 'error',
+		'detail' => $adapter_ok
+			? sprintf(
+				/* translators: %s: mcp-adapter version */
+				__( 'mcp-adapter %s. Endpoint: ', 'wp-mcp-connector-plus' ),
+				$adapter_v ? $adapter_v : '?'
+			) . '<code>' . esc_html( rest_url( 'wpmcp/v1/mcp' ) ) . '</code>'
+			: __( 'No usable mcp-adapter. Abilities stay reachable over wp-abilities/v1, but there is no MCP endpoint.', 'wp-mcp-connector-plus' ),
+		'raw'    => true,
+	);
+
+	// 4. Agent user with a credential.
+	$user      = wpmcp_agent_user();
+	$passwords = wpmcp_agent_password_count( $user );
+	$steps[]   = array(
+		'title'  => __( 'Agent user and credential', 'wp-mcp-connector-plus' ),
+		'state'  => ( $user && $passwords > 0 ) ? 'ok' : 'todo',
+		'detail' => $user
+			? sprintf(
+				/* translators: 1: user login, 2: number of application passwords */
+				_n( '%1$s, %2$d application password.', '%1$s, %2$d application passwords.', $passwords, 'wp-mcp-connector-plus' ),
+				'<code>' . esc_html( $user->user_login ) . '</code>',
+				(int) $passwords
+			)
+			: __( 'Not created yet. Use the form below.', 'wp-mcp-connector-plus' ),
+		'raw'    => true,
+	);
+
+	return $steps;
+}
+
+/**
  * Render the admin page.
  */
 function wpmcp_render_admin_page() {
@@ -73,85 +175,53 @@ function wpmcp_render_admin_page() {
 		return;
 	}
 
+	require_once WPMCP_DIR . 'includes/setup.php';
+	$setup_result = wpmcp_handle_setup_post();
+
 	global $wpdb;
 	$table = wpmcp_audit_table();
-
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- custom plugin table, no core API available.
 	$entries = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id DESC LIMIT 100" );
-
-	$ai_users = get_users( array( 'role' => WPMCP_ROLE ) );
-	$endpoint = rest_url( 'wpmcp/v1/mcp' );
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'WP MCP Connector Plus', 'wp-mcp-connector-plus' ); ?></h1>
 
-		<h2><?php esc_html_e( 'Connection', 'wp-mcp-connector-plus' ); ?></h2>
-		<table class="form-table" role="presentation">
-			<tr>
-				<th scope="row"><?php esc_html_e( 'Status', 'wp-mcp-connector-plus' ); ?></th>
-				<td>
-					<?php
-					$registered = wpmcp_registered_ability_count();
-					$expected   = count( wpmcp_ability_names() );
-					if ( null === $registered ) {
-						printf(
-							'<span style="color:#b32d2e">%s</span>',
-							esc_html__( 'Abilities API not available — the connector cannot run.', 'wp-mcp-connector-plus' )
+		<h2><?php esc_html_e( 'Status', 'wp-mcp-connector-plus' ); ?></h2>
+		<table class="widefat striped" style="max-width:60rem">
+			<tbody>
+			<?php foreach ( wpmcp_setup_steps() as $i => $step ) : ?>
+				<tr>
+					<td style="width:2.5rem;text-align:center;font-weight:600"><?php echo (int) ( $i + 1 ); ?></td>
+					<td style="width:2rem">
+						<?php
+						$icon = array(
+							'ok'    => array( 'dashicons-yes-alt', '#008a20' ),
+							'todo'  => array( 'dashicons-marker', '#996800' ),
+							'error' => array( 'dashicons-dismiss', '#b32d2e' ),
 						);
-					} elseif ( $registered === $expected ) {
+						list( $class, $colour ) = $icon[ $step['state'] ];
 						printf(
-							'<span style="color:#008a20">%s</span>',
-							sprintf(
-								/* translators: %d: number of abilities */
-								esc_html__( '%d of %d abilities registered.', 'wp-mcp-connector-plus' ),
-								(int) $registered,
-								(int) $expected
-							)
+							'<span class="dashicons %s" style="color:%s"></span>',
+							esc_attr( $class ),
+							esc_attr( $colour )
 						);
-					} else {
-						printf(
-							'<span style="color:#b32d2e">%s</span>',
-							sprintf(
-								/* translators: 1: registered count, 2: expected count */
-								esc_html__( 'Only %1$d of %2$d abilities registered. The MCP server will connect but expose no tools.', 'wp-mcp-connector-plus' ),
-								(int) $registered,
-								(int) $expected
-							)
-						);
-					}
-					?>
-				</td>
-			</tr>
-			<tr>
-				<th scope="row"><?php esc_html_e( 'MCP endpoint', 'wp-mcp-connector-plus' ); ?></th>
-				<td><code><?php echo esc_html( $endpoint ); ?></code></td>
-			</tr>
-			<tr>
-				<th scope="row"><?php esc_html_e( 'Agent user', 'wp-mcp-connector-plus' ); ?></th>
-				<td>
-					<?php if ( empty( $ai_users ) ) : ?>
-						<p>
-							<?php esc_html_e( 'No user has the AI Editor role yet. Create one under Users → Add New, give it that role, then generate an application password in its profile.', 'wp-mcp-connector-plus' ); ?>
-						</p>
-					<?php else : ?>
-						<ul>
-							<?php foreach ( $ai_users as $user ) : ?>
-								<li>
-									<code><?php echo esc_html( $user->user_login ); ?></code>
-									&ndash;
-									<a href="<?php echo esc_url( get_edit_user_link( $user->ID ) ); ?>">
-										<?php esc_html_e( 'manage application passwords', 'wp-mcp-connector-plus' ); ?>
-									</a>
-								</li>
-							<?php endforeach; ?>
-						</ul>
-					<?php endif; ?>
-					<p class="description">
-						<?php esc_html_e( 'Application passwords are enabled for this role only. For every other user they stay exactly as your site configured them.', 'wp-mcp-connector-plus' ); ?>
-					</p>
-				</td>
-			</tr>
+						?>
+					</td>
+					<td><strong><?php echo esc_html( $step['title'] ); ?></strong></td>
+					<td>
+						<?php
+						// Some details carry a <code> element built above.
+						echo empty( $step['raw'] )
+							? esc_html( $step['detail'] )
+							: wp_kses( $step['detail'], array( 'code' => array() ) );
+						?>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
 		</table>
+
+		<?php wpmcp_render_setup_panel( $setup_result ); ?>
 
 		<h2><?php esc_html_e( 'Settings', 'wp-mcp-connector-plus' ); ?></h2>
 		<form method="post" action="options.php">
