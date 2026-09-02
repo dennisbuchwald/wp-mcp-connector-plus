@@ -267,6 +267,12 @@ not enough:
 - **After:** the stored content is compared against what was sent, and any
   remaining difference is reported. The same check runs after duplicating.
 
+Reading a page also reports **structured data that lost its wrapper** —
+JSON-LD sitting in the markup with no `<script>` around it, which renders
+as a wall of text to visitors. It is the fingerprint of a script stripped
+by an earlier unfiltered save, and otherwise only ever gets noticed by
+someone looking at the page.
+
 ## Safety model
 
 Write access to a live website is the sensitive part, so what the agent
@@ -298,6 +304,23 @@ Regardless of level:
 - **No deleting, no uploads, no settings access**, at any level.
 - **Dry run is the default.** Writing requires `dry_run: false`.
 - **Every write creates a revision** — rollback is one click.
+
+**The agent cannot write scripts.** Markup that needs `unfiltered_html` —
+inline scripts, iframes, embeds — is refused, and refused by identity
+rather than by counting: swapping a page's own JSON-LD for a script of the
+agent's making is recognised as new even though the number of scripts on
+the page never changed. Markup that was already stored is left alone, so
+editing one block never destroys the schema in another.
+
+That also means the connector cannot repair such content once it is lost.
+For that one job, a developer can open the door and close it again:
+
+```php
+add_filter( 'wpmcp_allow_filtered_markup', '__return_true' );
+```
+
+It is deliberately not a checkbox in the admin — a checkbox invites being
+left on. While it is open, every write that uses it says so in its result.
 
 One page is a special case. WordPress guards the page designated under
 *Settings → Privacy* with `manage_privacy_options`, a meta capability that

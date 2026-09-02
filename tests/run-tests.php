@@ -557,6 +557,44 @@ $v      = wpmcp_validate_blocks( $blocks );
 t_ok( empty( $v['warnings'] ), 'offener Container wird nicht bemaengelt' );
 
 // ---------------------------------------------------------------------
+echo "\n\033[1mVerwaistes JSON-LD\033[0m\n";
+
+// Structured data with no script around it renders as a wall of text on
+// the page. It is what a stripped script leaves behind, and it was only
+// ever noticed by someone looking at the page.
+t_ok(
+	wpmcp_has_orphaned_structured_data( '{"@context": "https://schema.org", "@type": "Service"}' ),
+	'nacktes JSON-LD wird erkannt'
+);
+t_ok(
+	wpmcp_has_orphaned_structured_data( '{ &quot;@context&quot;: &quot;https://schema.org&quot; }' ),
+	'auch als HTML-Entities'
+);
+t_ok(
+	wpmcp_has_orphaned_structured_data( '{ “@graph”: [] }' ),
+	'auch mit typografischen Anfuehrungszeichen'
+);
+t_ok(
+	! wpmcp_has_orphaned_structured_data( '<script type="application/ld+json">{"@context":"https://schema.org"}</script>' ),
+	'im Script-Tag ist es in Ordnung'
+);
+t_ok(
+	! wpmcp_has_orphaned_structured_data( '<p>Wir arbeiten nach schema.org.</p>' ),
+	'ein blosser Textverweis ist kein Befund'
+);
+t_ok(
+	! wpmcp_has_orphaned_structured_data( '<p>Preis auf Anfrage.</p>' ),
+	'gewoehnlicher Text loest nichts aus'
+);
+
+$blocks = parse_blocks( '<!-- wp:core/html -->{"@context": "https://schema.org"}<!-- /wp:core/html -->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok(
+	(bool) preg_grep( '/JSON-LD/', $v['warnings'] ),
+	'die Pruefung meldet es als Warnung am Block'
+);
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

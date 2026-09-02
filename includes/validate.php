@@ -35,6 +35,31 @@ function wpmcp_collect_issues( array $blocks ) {
 }
 
 /**
+ * Does this markup hold structured data with nothing to hide it?
+ *
+ * Schema.org JSON-LD is only ever meant for a script tag. Finding its
+ * signature in plain markup means the wrapper is gone — the page is now
+ * showing its own metadata to visitors.
+ *
+ * @param string $html Block markup.
+ * @return bool
+ */
+function wpmcp_has_orphaned_structured_data( $html ) {
+	// Anything inside a script tag is doing its job. Look at the rest, and
+	// decode entities first: a stripped script often survives as &quot;.
+	$outside = preg_replace( '#<script\b[^>]*>.*?</script\s*>#is', '', $html );
+	$outside = html_entity_decode( (string) $outside, ENT_QUOTES, 'UTF-8' );
+
+	if ( false === stripos( $outside, '@context' ) && false === stripos( $outside, '@graph' ) ) {
+		return false;
+	}
+
+	// A JSON key, in straight or curly quotes — the editor and the theme
+	// both like turning one into the other.
+	return (bool) preg_match( '#[{,]\s*["“”]?@(context|graph)["“”]?\s*:#u', $outside );
+}
+
+/**
  * Strip the leading block path from a message, so the same problem in a
  * different position counts as the same problem. Paths shift whenever a
  * block is inserted or removed.
@@ -180,6 +205,18 @@ function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$e
 		}
 
 		$path = ( '' === $prefix ) ? (string) $index : $prefix . '.' . $index;
+
+		// The fingerprint of a script that was stripped at some point:
+		// structured data sitting in the markup with no script around it.
+		// It renders as a wall of JSON on the page, and until now the only
+		// way to notice was to look at the page. Checked before anything
+		// else, because it holds whether or not the block is registered.
+		if ( wpmcp_has_orphaned_structured_data( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+			$warnings[] = sprintf(
+				'%s: contains JSON-LD structured data that is not wrapped in a script tag, so it renders as visible text. This is what a stripped <script> leaves behind. Wrap it in <script type="application/ld+json"> in the editor.',
+				$path
+			);
+		}
 
 		// Stage 1: existence.
 		$type = $registry->get_registered( $name );

@@ -7,6 +7,22 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.6.0] - 2026-09-02
+
+Aus der zweiten Runde desselben Fehlerberichts. Der gemeldete Zusammenhang stimmte wieder nicht - die Seiten waren Altlasten aus 0.5.0, dupliziert bevor der Fix da war. Beim Nachsehen kam aber ein echtes Loch zum Vorschein.
+
+### Sicherheit
+
+- **Neues Markup wird an seinem Inhalt erkannt, nicht an der Anzahl.** Bisher verglich die Pruefung, wie viele `<script>` vor und nach der Aenderung im Inhalt stehen. Wer in einem Schreibvorgang das JSON-LD der Seite entfernt und ein eigenes Script einsetzt, blieb bei derselben Zahl - die Pruefung meldete "nichts Neues" und der Konnektor speicherte es ungefiltert. Verglichen werden jetzt die Fragmente selbst: Was vorher im Inhalt stand, darf bleiben, alles andere ist neu. Verschieben und Entfernen bleiben erlaubt, ein geaendertes Script zaehlt als neu.
+- Die Fehlermeldung nennt jetzt nur noch das tatsaechlich Neue statt alles Vorhandene.
+
+### Hinzugefuegt
+
+- **Verwaistes JSON-LD wird gemeldet.** Strukturierte Daten ohne `<script>` drumherum rendern als Textwand auf der Seite. Das ist der Fingerabdruck eines frueher abgeschnittenen Scripts - und war bisher nur zu bemerken, indem jemand die Seite ansah. Die Warnung haengt am Blockpfad, greift auch bei Entities und typografischen Anfuehrungszeichen, und laeuft vor der Registrierungspruefung: Ein Befund bleibt ein Befund, auch wenn der Block auf dieser Seite gar nicht registriert ist.
+- **Filter `wpmcp_allow_filtered_markup`** (Standard: aus). Der Konnektor lehnt Scripts konsequent ab - und kann deshalb auch keine reparieren, die er selbst verloren hat. Wer aufraeumen muss, oeffnet die Tuer im Code fuer die Dauer der Arbeit und schliesst sie wieder. Bewusst kein Haken im Backend: Ein Haken wird angelassen. Solange offen, sagt jeder betroffene Schreibvorgang das im Ergebnis.
+
+---
+
 ## [0.5.2] - 2026-09-02
 
 Aus einem Fehlerbericht: Auf weinbruderschaft-brackenheim.de liess sich die Datenschutzseite (ID 75) nicht bearbeiten, das Impressum daneben schon. Die Meldung war ein nichtssagendes "No permission to edit post 75".

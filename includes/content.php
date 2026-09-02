@@ -366,10 +366,15 @@ function wpmcp_write_content( array $args ) {
 	$errors = $validation['errors'];
 
 	if ( $impact['alters'] ) {
-		if ( $impact['introduces'] ) {
+		if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
 			$errors[] = sprintf(
-				'This change adds markup WordPress will not store from an agent account (%s). Structured data, embeds and inline scripts cannot be written this way. Remove it, or have a human add it in the editor.',
-				implode( ', ', $impact['affected'] )
+				'This change adds markup WordPress will not store from an agent account (%s). Structured data, embeds and inline scripts cannot be written this way. Remove it, or have a human add it in the editor. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
+				implode( ', ', $impact['added'] )
+			);
+		} elseif ( $impact['introduces'] ) {
+			$warnings[] = sprintf(
+				'This change adds markup WordPress would normally refuse from an agent account (%s). It is being written because this site opened the wpmcp_allow_filtered_markup filter. Close it again when the repair is done.',
+				implode( ', ', $impact['added'] )
 			);
 		} else {
 			$warnings[] = sprintf(
@@ -466,15 +471,6 @@ function wpmcp_write_content( array $args ) {
 }
 
 /**
- * Markup WordPress strips from accounts without `unfiltered_html`.
- *
- * @return string[]
- */
-function wpmcp_filtered_constructs() {
-	return array( '<script', '<iframe', '<style', '<form', '<object', '<embed' );
-}
-
-/**
  * Would saving this content lose anything, and if so, was it already there?
  *
  * The agent account deliberately has no `unfiltered_html`, so WordPress
@@ -495,25 +491,103 @@ function wpmcp_filtered_constructs() {
 function wpmcp_kses_impact( $before, $after ) {
 	$filtered = function_exists( 'wp_kses_post' ) ? wp_kses_post( $after ) : $after;
 
-	$affected   = array();
-	$introduces = false;
+	$in_before = wpmcp_filtered_fragments( (string) $before );
+	$in_after  = wpmcp_filtered_fragments( (string) $after );
 
-	foreach ( wpmcp_filtered_constructs() as $needle ) {
-		$in_after  = substr_count( $after, $needle );
-		$in_before = substr_count( (string) $before, $needle );
-		if ( $in_after > 0 ) {
-			$affected[] = $needle;
-		}
-		if ( $in_after > $in_before ) {
-			$introduces = true;
+	// Compare the fragments themselves, not how many there are. Counting
+	// let a swap through: remove the page's JSON-LD block and add a script
+	// of the agent's own in the same save, and the total never moved.
+	$affected = array();
+	$added    = array();
+
+	foreach ( $in_after as $fragment => $count ) {
+		$affected[] = wpmcp_fragment_label( $fragment );
+		if ( $count > ( $in_before[ $fragment ] ?? 0 ) ) {
+			$added[] = wpmcp_fragment_label( $fragment );
 		}
 	}
 
 	return array(
 		'alters'     => ( $filtered !== $after ),
-		'introduces' => $introduces,
-		'affected'   => $affected,
+		'introduces' => ! empty( $added ),
+		'affected'   => array_values( array_unique( $affected ) ),
+		'added'      => array_values( array_unique( $added ) ),
 	);
+}
+
+/**
+ * May this save introduce markup WordPress would strip?
+ *
+ * No, by default: an agent that can write a script tag can write anything
+ * a script can do, and that is not what a remote editor is for.
+ *
+ * There is one case for opening it, and it is a repair. When a page lost
+ * its JSON-LD to an unfiltered save, nobody can put it back through the
+ * connector — the block editor is the only way in, page by page. A
+ * developer with filesystem access can open this for the length of that
+ * job and close it again. It is deliberately not a setting in the admin:
+ * a checkbox invites being left on.
+ *
+ * @param \WP_Post $post Post being written.
+ * @return bool
+ */
+function wpmcp_filtered_markup_allowed( $post ) {
+	/**
+	 * Whether the agent may write markup that requires unfiltered_html.
+	 *
+	 * @param bool     $allow Default false.
+	 * @param \WP_Post $post  Post being written.
+	 */
+	return (bool) apply_filters( 'wpmcp_allow_filtered_markup', false, $post );
+}
+
+/**
+ * Every piece of markup in this content that WordPress would filter,
+ * counted by its exact text.
+ *
+ * Identity is what matters here, not quantity: a fragment that was in the
+ * page before may stay, anything else is new. Whole elements are taken for
+ * script, style and iframe, because their content is the point; for the
+ * rest the opening tag is enough to identify them.
+ *
+ * @param string $content Post content.
+ * @return array<string, int> Fragment text => occurrences.
+ */
+function wpmcp_filtered_fragments( $content ) {
+	$patterns = array(
+		'#<script\b[^>]*>.*?</script\s*>#is',
+		'#<style\b[^>]*>.*?</style\s*>#is',
+		'#<iframe\b[^>]*>.*?</iframe\s*>#is',
+		'#<(?:form|object|embed)\b[^>]*>#i',
+		// An unclosed script or iframe still gets filtered out.
+		'#<(?:script|style|iframe)\b[^>]*>#i',
+	);
+
+	$found = array();
+	$rest  = $content;
+
+	foreach ( $patterns as $pattern ) {
+		if ( preg_match_all( $pattern, $rest, $matches ) ) {
+			foreach ( $matches[0] as $fragment ) {
+				$found[ $fragment ] = ( $found[ $fragment ] ?? 0 ) + 1;
+			}
+			// Take the matches out so the fallback pattern does not count
+			// the opening tag of an element already matched whole.
+			$rest = preg_replace( $pattern, '', $rest );
+		}
+	}
+
+	return $found;
+}
+
+/**
+ * Name a fragment by its element, for a message a human reads.
+ *
+ * @param string $fragment Matched markup.
+ * @return string
+ */
+function wpmcp_fragment_label( $fragment ) {
+	return preg_match( '#^<\s*([a-z]+)#i', $fragment, $m ) ? '<' . strtolower( $m[1] ) : $fragment;
 }
 
 /**
