@@ -197,7 +197,11 @@ curl -u 'agent-user:application password' https://your-site.com/wp-json/wp-abili
 If that returns a list containing `wpmcp/…` entries, the connection works
 and the problem is on the client side.
 
-## The eight abilities
+## The abilities
+
+Six are always present. The two write abilities exist only above the
+read-only access level — at that level they are not registered, so the
+agent never sees them.
 
 | Ability | What it does |
 |---|---|
@@ -206,9 +210,17 @@ and the problem is on the client side.
 | `wpmcp/blocks-describe` | Full attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. |
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one section), or `full`. |
-| `wpmcp/content-write` | Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `move`) or a full tree replacement. Dry run by default. |
-| `wpmcp/content-duplicate` | Copy a page as a draft, including taxonomies and meta. |
+| `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `move`) or a full tree replacement. Dry run by default. |
+| `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. |
+
+### Deliberately not covered
+
+The agent works on the block tree, and only on that. It cannot upload
+media, set a featured image, change categories or tags, edit a post title
+after creation, or touch SEO metadata. A generated draft is therefore
+complete as *content* but not as a finished editorial artefact — those
+fields stay with a human, or with a later version of this plugin.
 
 ### Context budget
 
@@ -354,16 +366,39 @@ php tests/run-integration.php /path/to/your-theme-or-core
 
 The suite runs without a WordPress install but uses the **real** WordPress
 block parser and serializer, so a passing round-trip here means the same
-thing it would on a live site. The integration test loads real `block.json`
-files and checks the catalogue, detail view and validator against them.
+thing it would on a live site.
+
+Each suite exists because of a specific failure:
+
+- **run-tests** — round trips, patch operations, validation. The core logic.
+- **register-abilities** — loads the plugin and fires the ability hooks in
+  WordPress order against an API stub that rejects unknown categories the
+  way the real one does. Two separate bugs once made every registration
+  fail silently, both invisible without a live site.
+- **render-admin** — renders the admin page in every state including the
+  broken ones. The one surface where a mistake otherwise only appears when
+  a human opens the page.
+- **run-integration** — loads real `block.json` files and checks the
+  catalogue, detail view and validator against them.
 
 ## Status
 
-**v0.1.0.** Built, tested, and not yet proven on a production site. The
-`mcp-adapter` dependency is pinned because it is still 0.x with breaking
-changes between minor versions; if a different version is loaded by another
-plugin, the MCP server refuses to start and says so rather than failing
-subtly at request time.
+**v0.1.0.** Running on one live site, where an agent reads pages as block
+trees and describes them accurately. The write path is exercised by tests
+but has not yet produced a page that went live.
+
+What the first real install taught, all of it now handled:
+
+- **Other plugins bundle the same library.** Rank Math SEO ships
+  `mcp-adapter`, and whichever copy loads first wins. Compatibility is
+  therefore decided by the interface the loaded copy exposes, not by its
+  version string — verified against 0.4.1, 0.5.0 and 0.6.1, which are
+  identical in everything this plugin touches.
+- **Registration can fail silently.** The result is a server that
+  connects, completes the handshake and offers no tools, with nothing in
+  any log. Hence the status table and the registration test.
+- **Synced patterns were invisible**, which on a pattern-heavy site meant
+  the agent was guessing at half the page.
 
 ## Licence
 

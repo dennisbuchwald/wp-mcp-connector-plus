@@ -1,8 +1,8 @@
 <?php
 /**
  * Admin surface: a guided setup that doubles as a diagnostic, the
- * live-edit switch, and the activity log — so the question "what did the
- * agent change on my site?" has an answer without database access.
+ * access-level settings, and the activity log — so the question "what did
+ * the agent change on my site?" has an answer without database access.
  *
  * Each setup step checks a real precondition rather than just telling you
  * what to do next. A silent registration failure shows up here as a red
