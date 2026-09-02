@@ -28,8 +28,8 @@ const WPMCP_CAP = 'wpmcp_access';
  * Register the AI editor role. Draft-only by design: no publish_*, no
  * delete_*, no upload_files, no settings. Publishing stays human.
  *
- * edit_published_posts/pages are granted at role level but stripped at
- * runtime unless live-edit is enabled (see wpmcp_filter_caps).
+ * edit_published_posts/pages are part of the full level only; the role's
+ * capabilities follow the setting (see wpmcp_sync_role_capabilities).
  */
 function wpmcp_register_role() {
 	// Re-create on every activation so cap changes ship with updates.

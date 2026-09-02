@@ -174,6 +174,70 @@ function wpmcp_ability_names() {
 }
 
 /**
+ * The page the site has designated as its privacy policy, if any.
+ *
+ * @return int Post ID, or 0.
+ */
+function wpmcp_privacy_policy_page_id() {
+	return (int) get_option( 'wp_page_for_privacy_policy' );
+}
+
+/**
+ * Let the agent edit the privacy policy page like any other published page.
+ *
+ * WordPress guards that one page with manage_privacy_options. That is a
+ * meta capability: it maps to manage_options (manage_network on multisite),
+ * which is full site administration. Granting it to the agent so it can fix
+ * a paragraph would hand over the entire site — settings, plugins, users.
+ *
+ * So the admin requirement is dropped for exactly one check instead:
+ * editing that one page, by the agent, at the level that already allows
+ * editing published pages. Deleting is never touched, and every other
+ * requirement of the edit — edit_others_pages, edit_published_pages —
+ * stays in force. The page ends up neither better nor worse protected
+ * than the rest of the site.
+ *
+ * @param string[] $caps    Primitive capabilities the check requires.
+ * @param string   $cap     Capability being checked.
+ * @param int      $user_id User being checked.
+ * @param array    $args    Context; $args[0] is the post ID.
+ * @return string[]
+ */
+function wpmcp_allow_privacy_policy_edit( $caps, $cap, $user_id, $args ) {
+	if ( 'edit_post' !== $cap && 'edit_page' !== $cap ) {
+		return $caps;
+	}
+
+	$post_id = isset( $args[0] ) ? (int) $args[0] : 0;
+	if ( ! $post_id || wpmcp_privacy_policy_page_id() !== $post_id ) {
+		return $caps;
+	}
+
+	if ( ! wpmcp_live_edit_enabled() || ! wpmcp_is_ai_user( $user_id ) ) {
+		return $caps;
+	}
+
+	/**
+	 * Whether the agent may edit the designated privacy policy page.
+	 *
+	 * Return false to keep WordPress's administrator requirement, which
+	 * puts that page out of the agent's reach entirely.
+	 *
+	 * @param bool $allow   Default true at the full access level.
+	 * @param int  $post_id The privacy policy page.
+	 * @param int  $user_id The user being checked.
+	 */
+	if ( ! apply_filters( 'wpmcp_allow_privacy_policy_edit', true, $post_id, (int) $user_id ) ) {
+		return $caps;
+	}
+
+	$admin = is_multisite() ? 'manage_network' : 'manage_options';
+
+	return array_values( array_diff( (array) $caps, array( $admin ) ) );
+}
+add_filter( 'map_meta_cap', 'wpmcp_allow_privacy_policy_edit', 10, 4 );
+
+/**
  * Do the role's capabilities match the configured level?
  *
  * @return bool True also when the role is missing, so callers can tell

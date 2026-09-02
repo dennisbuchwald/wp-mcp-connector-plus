@@ -7,6 +7,25 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.5.2] - 2026-09-02
+
+Aus einem Fehlerbericht: Auf weinbruderschaft-brackenheim.de liess sich die Datenschutzseite (ID 75) nicht bearbeiten, das Impressum daneben schon. Die Meldung war ein nichtssagendes "No permission to edit post 75".
+
+### Behoben
+
+- **Die Datenschutzseite laesst sich auf der Vollstufe bearbeiten.** WordPress bewacht genau die Seite, die unter Einstellungen > Datenschutz hinterlegt ist, zusaetzlich mit `manage_privacy_options`.
+- **Die Meldung sagt jetzt, woran es liegt** - Seite, Einstellungsort, Stufe und Abschalter - statt den Aufrufer in den Rolleneinstellungen suchen zu lassen.
+
+### Warum nicht so, wie im Bericht vorgeschlagen
+
+Der Bericht schlug vor, der Rolle `manage_privacy_options` zu geben. Das haette nichts bewirkt: Die Capability ist eine *Meta*-Capability, niemand prueft sie direkt. WordPress loest sie in `manage_options` auf (auf Multisite `manage_network`) - also volle Administration der Seite. Die ehrliche Fassung des Vorschlags waere gewesen, dem Agenten die ganze Website zu geben, damit er einen Absatz aendern kann. Genau das schliesst der Konnektor auf jeder Stufe aus, und ein Test haelt das fest.
+
+Stattdessen faellt die Admin-Anforderung fuer **eine einzige Pruefung** weg: Bearbeiten (nie Loeschen) genau dieser einen Seite, durch den Agenten, auf der Stufe, die Veroeffentlichtes ohnehin freigibt. Alle uebrigen Anforderungen der Pruefung bleiben stehen, die Rolle bekommt kein einziges Recht dazu. Wer die Seite ganz aus der Reichweite halten will: `add_filter( 'wpmcp_allow_privacy_policy_edit', '__return_false' );`
+
+*(Nebenbei: Der Workaround im Bericht nannte die Rolle `wpmcp_agent`, sie heisst `wpmcp_ai_editor` - er waere doppelt wirkungslos geblieben.)*
+
+---
+
 ## [0.5.1] - 2026-09-02
 
 Aus einem Fehlerbericht: In einer duplizierten Seite fehlte das JSON-LD-Schema, das rohe JSON stand als Text im Block. Gemeldet als Folge der `replace`-Operationen.

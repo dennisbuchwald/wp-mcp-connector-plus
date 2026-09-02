@@ -108,6 +108,19 @@ function wpmcp_get_writable_post( $post_id ) {
 				)
 			);
 		}
+		// The one page WordPress guards with an administrator capability.
+		// Without naming it, the refusal looks like an ordinary permission
+		// problem and sends the caller hunting through role settings.
+		if ( wpmcp_privacy_policy_page_id() === (int) $post->ID ) {
+			return new \WP_Error(
+				'wpmcp_privacy_policy_page',
+				sprintf(
+					'Post %d is set as this site\'s privacy policy page (Settings > Privacy). WordPress requires an administrator capability for it. The connector lifts that requirement only at the "Drafts and published pages" access level, and a site can switch it off with the wpmcp_allow_privacy_policy_edit filter.',
+					$post->ID
+				)
+			);
+		}
+
 		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to edit post %d.', $post->ID ) );
 	}
 

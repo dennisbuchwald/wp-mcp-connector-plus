@@ -298,6 +298,20 @@ Regardless of level:
 - **No deleting, no uploads, no settings access**, at any level.
 - **Dry run is the default.** Writing requires `dry_run: false`.
 - **Every write creates a revision** — rollback is one click.
+
+One page is a special case. WordPress guards the page designated under
+*Settings → Privacy* with `manage_privacy_options`, a meta capability that
+maps to `manage_options` — full site administration. Granting that so an
+agent can fix a paragraph would hand over the whole site, so the connector
+drops the administrator requirement for exactly that one check instead:
+**editing** (never deleting) **that one page**, at the *Drafts and
+published pages* level only. Every other requirement stays in force, and
+no level ever gains an administration capability. To keep the page out of
+reach entirely:
+
+```php
+add_filter( 'wpmcp_allow_privacy_policy_edit', '__return_false' );
+```
 - **Slug, status and post type are never touched**, so URLs stay put.
 - **Everything is logged** under *Tools → MCP Connector*.
 - **Kill switch:** `define( 'WPMCP_DISABLE', true );` in `wp-config.php`
@@ -390,10 +404,13 @@ and never runs Composer.
 
 ```bash
 tests/fetch-shim.sh                              # once: fetch the real WP block parser
-php tests/run-tests.php                          # 97 unit tests
+php tests/run-tests.php                          # unit tests: round trips, patches, validation
 php tests/register-abilities.php                 # abilities actually register
 php tests/verify-stored.php                      # saved content matches what was sent
 php tests/kses-impact.php                        # existing markup survives an unrelated edit
+php tests/duplicate-preserves.php                # a copy is a copy
+php tests/search.php                             # site-wide search and its raw context
+php tests/privacy-page.php                       # the privacy page exception stays narrow
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -415,6 +432,13 @@ Each suite exists because of a specific failure:
 - **verify-stored** — WordPress rewrites content from accounts without
   `unfiltered_html`. A JSON-LD block once vanished from a real page with
   nothing in any log; this pins down that such a change is reported.
+- **duplicate-preserves** — duplicating once went through an unfiltered
+  save path and silently dropped a page's JSON-LD schema before any edit
+  happened. A copy has no before-state, so the preservation rule the write
+  path uses cannot apply here.
+- **privacy-page** — the narrow exception for the designated privacy
+  policy page, pinned from every side: other pages, deleting, other users,
+  lower access levels, multisite, and the off switch.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 
