@@ -149,10 +149,36 @@ echo "\n\033[1mDie Tuer fuer Reparaturen\033[0m\n";
 
 check( false === wpmcp_filtered_markup_allowed( null ), 'ist standardmaessig zu' );
 
+// Preservation, the everyday case: the page has markup, the change adds
+// none of it. The save must go past the content filter.
+$keep = wpmcp_kses_impact( $clean . $schema, $clean . $clean . $schema );
+check( true === wpmcp_should_preserve_markup( $keep ), 'Bestehendes wird am Filter vorbei gespeichert' );
+
+// Nothing to protect: the ordinary save is the right one.
+$none = wpmcp_kses_impact( $clean, $clean . $clean );
+check( false === wpmcp_should_preserve_markup( $none ), 'ohne betroffenes Markup bleibt es beim normalen Speichern' );
+
+// A write that introduces markup is refused, so the save never happens.
+$new = wpmcp_kses_impact( $clean, $clean . $schema );
+check( false === wpmcp_should_preserve_markup( $new ), 'geschlossen: neues Markup geht nicht am Filter vorbei' );
+
 add_filter( 'wpmcp_allow_filtered_markup', '__return_true' );
 check( true === wpmcp_filtered_markup_allowed( null ), 'und laesst sich per Filter oeffnen' );
+
+// The bug in 0.6.0: the check was opened, the save was not. The dry run
+// said ok, WordPress stripped the script a moment later, and the page
+// ended up with its JSON-LD as visible text all over again.
+check(
+	true === wpmcp_should_preserve_markup( $new ),
+	'offen: die Reparatur erreicht auch die Datenbank',
+	'sonst laesst die Pruefung das Script durch und das Speichern wirft es weg'
+);
+check( true === wpmcp_should_preserve_markup( $keep ), 'Bestehendes bleibt dabei ebenfalls erhalten' );
+check( false === wpmcp_should_preserve_markup( $none ), 'harmloser Inhalt braucht den Umweg weiterhin nicht' );
+
 $GLOBALS['dbw_filters']['wpmcp_allow_filtered_markup'] = array();
 check( false === wpmcp_filtered_markup_allowed( null ), 'und wieder schliessen' );
+check( false === wpmcp_should_preserve_markup( $new ), 'danach ist der Weg fuer Neues wieder zu' );
 
 echo "\n";
 if ( 0 === $fail ) {

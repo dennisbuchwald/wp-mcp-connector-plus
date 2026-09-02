@@ -427,9 +427,7 @@ function wpmcp_write_content( array $args ) {
 		'post_content' => wp_slash( $validation['serialized'] ),
 	);
 
-	// Editing one block must not destroy markup in another that the agent
-	// never touched. Safe because nothing of that kind is being added.
-	$updated = ( $impact['alters'] && ! $impact['introduces'] )
+	$updated = wpmcp_should_preserve_markup( $impact, $post )
 		? wpmcp_update_post_preserving( $postarr )
 		: wp_update_post( $postarr, true );
 
@@ -513,6 +511,32 @@ function wpmcp_kses_impact( $before, $after ) {
 		'affected'   => array_values( array_unique( $affected ) ),
 		'added'      => array_values( array_unique( $added ) ),
 	);
+}
+
+/**
+ * Should this save bypass WordPress's content filter?
+ *
+ * Two reasons, and only these two. Editing one block must not destroy
+ * markup in another that the agent never touched — safe, because nothing
+ * of that kind is being added. And a repair explicitly opened by the site
+ * has to reach the database, or opening it means nothing: the check would
+ * let the script through and the save would drop it a moment later.
+ *
+ * The bypass is one call wide. It removes the filter, saves, puts it back.
+ * Granting the agent unfiltered_html instead would leave the door open for
+ * everything else that runs in the request, and for whatever forgets to
+ * take it away again.
+ *
+ * @param array         $impact Result of wpmcp_kses_impact().
+ * @param \WP_Post|null $post   Post being written.
+ * @return bool
+ */
+function wpmcp_should_preserve_markup( array $impact, $post = null ) {
+	if ( empty( $impact['alters'] ) ) {
+		return false;
+	}
+
+	return empty( $impact['introduces'] ) || wpmcp_filtered_markup_allowed( $post );
 }
 
 /**

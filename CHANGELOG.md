@@ -7,6 +7,20 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.6.1] - 2026-09-02
+
+Beim ersten echten Einsatz der Reparatur-Tuer aufgefallen: Sie ging auf, aber nur halb.
+
+### Behoben
+
+- **Eine erlaubte Reparatur erreicht jetzt auch die Datenbank.** 0.6.0 oeffnete `wpmcp_allow_filtered_markup` fuer die Pruefung - der Probelauf meldete `ok`, das Speichern lief danach aber weiter durch den normalen Weg, und WordPress schnitt das Script wieder ab. Ergebnis: dieselbe JSON-Textwand wie vorher, nur mit gruener Meldung davor. Die Entscheidung, ob am Inhaltsfilter vorbei gespeichert wird, steht jetzt an einer Stelle (`wpmcp_should_preserve_markup`) und beruecksichtigt beide Gruende: Bestehendes erhalten und eine ausdruecklich geoeffnete Reparatur.
+
+### Nicht gemacht
+
+Der naheliegende Weg waere gewesen, dem KI-Benutzer `unfiltered_html` zu geben, solange repariert wird. Das ist deutlich weiter aufgemacht als noetig: Die Capability gilt dann fuer alles, was im selben Request laeuft, und bleibt haengen, wenn das Zuruecknehmen ausfaellt. Der Konnektor nimmt stattdessen fuer die Dauer *eines* Speichervorgangs den Filter heraus und setzt ihn danach zurueck.
+
+---
+
 ## [0.6.0] - 2026-09-02
 
 Aus der zweiten Runde desselben Fehlerberichts. Der gemeldete Zusammenhang stimmte wieder nicht - die Seiten waren Altlasten aus 0.5.0, dupliziert bevor der Fix da war. Beim Nachsehen kam aber ein echtes Loch zum Vorschein.
