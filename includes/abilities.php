@@ -181,7 +181,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-read',
 		array(
 			'label'       => 'Seite als Blockbaum lesen',
-			'description' => 'Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" with a path for the section you care about, and only use "full" when you really need the whole page. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write operations. Attributes left at their default are omitted, so what you see is what was actually decided.',
+			'description' => 'Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" for the sections you care about, and only use "full" when you really need the whole page. In subtree mode pass "paths" to fetch several sections in one call rather than one request per section. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write. Attributes left at their default are omitted, so what you see is what was actually decided — check blocks-describe for what those defaults are. The returned "modified" value should be handed to content-write, which then refuses to overwrite someone else\'s edit.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -198,7 +198,12 @@ function wpmcp_register_abilities() {
 					),
 					'path'    => array(
 						'type'        => 'string',
-						'description' => 'Required for mode "subtree": a block path like "2" or "2.0.1".',
+						'description' => 'For mode "subtree": a block path like "2" or "2.0.1".',
+					),
+					'paths'   => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'For mode "subtree": several paths at once, e.g. ["0","1","2"]. Preferred over repeated calls.',
 					),
 					'include_defaults' => array(
 						'type'        => 'boolean',
@@ -211,11 +216,13 @@ function wpmcp_register_abilities() {
 			'output_schema' => array( 'type' => 'object' ),
 			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
+				$paths  = isset( $input['paths'] ) && is_array( $input['paths'] ) ? $input['paths'] : array();
 				$result = wpmcp_read_content(
 					(int) ( $input['post_id'] ?? 0 ),
 					(string) ( $input['mode'] ?? 'outline' ),
 					(string) ( $input['path'] ?? '' ),
-					! empty( $input['include_defaults'] )
+					! empty( $input['include_defaults'] ),
+					$paths
 				);
 				if ( ! is_wp_error( $result ) ) {
 					wpmcp_log(
@@ -236,7 +243,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
-			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. If validation fails, the errors name the exact block path and reason — fix and call again.',
+			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Pass expected_modified (from content-read) so the write is refused if someone edited the page in the meantime. After a real write the stored content is compared against what was sent, and any difference is reported: WordPress strips script tags, iframes and some attributes from agent accounts, so structured data and embeds cannot be written and will come back as a warning. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. If validation fails, the errors name the exact block path and reason — fix and call again.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -259,6 +266,10 @@ function wpmcp_register_abilities() {
 						'type'        => 'boolean',
 						'default'     => true,
 						'description' => 'Validate without saving. Defaults to true — pass false to write.',
+					),
+					'expected_modified' => array(
+						'type'        => 'string',
+						'description' => 'The "modified" value from content-read. The write is refused if the page changed since, instead of overwriting the other edit.',
 					),
 				),
 				'required'   => array( 'post_id' ),
@@ -322,7 +333,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-preview',
 		array(
 			'label'       => 'Vorschau',
-			'description' => 'Check your own work: returns the server-rendered HTML of the page, its heading outline, and a signed preview URL that works without a login for 15 minutes. Read the headings and HTML to verify structure; open the preview URL in a browser to actually look at the result. Always do this after writing.',
+			'description' => 'See a page as it actually renders: server-rendered HTML, its heading outline, and a signed preview URL that works without a login for 15 minutes. Use it to check your own work after writing, and equally to inspect any existing page — the block tree says what is configured, this says what a visitor gets, including whether every block renders without error.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',

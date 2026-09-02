@@ -243,6 +243,19 @@ Every write — dry run and real — passes the same five stages:
 Errors name the exact block path and reason, so the agent can fix a
 specific node instead of retrying the whole page.
 
+Two things happen around the write itself, because validation alone was
+not enough:
+
+- **Before:** pass `expected_modified` (returned by `content-read`) and the
+  write is refused if someone edited the page in the meantime, rather than
+  silently overwriting them.
+- **After:** the stored content is compared against what was sent. Accounts
+  without `unfiltered_html` — which the agent deliberately is — have their
+  content run through `wp_kses_post` on save, which removes script tags,
+  iframes and some attributes. Structured data and embeds therefore cannot
+  be written, and the response says so instead of leaving it unnoticed.
+  The same check runs after duplicating.
+
 ## Safety model
 
 Write access to a live website is the sensitive part, so what the agent
@@ -360,6 +373,7 @@ and never runs Composer.
 tests/fetch-shim.sh                              # once: fetch the real WP block parser
 php tests/run-tests.php                          # 97 unit tests
 php tests/register-abilities.php                 # abilities actually register
+php tests/verify-stored.php                      # saved content matches what was sent
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -378,14 +392,19 @@ Each suite exists because of a specific failure:
 - **render-admin** — renders the admin page in every state including the
   broken ones. The one surface where a mistake otherwise only appears when
   a human opens the page.
+- **verify-stored** — WordPress rewrites content from accounts without
+  `unfiltered_html`. A JSON-LD block once vanished from a real page with
+  nothing in any log; this pins down that such a change is reported.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 
 ## Status
 
-**v0.1.0.** Running on one live site, where an agent reads pages as block
-trees and describes them accurately. The write path is exercised by tests
-but has not yet produced a page that went live.
+**v0.2.0.** Running on two live sites for reading, including a full QA pass
+over a draft built from a real design system — the agent fetched block
+schemas to learn the defaults, and could then tell a deliberately set value
+from an unset one. The write path is exercised by tests but has not yet
+produced a page that went live.
 
 What the first real install taught, all of it now handled:
 
@@ -399,6 +418,10 @@ What the first real install taught, all of it now handled:
   any log. Hence the status table and the registration test.
 - **Synced patterns were invisible**, which on a pattern-heavy site meant
   the agent was guessing at half the page.
+- **WordPress rewrites what it stores.** Duplicating a page silently
+  destroyed its JSON-LD schema, and the validation pipeline had no way of
+  knowing: it checks what is about to be sent, not what arrived. Hence the
+  comparison after every write.
 
 ## Licence
 

@@ -174,7 +174,7 @@ function wpmcp_list_content( array $args ) {
  * @param bool   $include_defaults Keep default-valued attributes.
  * @return array|\WP_Error
  */
-function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false ) {
+function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_defaults = false, array $paths = array() ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -190,6 +190,9 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 		'url'        => get_permalink( $post ),
 		'blockCount' => wpmcp_count_blocks( $blocks ),
 		'mode'       => $mode,
+		// Hand this back in content-write to be told if someone edited the
+		// page in the meantime, instead of silently overwriting them.
+		'modified'   => $post->post_modified_gmt,
 	);
 
 	if ( 'outline' === $mode ) {
@@ -198,18 +201,26 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 	}
 
 	if ( 'subtree' === $mode ) {
-		$segments = wpmcp_path_parse( $path );
-		if ( null === $segments || empty( $segments ) ) {
-			return new \WP_Error( 'wpmcp_bad_path', 'Mode "subtree" needs a path like "2" or "2.0.1".' );
+		// One path or many: reading fifteen sections one request at a time
+		// is a lot of round trips for no reason.
+		$wanted = ! empty( $paths ) ? $paths : array( $path );
+		$trees  = array();
+
+		foreach ( $wanted as $one ) {
+			$segments = wpmcp_path_parse( $one );
+			if ( null === $segments || empty( $segments ) ) {
+				return new \WP_Error( 'wpmcp_bad_path', sprintf( 'Mode "subtree" needs a path like "2" or "2.0.1", got "%s".', (string) $one ) );
+			}
+			$node = wpmcp_blocks_at_path( $blocks, $segments );
+			if ( null === $node ) {
+				return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Path "%s" does not exist in post %d.', (string) $one, $post->ID ) );
+			}
+			$prefix = $segments;
+			array_pop( $prefix );
+			$trees = array_merge( $trees, wpmcp_blocks_to_tree( array( $node ), $prefix, $include_defaults ) );
 		}
-		$node = wpmcp_blocks_at_path( $blocks, $segments );
-		if ( null === $node ) {
-			return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Path "%s" does not exist in post %d.', $path, $post->ID ) );
-		}
-		$prefix = $segments;
-		array_pop( $prefix );
-		$tree           = wpmcp_blocks_to_tree( array( $node ), $prefix, $include_defaults );
-		$result['tree'] = $tree;
+
+		$result['tree'] = $trees;
 		return $result;
 	}
 
@@ -240,6 +251,22 @@ function wpmcp_write_content( array $args ) {
 			sprintf(
 				'Post %d is a synced pattern, and pattern editing is switched off for this site. A pattern change would apply to every page embedding it.',
 				$post->ID
+			)
+		);
+	}
+
+	// Optimistic locking. The agent reads, thinks, then writes; in between
+	// a human may have saved the same page. Without this the human's work
+	// disappears silently.
+	$expected_modified = isset( $args['expected_modified'] ) ? trim( (string) $args['expected_modified'] ) : '';
+	if ( '' !== $expected_modified && $expected_modified !== $post->post_modified_gmt ) {
+		return new \WP_Error(
+			'wpmcp_stale',
+			sprintf(
+				'Post %d changed after you read it (read: %s, now: %s). Someone edited it in the meantime. Read it again and redo the change on the current version.',
+				$post->ID,
+				$expected_modified,
+				$post->post_modified_gmt
 			)
 		);
 	}
@@ -363,6 +390,13 @@ function wpmcp_write_content( array $args ) {
 		return $updated;
 	}
 
+	// What we sent is not necessarily what got stored.
+	$stored_warnings = wpmcp_verify_stored( $post->ID, $validation['serialized'] );
+	if ( ! empty( $stored_warnings ) ) {
+		$response['warnings'] = array_merge( $response['warnings'], $stored_warnings );
+		$response['contentAltered'] = true;
+	}
+
 	$revisions   = wp_get_post_revisions( $post->ID, array( 'numberposts' => 1 ) );
 	$revision    = ! empty( $revisions ) ? reset( $revisions ) : null;
 	$revision_id = $revision ? (int) $revision->ID : 0;
@@ -383,6 +417,66 @@ function wpmcp_write_content( array $args ) {
 	);
 
 	return $response;
+}
+
+/**
+ * Compare what we sent against what WordPress actually stored.
+ *
+ * Between serialize_blocks() and the database sits WordPress itself.
+ * Users without `unfiltered_html` — which the agent role deliberately is —
+ * have their content run through wp_kses_post on save, and that silently
+ * removes script tags, iframes and various attributes. A JSON-LD block
+ * disappears without a word in any log.
+ *
+ * The validation pipeline checks what we are about to send. This checks
+ * what arrived, which is the only thing that matters afterwards.
+ *
+ * @param int    $post_id  Post that was written.
+ * @param string $expected Serialized markup we handed to WordPress.
+ * @return string[] Warnings, empty when the content survived intact.
+ */
+function wpmcp_verify_stored( $post_id, $expected ) {
+	$stored = get_post_field( 'post_content', $post_id, 'raw' );
+
+	if ( (string) $stored === (string) $expected ) {
+		return array();
+	}
+
+	$warnings = array();
+
+	$expected_blocks = parse_blocks( $expected );
+	$stored_blocks   = parse_blocks( (string) $stored );
+
+	$before = wpmcp_count_blocks( $expected_blocks );
+	$after  = wpmcp_count_blocks( $stored_blocks );
+	if ( $before !== $after ) {
+		$warnings[] = sprintf(
+			'WordPress stored %d blocks where %d were sent. Some content was rejected on save.',
+			$after,
+			$before
+		);
+	}
+
+	// Name the usual suspects, because "something changed" is not actionable.
+	$stripped = array();
+	foreach ( array( '<script' => 'script tags', '<iframe' => 'iframes', '<style' => 'style tags' ) as $needle => $label ) {
+		$sent_count   = substr_count( $expected, $needle );
+		$stored_count = substr_count( (string) $stored, $needle );
+		if ( $sent_count > $stored_count ) {
+			$stripped[] = sprintf( '%d %s', $sent_count - $stored_count, $label );
+		}
+	}
+
+	if ( ! empty( $stripped ) ) {
+		$warnings[] = sprintf(
+			'WordPress removed %s while saving. The agent account has no unfiltered_html capability, so markup of this kind cannot be written — structured data, embeds and inline scripts are lost. Add them by hand.',
+			implode( ' and ', $stripped )
+		);
+	} elseif ( empty( $warnings ) ) {
+		$warnings[] = 'The stored content differs from what was sent. WordPress altered it on save; compare the result before relying on it.';
+	}
+
+	return $warnings;
 }
 
 /**
@@ -450,6 +544,8 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		}
 	}
 
+	$stored_warnings = wpmcp_verify_stored( $new_id, $post->post_content );
+
 	wpmcp_log(
 		'wpmcp/content-duplicate',
 		array(
@@ -459,7 +555,7 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		)
 	);
 
-	return array(
+	$result = array(
 		'ok'       => true,
 		'id'       => (int) $new_id,
 		'sourceId' => $post->ID,
@@ -468,6 +564,13 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		'preview'  => wpmcp_preview_url( (int) $new_id ),
 		'message'  => 'Created as a draft. A human publishes it.',
 	);
+
+	if ( ! empty( $stored_warnings ) ) {
+		$result['warnings']       = $stored_warnings;
+		$result['contentAltered'] = true;
+	}
+
+	return $result;
 }
 
 /**

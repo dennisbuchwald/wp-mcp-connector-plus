@@ -29,7 +29,7 @@ function wpmcp_access_levels() {
 	return array(
 		'read'  => array(
 			'label'       => __( 'Read only', 'wp-mcp-connector-plus' ),
-			'description' => __( 'The agent can look at the site and explain it. No write tools exist at all.', 'wp-mcp-connector-plus' ),
+			'description' => __( 'The agent can look at the site and explain it. No write tools exist at all. Note: published content only — WordPress requires an editing capability to read drafts, so drafts stay invisible at this level.', 'wp-mcp-connector-plus' ),
 		),
 		'draft' => array(
 			'label'       => __( 'Drafts', 'wp-mcp-connector-plus' ),
