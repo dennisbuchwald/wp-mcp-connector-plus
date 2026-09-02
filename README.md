@@ -320,6 +320,7 @@ and never runs Composer.
 ```bash
 tests/fetch-shim.sh                              # once: fetch the real WP block parser
 php tests/run-tests.php                          # 97 unit tests
+php tests/register-abilities.php                 # abilities actually register
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```

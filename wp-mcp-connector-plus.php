@@ -71,6 +71,14 @@ require_once WPMCP_DIR . 'includes/preview.php';
 require_once WPMCP_DIR . 'includes/updater.php';
 
 /**
+ * The ability category slug. Defined once and used both where the category
+ * is registered and where every ability references it — a mismatch between
+ * the two is silent (registration simply fails) and cost a debugging round
+ * once already.
+ */
+const WPMCP_ABILITY_CATEGORY = 'wpmcp';
+
+/**
  * Ability categories are registered on their own hook, which fires BEFORE
  * wp_abilities_api_init. It therefore cannot live in includes/abilities.php,
  * which is only loaded on that later hook — the category would never exist
@@ -84,7 +92,7 @@ function wpmcp_register_category() {
 		return;
 	}
 	wp_register_ability_category(
-		'wpmcp-connector',
+		WPMCP_ABILITY_CATEGORY,
 		array(
 			'label'       => 'MCP Connector Plus',
 			'description' => 'Block-tree level access to this WordPress site.',
