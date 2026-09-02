@@ -170,10 +170,35 @@ function wpmcp_ability_names() {
 }
 
 /**
+ * Do the role's capabilities match the configured level?
+ *
+ * @return bool True also when the role is missing, so callers can tell
+ *              "in step" from "cannot tell" via wpmcp_agent_role_exists().
+ */
+function wpmcp_role_caps_match() {
+	$role = get_role( WPMCP_ROLE );
+	if ( ! $role ) {
+		return false;
+	}
+
+	$wanted = wpmcp_level_capabilities( wpmcp_access_level() );
+	$actual = array_keys( array_filter( (array) $role->capabilities ) );
+
+	sort( $actual );
+	$expected = array_keys( $wanted );
+	sort( $expected );
+
+	return $actual === $expected;
+}
+
+/**
  * Keep the role's capabilities in step with the access level.
  *
- * Runs on the settings save and on activation, so the role always matches
- * what the settings screen claims.
+ * Hooked to both add_option and update_option: WordPress fires
+ * update_option_{$option} only when the option already existed, so on any
+ * site upgrading from a version that had no such setting the first save
+ * creates it and the update hook never runs. That left the switch visibly
+ * flipped and practically inert.
  */
 function wpmcp_sync_role_capabilities() {
 	$role = get_role( WPMCP_ROLE );
@@ -195,3 +220,19 @@ function wpmcp_sync_role_capabilities() {
 	}
 }
 add_action( 'update_option_wpmcp_access_level', 'wpmcp_sync_role_capabilities' );
+add_action( 'add_option_wpmcp_access_level', 'wpmcp_sync_role_capabilities' );
+
+/**
+ * Last line of defence: reconcile on any admin request.
+ *
+ * Hooks can be missed — a level set by constant, an option written
+ * directly, a role edited by another plugin. Comparing is cheap (roles
+ * live in one cached option) and it only writes when something actually
+ * drifted, so the setting can never quietly mean less than it says.
+ */
+function wpmcp_reconcile_role() {
+	if ( ! wpmcp_role_caps_match() && get_role( WPMCP_ROLE ) ) {
+		wpmcp_sync_role_capabilities();
+	}
+}
+add_action( 'admin_init', 'wpmcp_reconcile_role' );

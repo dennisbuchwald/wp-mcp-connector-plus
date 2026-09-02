@@ -24,6 +24,7 @@ $GLOBALS['stub']       = array(
 	'passwords'         => 0,
 	'level'             => 'draft',
 	'patterns'          => 'read',
+	'caps_match'        => true,
 );
 
 // --- WordPress stubs ----------------------------------------------------
@@ -129,6 +130,7 @@ function wpmcp_access_levels() {
 	);
 }
 function wpmcp_audit_table() { return 'wp_wpmcp_log'; }
+function wpmcp_role_caps_match() { return $GLOBALS['stub']['caps_match'] ?? true; }
 const WPMCP_ROLE = 'wpmcp_ai_editor';
 
 class StubWpdb {
@@ -226,6 +228,10 @@ expect_contains( $html, '6 of 6', 'zaehlt nur die Lese-Abilities' );
 
 $GLOBALS['stub']['level']      = 'draft';
 $GLOBALS['stub']['registered'] = 8;
+
+$html = render_case( 'Rechte laufen auseinander', function () { $GLOBALS['stub']['caps_match'] = false; } );
+expect_contains( $html, 'does not grant what the selected level promises', 'meldet nicht passende Rechte' );
+$GLOBALS['stub']['caps_match'] = true;
 
 echo "\n\033[1mVerbindung erzeugen\033[0m\n";
 

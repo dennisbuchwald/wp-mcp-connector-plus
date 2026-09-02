@@ -91,7 +91,13 @@ function get_post_type( $id ) { return 'page'; }
 function get_option( $n, $d = false ) {
 	return $GLOBALS['options'][ $n ] ?? $d;
 }
-function get_role( $r ) { return null; }
+class StubRole {
+	public $capabilities = array();
+	public function add_cap( $c, $g = true ) { $this->capabilities[ $c ] = $g; }
+	public function remove_cap( $c ) { unset( $this->capabilities[ $c ] ); }
+}
+$GLOBALS['role'] = new StubRole();
+function get_role( $r ) { return $GLOBALS['role']; }
 
 // --- Load the plugin ----------------------------------------------------
 
@@ -204,6 +210,49 @@ foreach ( array( 'read', 'draft', 'full' ) as $level ) {
 check( ! in_array( 'edit_posts', array_keys( wpmcp_level_capabilities( 'read' ) ), true ), 'Lesestufe hat gar kein Bearbeitungsrecht' );
 check( in_array( 'edit_published_pages', array_keys( wpmcp_level_capabilities( 'full' ) ), true ), 'Nur die Vollstufe darf Veroeffentlichtes bearbeiten' );
 check( ! in_array( 'edit_published_pages', array_keys( wpmcp_level_capabilities( 'draft' ) ), true ), 'Entwurfsstufe darf Veroeffentlichtes nicht bearbeiten' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+
+// --- The bug an independent test found ----------------------------------
+echo "\n\033[1mRechte folgen der Stufe\033[0m\n";
+
+// A site upgrading from an older version has no such option yet. Saving it
+// the first time is an add_option, not an update_option — the hook that
+// only listened for updates never ran, and the switch stayed decorative.
+$GLOBALS['role']                          = new StubRole();
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+wpmcp_sync_role_capabilities();
+check(
+	! isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
+	'Entwurfsstufe: kein Recht auf Veroeffentlichtes'
+);
+
+$GLOBALS['options']['wpmcp_access_level'] = 'full';
+do_action( 'add_option_wpmcp_access_level', 'wpmcp_access_level', 'full' );
+check(
+	isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
+	'Wechsel auf Vollstufe vergibt das Recht auch beim ERSTEN Speichern',
+	'add_option-Hook greift nicht — genau der gemeldete Fehler'
+);
+
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+do_action( 'update_option_wpmcp_access_level', 'full', 'draft', 'wpmcp_access_level' );
+check(
+	! isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
+	'Zurueckschalten entzieht das Recht wieder'
+);
+
+// The reconciler must repair drift from any other source.
+$GLOBALS['options']['wpmcp_access_level'] = 'full';
+$GLOBALS['role']                          = new StubRole();
+check( false === wpmcp_role_caps_match(), 'Abweichung wird erkannt' );
+wpmcp_reconcile_role();
+check( wpmcp_role_caps_match(), 'Abgleich stellt die Rechte wieder her' );
+
+check(
+	! isset( $GLOBALS['role']->capabilities['publish_pages'] ),
+	'Auch auf der Vollstufe kein Veroeffentlichungsrecht'
+);
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
 

@@ -176,6 +176,22 @@ function wpmcp_setup_steps() {
 		'raw'    => true,
 	);
 
+	// 5. Do the granted capabilities actually match the chosen level?
+	$levels     = wpmcp_access_levels();
+	$level      = wpmcp_access_level();
+	$caps_match = function_exists( 'wpmcp_role_caps_match' ) ? wpmcp_role_caps_match() : true;
+	$steps[]    = array(
+		'title'  => __( 'Permissions in step', 'wp-mcp-connector-plus' ),
+		'state'  => $caps_match ? 'ok' : 'error',
+		'detail' => $caps_match
+			? sprintf(
+				/* translators: %s: name of the access level */
+				__( 'Level "%s", and the agent role grants exactly that.', 'wp-mcp-connector-plus' ),
+				$levels[ $level ]['label']
+			)
+			: __( 'The agent role does not grant what the selected level promises. Saving the settings again repairs it.', 'wp-mcp-connector-plus' ),
+	);
+
 	return $steps;
 }
 

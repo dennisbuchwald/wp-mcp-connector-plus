@@ -292,6 +292,12 @@ Regardless of level:
 - **Kill switch:** `define( 'WPMCP_DISABLE', true );` in `wp-config.php`
   stops the connector without deactivating the plugin.
 
+Do not work around a permission problem by giving the agent user a
+built-in role such as Editor. Editor can publish and delete, which is
+exactly what every level here withholds. If the level and the granted
+capabilities disagree, the status table says so and saving the settings
+again repairs it.
+
 To fix the level from code instead of the database, for instance on a
 production site that should never move past read-only:
 
