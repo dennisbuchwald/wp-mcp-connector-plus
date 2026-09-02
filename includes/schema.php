@@ -90,6 +90,21 @@ function wpmcp_validate_attrs( $block_name, array $attrs, $path ) {
 		}
 	}
 
+	// Several block libraries (GenerateBlocks, Kadence, Stackable) key their
+	// generated CSS to a per-instance id. When it is missing the editor
+	// creates one on open, which marks an untouched page as unsaved and, for
+	// styled blocks, drops the styling that was keyed to the absent id.
+	foreach ( array( 'uniqueId', 'uniqueID' ) as $id_attr ) {
+		if ( isset( $defs[ $id_attr ] ) && empty( $attrs[ $id_attr ] ) ) {
+			$warnings[] = sprintf(
+				'%s: "%s" declares "%s" and none was given. The editor will generate one when the page is opened, marking it as changed without anyone editing it, and any CSS keyed to that id is lost. Copy the shape of an existing instance of this block, including the id, the matching class in the markup and the generated css attribute.',
+				$path,
+				$block_name,
+				$id_attr
+			);
+		}
+	}
+
 	return array(
 		'errors'   => $errors,
 		'warnings' => $warnings,

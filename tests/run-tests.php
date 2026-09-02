@@ -425,6 +425,59 @@ $names  = wpmcp_block_names( $result['blocks'] );
 t_same( array( 'dbw-base/hero' ), $names, 'removing by visible index removes the right block' );
 
 // ---------------------------------------------------------------------
+t_group( 'Attribute, die als Objekt gespeichert werden müssen' );
+
+$registry->register(
+	'acme/styled',
+	array(
+		'title'      => 'Styled',
+		'attributes' => array(
+			'uniqueId' => array(
+				'type'    => 'string',
+				'default' => '',
+			),
+			'styles'   => array( 'type' => 'object' ),
+			'items'    => array( 'type' => 'array' ),
+		),
+	)
+);
+
+// JSON decoding turns {} into an empty PHP array, which encodes back as [].
+$tree   = array(
+	array(
+		'name'  => 'acme/styled',
+		'attrs' => json_decode( '{"uniqueId":"243c9e83","styles":{},"items":[]}', true ),
+	),
+);
+$errors = array();
+$out    = serialize_blocks( wpmcp_tree_to_blocks( $tree, '', $errors ) );
+
+t_ok( false !== strpos( $out, '"styles":{}' ), 'leeres Objekt bleibt ein Objekt', $out );
+t_ok( false !== strpos( $out, '"items":[]' ), 'leeres Array bleibt ein Array', $out );
+
+// A populated object was never ambiguous, but must not regress.
+$tree[0]['attrs'] = json_decode( '{"styles":{"textAlign":"center"}}', true );
+$errors           = array();
+$out              = serialize_blocks( wpmcp_tree_to_blocks( $tree, '', $errors ) );
+t_ok( false !== strpos( $out, '"styles":{"textAlign":"center"}' ), 'gefülltes Objekt bleibt unverändert', $out );
+
+// ---------------------------------------------------------------------
+t_group( 'Fehlende Instanz-ID' );
+
+$blocks = parse_blocks( '<!-- wp:acme/styled {"uniqueId":"243c9e83"} /-->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok( empty( $v['warnings'] ), 'gesetzte uniqueId erzeugt keine Warnung' );
+
+$blocks = parse_blocks( '<!-- wp:acme/styled {} /-->' );
+$v      = wpmcp_validate_blocks( $blocks );
+t_ok( ! empty( $v['warnings'] ), 'fehlende uniqueId wird gemeldet' );
+t_ok(
+	false !== strpos( implode( ' ', $v['warnings'] ), 'marking it as changed' ),
+	'die Warnung nennt die Folge fürs Backend'
+);
+t_ok( empty( $v['errors'] ), 'fehlende uniqueId ist eine Warnung, kein Fehler' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

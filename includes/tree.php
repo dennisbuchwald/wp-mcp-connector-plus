@@ -132,7 +132,7 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
 
 		$blocks[] = array(
 			'blockName'    => $name,
-			'attrs'        => $attrs,
+			'attrs'        => wpmcp_restore_object_attrs( $name, $attrs ),
 			'innerBlocks'  => $children,
 			'innerHTML'    => wpmcp_inner_html_from_content( $inner_content ),
 			'innerContent' => $inner_content,
@@ -140,6 +140,37 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
 	}
 
 	return $blocks;
+}
+
+/**
+ * Restore attributes that must serialise as JSON objects.
+ *
+ * JSON decoding gives PHP arrays, and an empty PHP array encodes back as
+ * `[]`, not `{}`. A block expecting an object then receives an array, and
+ * block libraries that build CSS from such an attribute quietly produce
+ * nothing. The block.json type declaration is what settles it.
+ *
+ * @param string $block_name Block name.
+ * @param array  $attrs      Attributes.
+ * @return array
+ */
+function wpmcp_restore_object_attrs( $block_name, array $attrs ) {
+	$type = \WP_Block_Type_Registry::get_instance()->get_registered( $block_name );
+	if ( ! $type || ! is_array( $type->attributes ) ) {
+		return $attrs;
+	}
+
+	foreach ( $attrs as $key => $value ) {
+		$declared = $type->attributes[ $key ]['type'] ?? null;
+		if ( 'object' !== $declared ) {
+			continue;
+		}
+		if ( is_array( $value ) && empty( $value ) ) {
+			$attrs[ $key ] = new \stdClass();
+		}
+	}
+
+	return $attrs;
 }
 
 /**
