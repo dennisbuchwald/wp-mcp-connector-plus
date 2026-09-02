@@ -97,7 +97,7 @@ add_action( 'wp_abilities_api_init', 'wpmcp_load_abilities' );
  * the diagnostic message — compatibility itself is decided by the API
  * shape below, not by a version string.
  */
-const WPMCP_MCP_ADAPTER_TESTED = array( '0.4.1', '0.6.1' );
+const WPMCP_MCP_ADAPTER_TESTED = array( '0.4.1', '0.5.0', '0.6.1' );
 
 /**
  * Is the loaded mcp-adapter one we can drive?
