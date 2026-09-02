@@ -367,7 +367,9 @@ define( 'WPMCP_GITHUB_TOKEN', 'github_pat_...' );
 ```
 
 Releasing: bump the version in the plugin header **and** `WPMCP_VERSION`,
-tag it, publish a GitHub release. The header version is what sites compare
+add an entry to [CHANGELOG.md](CHANGELOG.md), tag it, push. A tag is
+enough — the update checker uses the latest release and falls back to the
+highest version tag, so there is nothing to click on GitHub. The header version is what sites compare
 against — a forgotten bump means no update appears.
 
 `vendor/` is committed on purpose: WordPress installs the release ZIP as-is
@@ -406,7 +408,9 @@ Each suite exists because of a specific failure:
 
 ## Status
 
-**v0.2.0.** Running on two live sites for reading, including a full QA pass
+See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
+
+**v0.2.2.** Running on two live sites for reading, including a full QA pass
 over a draft built from a real design system — the agent fetched block
 schemas to learn the defaults, and could then tell a deliberately set value
 from an unset one. The write path is exercised by tests but has not yet
