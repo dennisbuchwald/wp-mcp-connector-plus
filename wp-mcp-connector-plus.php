@@ -11,7 +11,7 @@
  * Author URI:        https://dennisbuchwald.de
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       dbw-wp-mcp-connector-plus
+ * Text Domain:       wp-mcp-connector-plus
  * Domain Path:       /languages
  * Update URI:        https://github.com/dennisbuchwald/wp-mcp-connector-plus
  *
@@ -47,10 +47,10 @@ function wpmcp_requirements_notice() {
 	global $wp_version;
 	printf(
 		'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
-		esc_html__( 'WP MCP Connector Plus is inactive.', 'dbw-wp-mcp-connector-plus' ),
+		esc_html__( 'WP MCP Connector Plus is inactive.', 'wp-mcp-connector-plus' ),
 		sprintf(
 			/* translators: %s: current WordPress version */
-			esc_html__( 'It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector.', 'dbw-wp-mcp-connector-plus' ),
+			esc_html__( 'It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector.', 'wp-mcp-connector-plus' ),
 			esc_html( $wp_version )
 		)
 	);
@@ -161,10 +161,10 @@ function wpmcp_boot_mcp() {
 				}
 				printf(
 					'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
-					esc_html__( 'WP MCP Connector Plus:', 'dbw-wp-mcp-connector-plus' ),
+					esc_html__( 'WP MCP Connector Plus:', 'wp-mcp-connector-plus' ),
 					sprintf(
 						/* translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions */
-						esc_html__( 'The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1.', 'dbw-wp-mcp-connector-plus' ),
+						esc_html__( 'The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1.', 'wp-mcp-connector-plus' ),
 						esc_html( $loaded ),
 						esc_html( implode( ', ', WPMCP_MCP_ADAPTER_TESTED ) )
 					)

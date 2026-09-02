@@ -22,7 +22,7 @@ function wpmcp_register_category() {
 		return;
 	}
 	wp_register_ability_category(
-		'dbw-wp-mcp-connector-plus',
+		'wp-mcp-connector-plus',
 		array(
 			'label'       => 'MCP Connector Plus',
 			'description' => 'Block-tree level access to this WordPress site.',
@@ -62,7 +62,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Site-Info',
 			'description' => 'Fingerprint of this website: WordPress/theme/core versions, client name, active feature modules, editable post types, and the design tokens (colour slugs, font sizes, spacing) the design system allows. Call this first in any session — versions and available blocks differ per customer site, so never assume them.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => new stdClass(),
@@ -82,7 +82,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Block-Katalog',
 			'description' => 'The building kit of this site: every available block with its role (container / child / standalone), what it is for, what may go inside it, and its main variants — plus the editorial playbook (page dramaturgy, block choice, tone, house rules) that no schema can carry. Read the playbook before building anything. This is the overview; use blocks-describe for the full attribute schema of the few blocks you actually intend to use.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -120,7 +120,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Block-Details',
 			'description' => 'Full schema for named blocks: every attribute with its meaning, type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules and a minimal example. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -151,7 +151,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Inhalte auflisten',
 			'description' => 'List pages, posts and custom post types with status, URL and block count. Use uses_block to find real examples of a block in use on this very site — reading two or three existing pages teaches the site\'s tone and section rhythm faster than any guideline.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -198,7 +198,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Seite als Blockbaum lesen',
 			'description' => 'Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" with a path for the section you care about, and only use "full" when you really need the whole page. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write operations. Attributes left at their default are omitted, so what you see is what was actually decided.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -253,7 +253,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Blockbaum schreiben',
 			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. If validation fails, the errors name the exact block path and reason — fix and call again.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -300,7 +300,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Seite duplizieren',
 			'description' => 'Duplicate a page including its blocks, taxonomies and meta. The copy is always a draft. This is the preferred way to create a new page: an existing page already carries the site\'s structure, tone and section rhythm, so adapting a copy beats assembling one from scratch. Find a good source with content-list first.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -339,7 +339,7 @@ function wpmcp_register_abilities() {
 		array(
 			'label'       => 'Vorschau',
 			'description' => 'Check your own work: returns the server-rendered HTML of the page, its heading outline, and a signed preview URL that works without a login for 15 minutes. Read the headings and HTML to verify structure; open the preview URL in a browser to actually look at the result. Always do this after writing.',
-			'category'    => 'dbw-wp-mcp-connector-plus',
+			'category'    => 'wp-mcp-connector-plus',
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(

@@ -48,7 +48,7 @@ function wpmcp_init_updater() {
 	$checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
 		wpmcp_repo_url(),
 		WPMCP_FILE,
-		'dbw-wp-mcp-connector-plus'
+		'wp-mcp-connector-plus'
 	);
 
 	/*

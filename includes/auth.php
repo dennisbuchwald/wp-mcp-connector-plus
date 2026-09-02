@@ -36,7 +36,7 @@ function wpmcp_register_role() {
 	remove_role( WPMCP_ROLE );
 	add_role(
 		WPMCP_ROLE,
-		__( 'AI Editor', 'dbw-wp-mcp-connector-plus' ),
+		__( 'AI Editor', 'wp-mcp-connector-plus' ),
 		array(
 			'read'                  => true,
 			WPMCP_CAP              => true,
