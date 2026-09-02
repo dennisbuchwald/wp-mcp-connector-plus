@@ -7,6 +7,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.2.3] - 2026-09-02
+
+### Behoben
+
+- **Bestehende Inhalte blockierten jeden Schreibvorgang** - Die Validierung beurteilte die ganze Seite nach der Aenderung, nicht die Aenderung selbst. Eine Seite mit fuenf ueber den Editor gespeicherten Hex-Farben liess sich damit gar nicht mehr beschreiben, obwohl der Einschub des Agenten sauber war: `ok: false`, fuenf Fehler, alle in unberuehrten Bloecken. In der Praxis trifft das viele Seiten, weil der Block-Editor Werte zulaesst, die dieser Validator strenger prueft.
+  - Der Zustand **vor** der Aenderung wird jetzt mitgeprueft. Was es vorher schon gab, wird weiterhin gemeldet, verliert aber sein Vetorecht; nur was die Aenderung neu einbringt, blockiert.
+  - **Gezaehlt statt verglichen:** Eine sechste Verletzung einer Art, die vorher fuenfmal vorkam, wird erkannt. Pfade verschieben sich beim Einfuegen und Loeschen, deshalb zaehlt die Art des Problems, nicht seine Position.
+  - Gilt fuer `ops` und `tree` gleichermassen. Auch ein vollstaendiger Ersatz traegt bestehende Bloecke mit sich, die der Agent nur gelesen und unveraendert zurueckgeschrieben hat.
+
+---
+
 ## [0.2.2] - 2026-09-02
 
 ### Behoben

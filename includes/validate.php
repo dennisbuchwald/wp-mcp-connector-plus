@@ -17,16 +17,107 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Run the full pipeline over a block array.
+ * Stages 1 to 4 over a block array: existence, schema, structure, design.
  *
- * @param array $blocks Parsed blocks to validate.
- * @return array { errors: string[], warnings: string[], serialized: string }
+ * @param array $blocks Parsed blocks.
+ * @return array { errors: string[], warnings: string[] }
  */
-function wpmcp_validate_blocks( array $blocks ) {
+function wpmcp_collect_issues( array $blocks ) {
 	$errors   = array();
 	$warnings = array();
 
 	wpmcp_walk_validate( $blocks, null, array(), $errors, $warnings );
+
+	return array(
+		'errors'   => $errors,
+		'warnings' => $warnings,
+	);
+}
+
+/**
+ * Strip the leading block path from a message, so the same problem in a
+ * different position counts as the same problem. Paths shift whenever a
+ * block is inserted or removed.
+ *
+ * @param string $message Validation message.
+ * @return string
+ */
+function wpmcp_issue_shape( $message ) {
+	return (string) preg_replace( '/^[0-9]+(\.[0-9]+)*: /', '', $message );
+}
+
+/**
+ * How often each kind of problem occurs, ignoring position.
+ *
+ * @param string[] $messages Messages.
+ * @return array<string, int>
+ */
+function wpmcp_issue_counts( array $messages ) {
+	$counts = array();
+	foreach ( $messages as $message ) {
+		$shape = wpmcp_issue_shape( $message );
+		$counts[ $shape ] = ( $counts[ $shape ] ?? 0 ) + 1;
+	}
+	return $counts;
+}
+
+/**
+ * Separate problems this change introduced from problems it inherited.
+ *
+ * A page saved through the block editor can hold values this validator
+ * rejects — a literal colour where the design system wants a slug, say.
+ * Refusing to write such a page at all would mean the agent can never
+ * touch it, however clean its own edit is. So a problem that was already
+ * there stays reported but stops being a veto; only what the change adds
+ * blocks the save.
+ *
+ * Counted rather than matched, so adding a sixth violation of a kind that
+ * already occurred five times is still caught.
+ *
+ * @param string[] $after  Errors after the change.
+ * @param string[] $before Errors before the change.
+ * @return array { errors: string[], inherited: string[] }
+ */
+function wpmcp_split_inherited_errors( array $after, array $before ) {
+	$budget    = wpmcp_issue_counts( $before );
+	$errors    = array();
+	$inherited = array();
+
+	foreach ( $after as $message ) {
+		$shape = wpmcp_issue_shape( $message );
+		if ( ! empty( $budget[ $shape ] ) ) {
+			--$budget[ $shape ];
+			$inherited[] = $message . ' (already present before this change, left as it was)';
+			continue;
+		}
+		$errors[] = $message;
+	}
+
+	return array(
+		'errors'    => $errors,
+		'inherited' => $inherited,
+	);
+}
+
+/**
+ * Run the full pipeline over a block array.
+ *
+ * @param array $blocks Parsed blocks to validate.
+ * @param array $before Blocks as they were, so pre-existing problems do
+ *                      not veto a change that did not cause them.
+ * @return array { errors: string[], warnings: string[], serialized: string }
+ */
+function wpmcp_validate_blocks( array $blocks, ?array $before = null ) {
+	$issues   = wpmcp_collect_issues( $blocks );
+	$errors   = $issues['errors'];
+	$warnings = $issues['warnings'];
+
+	if ( null !== $before ) {
+		$baseline = wpmcp_collect_issues( $before );
+		$split    = wpmcp_split_inherited_errors( $errors, $baseline['errors'] );
+		$errors   = $split['errors'];
+		$warnings = array_merge( $warnings, $split['inherited'] );
+	}
 
 	$serialized = '';
 

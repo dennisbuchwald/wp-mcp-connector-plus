@@ -306,7 +306,7 @@ function wpmcp_write_content( array $args ) {
 		$op_summary = $applied['summary'];
 	}
 
-	$validation = wpmcp_validate_blocks( $blocks );
+	$validation = wpmcp_validate_blocks( $blocks, $before_blocks );
 	$after_count = wpmcp_count_blocks( $blocks );
 
 	$diff = array(

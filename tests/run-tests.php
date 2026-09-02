@@ -478,6 +478,64 @@ t_ok(
 t_ok( empty( $v['errors'] ), 'fehlende uniqueId ist eine Warnung, kein Fehler' );
 
 // ---------------------------------------------------------------------
+t_group( 'Geerbte Fehler blockieren nicht' );
+
+// The reported case: a page saved through the block editor carries five
+// literal colours the validator rejects. Inserting a clean block must not
+// be refused because of them.
+$registry->register(
+	'acme/card',
+	array(
+		'title'      => 'Card',
+		'attributes' => array(
+			'highlightColor' => array(
+				'type'    => 'string',
+				'default' => '',
+			),
+		),
+	)
+);
+
+$existing = '<!-- wp:acme/card {"highlightColor":"#2E7D9B"} /-->'
+	. '<!-- wp:acme/card {"highlightColor":"#7DBB42"} /-->'
+	. '<!-- wp:acme/card {"highlightColor":"#E8A838"} /-->';
+
+$before = parse_blocks( $existing );
+
+// Without the before-state, every pre-existing violation is an error.
+$v = wpmcp_validate_blocks( $before );
+t_same( 3, count( $v['errors'] ), 'ohne Vorzustand sind es drei Fehler' );
+
+// With it, they are inherited and stop being a veto.
+$v = wpmcp_validate_blocks( $before, $before );
+t_ok( empty( $v['errors'] ), 'mit Vorzustand blockiert nichts mehr', implode( ' | ', $v['errors'] ) );
+t_same( 3, count( $v['warnings'] ), 'sie werden weiterhin gemeldet' );
+t_ok(
+	false !== strpos( implode( ' ', $v['warnings'] ), 'already present before this change' ),
+	'die Meldung sagt, dass es sie vorher schon gab'
+);
+
+// Inserting a clean block into that page must go through.
+$after = parse_blocks( $existing . '<!-- wp:dbw-base/hero {"heading":"Neu"} /-->' );
+$v     = wpmcp_validate_blocks( $after, $before );
+t_ok( empty( $v['errors'] ), 'sauberer Einschub wird nicht abgelehnt', implode( ' | ', $v['errors'] ) );
+
+// But a NEW violation of the same kind is still caught — counted, not matched.
+$after = parse_blocks( $existing . '<!-- wp:acme/card {"highlightColor":"#123456"} /-->' );
+$v     = wpmcp_validate_blocks( $after, $before );
+t_same( 1, count( $v['errors'] ), 'eine vierte Verletzung derselben Art wird erkannt' );
+t_ok(
+	false !== strpos( $v['errors'][0], '#123456' ),
+	'und zwar die neue, nicht eine der alten',
+	$v['errors'][0] ?? ''
+);
+
+// Removing an offending block is an improvement, never an error.
+$after = parse_blocks( '<!-- wp:acme/card {"highlightColor":"#2E7D9B"} /-->' );
+$v     = wpmcp_validate_blocks( $after, $before );
+t_ok( empty( $v['errors'] ), 'weniger Verstoesse als vorher ist kein Fehler' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );
