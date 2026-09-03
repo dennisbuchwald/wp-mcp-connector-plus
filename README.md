@@ -176,7 +176,12 @@ the MCP server is running but has nothing to offer.
 permission to save."** That message comes from a block library, and the
 gate behind it is the `unfiltered_html` capability, which the agent role
 does not have. Set *Dynamic data* to allowed under *Tools → MCP
-Connector*; see the safety model for what that does and does not grant.
+Connector*; see the safety model for what that does and does not grant. If it
+is already set to allowed and the message persists, check
+`site-info` → `capabilities.dynamicData`: `effective: false` means
+`DISALLOW_UNFILTERED_HTML` is defined in `wp-config.php`, which turns the
+capability into a `do_not_allow` for every account, administrators
+included. Nothing in this plugin can reach past that.
 Editing the database with WP-CLI gets past it because WP-CLI runs without
 a user, so none of these checks happen at all — a way around, not a fix.
 
@@ -355,6 +360,13 @@ takes the place of the filtering WordPress then skips:
 
 Every save that used the elevated capability says so in its response and
 in the activity log.
+
+Two things put `unfiltered_html` out of reach whatever this setting says:
+`DISALLOW_UNFILTERED_HTML` in `wp-config.php`, and multisite for anyone
+who is not a super admin. Both are deliberate decisions by whoever set the
+site up, and the plugin does not work around either — it reports them, on
+the settings screen and in `site-info`, and refuses the save before
+attempting it.
 
 Regardless of level:
 

@@ -21,6 +21,21 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
+function is_multisite() {
+	return false;
+}
+$GLOBALS['removed'] = array();
+function remove_filter( $tag, $cb, $priority = 10 ) {
+	$GLOBALS['removed'][] = $tag;
+	return true;
+}
+function get_current_user_id() {
+	return 9;
+}
+function wp_update_post( $postarr, $error = false ) {
+	return $postarr['ID'] ?? 1;
+}
+
 function wp_kses_post( $content ) {
 	$content = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content );
 	return preg_replace( '#<iframe\b[^>]*>.*?</iframe>#is', '', $content );
@@ -169,6 +184,38 @@ check(
 	! wpmcp_looks_like_unfiltered_html( 'This block shows dynamic data.' ),
 	'und auch nicht jede Erwaehnung von dynamic data',
 	'ohne "permission" ist es keine Rechtefrage'
+);
+
+echo "\n\033[1mWenn die Capability gar nicht erreichbar ist\033[0m\n";
+
+// unfiltered_html is a meta capability. A site can turn it into
+// do_not_allow from wp-config, and then granting it changes nothing —
+// the save would go ahead and fail with the block library's message,
+// which explains none of this.
+check( null === wpmcp_unfiltered_html_blocker(), 'normal ist sie erreichbar' );
+
+define( 'DISALLOW_UNFILTERED_HTML', true );
+$blocker = wpmcp_unfiltered_html_blocker();
+
+check( null !== $blocker, 'mit DISALLOW_UNFILTERED_HTML nicht mehr' );
+check( false !== strpos( (string) $blocker, 'wp-config.php' ), 'die Meldung nennt, wo es steht' );
+check( false !== strpos( (string) $blocker, 'do_not_allow' ), 'und was WordPress daraus macht' );
+check(
+	false !== strpos( (string) $blocker, 'on purpose' ),
+	'und dass das eine Entscheidung der Seite ist',
+	'daran vorbeizuarbeiten waere genau das Falsche'
+);
+
+$result = wpmcp_update_post_elevated( array( 'ID' => 1, 'post_content' => 'x' ) );
+check( is_wp_error( $result ), 'ein Save wird dann gar nicht erst versucht' );
+check(
+	is_wp_error( $result ) && 'wpmcp_unfiltered_html_unavailable' === $result->get_error_code(),
+	'mit eigenem Fehlercode statt der Meldung der Block-Bibliothek'
+);
+check(
+	in_array( 'user_has_cap', $GLOBALS['removed'], true ),
+	'und die Berechtigung wird auch auf diesem Weg wieder entzogen',
+	'das finally muss auch bei einem fruehen return greifen'
 );
 
 echo "\n";

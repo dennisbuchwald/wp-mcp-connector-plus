@@ -7,6 +7,24 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.9.1] - 2026-09-03
+
+Nachtrag zu 0.9.0: Auf dbw-media.de blieb der Fehler stehen, obwohl "Dynamic data: Allowed" gesetzt war.
+
+### Geaendert
+
+- **Der Konnektor prueft, ob die Berechtigung ueberhaupt greift**, statt sie zu vergeben und zu hoffen. `unfiltered_html` ist eine *Meta*-Capability: Steht `DISALLOW_UNFILTERED_HTML` in der `wp-config.php`, macht WordPress daraus ein `do_not_allow` - fuer jedes Konto, Administratoren eingeschlossen. Keine Vergabe ueber `user_has_cap` kommt daran vorbei. Dasselbe gilt auf Multisite fuer alle ausser Super-Admins. In beiden Faellen wird der Save jetzt gar nicht erst versucht, sondern mit einer Meldung abgelehnt, die die Ursache benennt.
+- **Die Einstellungsseite sagt es dazu.** Steht die Einstellung auf *Erlaubt*, waehrend eine der beiden Sperren greift, steht das rot darunter - statt eine Einstellung anzuzeigen, die nichts bewirkt.
+- **`site-info` meldet `capabilities.dynamicData`** mit `allowed`, `effective` und einem Satz Klartext. Damit ist es eine Auskunft statt etwas, das aus einem gescheiterten Schreibvorgang zu erraten waere.
+
+### Was nicht die Ursache war
+
+Vermutet wurden Hook-Zeitpunkt und -Prioritaet. Beides scheidet aus: `user_has_cap` wird bei *jedem* `current_user_can()` durchlaufen, also auch mitten im `wp_update_post`, egal an welchem Save-Hook die Block-Bibliothek haengt. Ein Prioritaetsproblem gibt es dort nicht.
+
+Bewusst nicht gebaut: ein Weg um `DISALLOW_UNFILTERED_HTML` herum. Die Konstante ist eine ausdrueckliche Entscheidung derjenigen, die die Seite aufgesetzt haben. Sie im Plugin zu unterlaufen waere genau die Art von Hintertuer, gegen die es sonst ueberall absichert.
+
+---
+
 ## [0.9.0] - 2026-09-03
 
 Aus dem Befund, dass fast jede Leistungs- und Branchenseite auf dbw-media.de nicht speicherbar war - also genau die Seiten, fuer die der Konnektor gebaut ist.

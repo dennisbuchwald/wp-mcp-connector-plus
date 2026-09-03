@@ -802,10 +802,42 @@ function wpmcp_update_post_elevated( array $postarr ) {
 	add_filter( 'user_has_cap', $grant, 100, 4 );
 
 	try {
+		// Check that the grant took, rather than assuming it. unfiltered_html
+		// is a meta capability: a site can turn it into do_not_allow from
+		// wp-config, and then no amount of granting reaches it. Without this
+		// the save goes ahead and fails with the block library's own message,
+		// which says nothing about why — and the last time that happened the
+		// conclusion was that hook priorities were wrong.
+		$blocker = wpmcp_unfiltered_html_blocker();
+		if ( $blocker ) {
+			return new \WP_Error( 'wpmcp_unfiltered_html_unavailable', $blocker );
+		}
+
 		return wpmcp_update_post_preserving( $postarr );
 	} finally {
 		remove_filter( 'user_has_cap', $grant, 100 );
 	}
+}
+
+/**
+ * Why unfiltered_html cannot be granted here, if it cannot.
+ *
+ * Two ways a site puts it out of reach for everybody, administrators
+ * included. Both are deliberate decisions by whoever set the site up, and
+ * neither is this plugin's to overrule — so the answer is to name them.
+ *
+ * @return string|null Explanation, or null when the capability is reachable.
+ */
+function wpmcp_unfiltered_html_blocker() {
+	if ( defined( 'DISALLOW_UNFILTERED_HTML' ) && DISALLOW_UNFILTERED_HTML ) {
+		return 'This site defines DISALLOW_UNFILTERED_HTML in wp-config.php, which WordPress turns into a "do_not_allow" for every account, administrators included. No setting in this plugin can reach past that, and it should not: it is a decision the site was configured with on purpose. Either remove the constant, or leave pages with dynamic data to a human in the editor — where the same constant applies, so an administrator will have to lift it there too.';
+	}
+
+	if ( is_multisite() && function_exists( 'is_super_admin' ) && ! is_super_admin( get_current_user_id() ) ) {
+		return 'On multisite WordPress reserves unfiltered_html for super admins, so it cannot be granted to the agent account here.';
+	}
+
+	return null;
 }
 
 /**
@@ -1841,6 +1873,24 @@ function wpmcp_site_info() {
 	// Only meaningful once writing exists at all.
 	if ( ! empty( $write_tools ) ) {
 		$info['capabilities']['publishedPagesWritable'] = wpmcp_live_edit_enabled();
+
+		// Whether pages with dynamic data can be saved, and if not, why —
+		// so this is a fact to read rather than something to infer from a
+		// failed write.
+		$dynamic = array( 'allowed' => wpmcp_dynamic_data_allowed() );
+		$blocker = wpmcp_unfiltered_html_blocker();
+
+		if ( ! $dynamic['allowed'] ) {
+			$dynamic['explains'] = 'Pages whose blocks carry dynamic data cannot be saved. Some block libraries gate them behind the unfiltered_html capability. The site owner can allow it under Tools > MCP Connector, where it is granted per save rather than to the role.';
+		} elseif ( $blocker ) {
+			$dynamic['effective'] = false;
+			$dynamic['explains']  = $blocker;
+		} else {
+			$dynamic['effective'] = true;
+			$dynamic['explains']  = 'Pages with dynamic data can be saved. The capability is granted for the duration of each save and removed again; a write that newly introduces a script tag, an inline event handler or a javascript: URL is still refused.';
+		}
+
+		$info['capabilities']['dynamicData'] = $dynamic;
 	}
 
 	if ( function_exists( 'dbw_get_settings' ) ) {

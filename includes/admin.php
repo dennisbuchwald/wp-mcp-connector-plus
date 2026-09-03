@@ -314,6 +314,13 @@ function wpmcp_render_admin_page() {
 								</label>
 							</p>
 						<?php endforeach; ?>
+						<?php $dynamic_blocker = function_exists( 'wpmcp_unfiltered_html_blocker' ) ? wpmcp_unfiltered_html_blocker() : null; ?>
+						<?php if ( $dynamic_blocker && 'allowed' === $dynamic_current ) : ?>
+							<p class="description" style="color:#b32d2e">
+								<strong><?php esc_html_e( 'This setting cannot take effect on this site.', 'wp-mcp-connector-plus' ); ?></strong>
+								<?php echo esc_html( $dynamic_blocker ); ?>
+							</p>
+						<?php endif; ?>
 						<p class="description">
 							<?php esc_html_e( 'Some block libraries refuse to save a page holding dynamic data unless the account has unfiltered_html — the capability that permits storing arbitrary HTML and JavaScript. That would be the widest permission in a role that deliberately cannot publish, delete, upload or change settings, so it is never given to the role. When this is allowed, it is granted for the length of one save and taken away again, and a write that newly introduces a script tag, an inline event handler or a javascript: URL is still refused. Every such save is marked in the activity log.', 'wp-mcp-connector-plus' ); ?>
 						</p>
