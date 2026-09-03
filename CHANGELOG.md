@@ -7,6 +7,21 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.7.1] - 2026-09-03
+
+Aus einem Lauf ueber dbw-media.de: 7 Seiten geaendert, 13 abgelehnt mit "This content contains dynamic data". Betroffen war jede Seite mit den Legacy-Containern eines bestimmten Block-Plugins.
+
+### Geaendert
+
+- **Eine Ablehnung von aussen sagt jetzt, woher sie kommt.** Bisher kam die fremde Fehlermeldung nackt zurueck - direkt nach einem Probelauf, der `ok` gemeldet hatte. Das liest sich wie ein Fehler des Konnektors. Die Meldung nennt jetzt: dass die eigene Pruefung durchlief, dass die Ablehnung beim Speichern von WordPress oder einem anderen Plugin kam, und - wenn die Aenderung selbst nichts Gefiltertes einbringt - dass es um bereits gespeicherten Inhalt geht.
+- **Die Meldung nennt die Plugins, die am Speichern mitschreiben.** Ein Blick in die Hook-Registry (`wp_insert_post_data`, `wp_insert_post_empty_content`, `content_save_pre`), Callback zu Datei zu Plugin-Ordner aufgeloest, nur im Fehlerfall. Aus "irgendwas hat abgelehnt" wird eine Liste mit ein bis drei Namen.
+
+### Warum nicht der vorgeschlagene Fix
+
+Vorgeschlagen war wieder, dem KI-Benutzer `unfiltered_html` zu geben. Das haette nicht geholfen: `wp_kses` lehnt keinen Speichervorgang ab, es schreibt Inhalt still um - genau deshalb gibt es die Impact-Pruefung. Die Meldung "This content contains dynamic data" steht weder in WordPress (geprueft in kses.php, post.php, blocks.php, Block Bindings, REST-Posts-Controller der 6.9) noch in diesem Plugin. Sie kommt aus einem Drittplugin, das Speichervorgaenge filtert. Die Loesung ist, dessen Einstellung zu finden - oder die Aenderung im Editor zu machen, wo sie als dein eigener Benutzer laeuft.
+
+---
+
 ## [0.7.0] - 2026-09-03
 
 Aus dem Einsatz auf dbw-media.de: eine Telefonnummer in einem 60-KB-Rechtstext aendern.

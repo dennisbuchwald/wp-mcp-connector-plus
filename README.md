@@ -452,6 +452,7 @@ php tests/search.php                             # site-wide search and its raw 
 php tests/privacy-page.php                       # the privacy page exception stays narrow
 php tests/patch-html.php                         # editing text inside a block, and when it refuses
 php tests/long-output.php                        # long pages are windowed, never quietly halved
+php tests/save-refusal.php                       # a refusal from elsewhere says where it came from
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -480,6 +481,9 @@ Each suite exists because of a specific failure:
 - **privacy-page** — the narrow exception for the designated privacy
   policy page, pinned from every side: other pages, deleting, other users,
   lower access levels, multisite, and the off switch.
+- **save-refusal** — a plugin refused a save with a message nobody
+  recognised, right after a dry run had said yes. It read as a connector
+  bug and cost an afternoon, so the error now says where it came from.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 
