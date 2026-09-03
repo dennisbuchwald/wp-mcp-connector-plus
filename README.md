@@ -210,9 +210,9 @@ agent never sees them.
 | `wpmcp/blocks-describe` | Full attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. |
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one section), or `full`. |
-| `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `move`) or a full tree replacement. Dry run by default. |
+| `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`) or a full tree replacement. Dry run by default. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
-| `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. |
+| `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
 
@@ -266,6 +266,22 @@ not enough:
   none of it.
 - **After:** the stored content is compared against what was sent, and any
   remaining difference is reported. The same check runs after duplicating.
+
+**Changing text inside a block** is `patch_html`, not `replace`. `replace`
+demands the whole block back, which on a long legal page means retyping
+tens of thousands of characters to correct a phone number — and every
+character retyped is a character that can come back wrong. `patch_html`
+names the text instead:
+
+```json
+{"op": "patch_html", "path": "4.2", "find": "07131 123456", "replace": "+49 7131 123456"}
+```
+
+The anchor must occur exactly once in that block. None means the caller is
+working from a stale reading; several mean it cannot know which one it is
+about to change. Both are refused rather than guessed at — and
+`content-search` returns the surrounding text verbatim, which is what makes
+a unique anchor easy to pick.
 
 Reading a page also reports **structured data that lost its wrapper** —
 JSON-LD sitting in the markup with no `<script>` around it, which renders
@@ -434,6 +450,8 @@ php tests/kses-impact.php                        # existing markup survives an u
 php tests/duplicate-preserves.php                # a copy is a copy
 php tests/search.php                             # site-wide search and its raw context
 php tests/privacy-page.php                       # the privacy page exception stays narrow
+php tests/patch-html.php                         # editing text inside a block, and when it refuses
+php tests/long-output.php                        # long pages are windowed, never quietly halved
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```

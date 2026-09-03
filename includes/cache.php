@@ -110,9 +110,10 @@ function wpmcp_page_cache_suspected() {
  *
  * @param int  $post_id      Post ID.
  * @param bool $cache_buster Append a unique query parameter.
+ * @param int  $offset       Byte to start the returned markup at.
  * @return array|\WP_Error
  */
-function wpmcp_fetch_live( $post_id, $cache_buster = true ) {
+function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0 ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -155,11 +156,8 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true ) {
 		}
 	}
 
-	$max  = 200000;
-	$full = strlen( $body );
-	if ( $full > $max ) {
-		$body = substr( $body, 0, $max ) . "\n<!-- truncated by wp-mcp-connector-plus -->";
-	}
+	$full  = strlen( $body );
+	$slice = wpmcp_slice_text( $body, 200000, $offset );
 
 	wpmcp_log(
 		'wpmcp/content-fetch-live',
@@ -169,13 +167,14 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true ) {
 		)
 	);
 
-	return array(
-		'postId'       => $post->ID,
-		'url'          => $url,
-		'httpStatus'   => $status,
-		'bytes'        => $full,
-		'cacheHeaders' => $cache_headers,
-		'html'         => $body,
-		'source'       => 'the public URL, as a visitor receives it',
+	return array_merge(
+		array(
+			'postId'       => $post->ID,
+			'url'          => $url,
+			'httpStatus'   => $status,
+			'cacheHeaders' => $cache_headers,
+			'source'       => 'the public URL, as a visitor receives it',
+		),
+		$slice
 	);
 }

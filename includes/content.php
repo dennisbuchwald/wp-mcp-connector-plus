@@ -829,7 +829,7 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
  * @param bool $include_html Whether to return the rendered HTML.
  * @return array|\WP_Error
  */
-function wpmcp_preview_content( $post_id, $include_html = true ) {
+function wpmcp_preview_content( $post_id, $include_html = true, $offset = 0 ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -847,12 +847,15 @@ function wpmcp_preview_content( $post_id, $include_html = true ) {
 	);
 
 	if ( $include_html ) {
-		$rendered = wpmcp_render_post_html( $post );
+		$rendered = wpmcp_render_post_html( $post, $offset );
 		if ( is_wp_error( $rendered ) ) {
 			$result['renderError'] = $rendered->get_error_message();
 		} else {
-			$result['html']     = $rendered['html'];
-			$result['headings'] = $rendered['headings'];
+			foreach ( array( 'html', 'headings', 'bytes', 'offset', 'truncated', 'nextOffset', 'note' ) as $key ) {
+				if ( isset( $rendered[ $key ] ) ) {
+					$result[ $key ] = $rendered[ $key ];
+				}
+			}
 			if ( ! empty( $rendered['notices'] ) ) {
 				$result['renderNotices'] = $rendered['notices'];
 			}
@@ -875,10 +878,11 @@ function wpmcp_preview_content( $post_id, $include_html = true ) {
  * Render post content through the block renderer, capped in size, plus the
  * heading outline — enough for the AI to check its own work structurally.
  *
- * @param \WP_Post $post Post.
+ * @param \WP_Post $post   Post.
+ * @param int      $offset Byte to start the markup window at.
  * @return array|\WP_Error
  */
-function wpmcp_render_post_html( $post ) {
+function wpmcp_render_post_html( $post, $offset = 0 ) {
 	$smoke = wpmcp_render_smoke_test( $post->post_content );
 	if ( is_wp_error( $smoke ) ) {
 		return $smoke;
@@ -897,16 +901,53 @@ function wpmcp_render_post_html( $post ) {
 		}
 	}
 
-	$max = 60000;
-	if ( strlen( $html ) > $max ) {
-		$html = substr( $html, 0, $max ) . "\n<!-- truncated by wp-mcp-connector-plus -->";
+	$slice = wpmcp_slice_text( $html, 60000, $offset );
+
+	return array_merge(
+		array(
+			'headings' => $headings,
+			'notices'  => $smoke['notices'] ?? array(),
+		),
+		$slice
+	);
+}
+
+/**
+ * Cut a long text down to a window the caller can walk through.
+ *
+ * A comment in the middle of the markup saying it stopped there is easy to
+ * miss and impossible to act on — a legal page was read, silently halved,
+ * and judged on the half. The size and the next offset are fields, so
+ * being cut off is a fact the caller can see and answer.
+ *
+ * @param string $text   Full text.
+ * @param int    $max    Bytes to return at most.
+ * @param int    $offset Byte to start at.
+ * @return array { html: string, bytes: int, offset: int, truncated: bool, nextOffset?: int }
+ */
+function wpmcp_slice_text( $text, $max, $offset = 0 ) {
+	$total  = strlen( $text );
+	$offset = max( 0, min( (int) $offset, $total ) );
+	$slice  = substr( $text, $offset, $max );
+
+	$result = array(
+		'html'      => $slice,
+		'bytes'     => $total,
+		'offset'    => $offset,
+		'truncated' => ( $offset + strlen( $slice ) ) < $total,
+	);
+
+	if ( $result['truncated'] ) {
+		$result['nextOffset'] = $offset + strlen( $slice );
+		$result['note']       = sprintf(
+			'%d of %d bytes. Call again with offset: %d for the next part.',
+			strlen( $slice ),
+			$total,
+			$result['nextOffset']
+		);
 	}
 
-	return array(
-		'html'     => $html,
-		'headings' => $headings,
-		'notices'  => $smoke['notices'] ?? array(),
-	);
+	return $result;
 }
 
 /**

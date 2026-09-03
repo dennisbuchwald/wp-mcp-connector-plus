@@ -514,6 +514,21 @@ function wpmcp_apply_ops( array $blocks, array $ops ) {
 				$summary['patched'] += 1;
 				break;
 
+			case 'patch_html':
+				if ( ! isset( $op['find'] ) || ! is_string( $op['find'] ) || '' === $op['find'] ) {
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (patch_html): "find" must be a non-empty string.', $n ) );
+				}
+				if ( ! isset( $op['replace'] ) || ! is_string( $op['replace'] ) ) {
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (patch_html): "replace" must be a string.', $n ) );
+				}
+				$result = wpmcp_patch_html( $blocks, $path, $op['find'], $op['replace'], $n );
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				$blocks             = $result;
+				$summary['patched'] += 1;
+				break;
+
 			case 'move':
 				$to = wpmcp_path_parse( $op['to'] ?? '' );
 				if ( null === $to ) {
@@ -538,7 +553,7 @@ function wpmcp_apply_ops( array $blocks, array $ops ) {
 			default:
 				return new \WP_Error(
 					'wpmcp_bad_op',
-					sprintf( 'Operation %d: unknown op "%s". Use insert, replace, remove, set_attrs or move.', $n, (string) $kind )
+					sprintf( 'Operation %d: unknown op "%s". Use insert, replace, remove, set_attrs, patch_html or move.', $n, (string) $kind )
 				);
 		}
 	}
@@ -676,6 +691,87 @@ function wpmcp_patch_attrs( array $blocks, array $path, array $attrs ) {
 		$block['attrs'] = $current;
 		return $block;
 	} );
+}
+
+/**
+ * Replace one exact piece of text inside a block's own markup.
+ *
+ * `replace` needs the whole block back to change anything in it. On a
+ * privacy policy that is sixty thousand characters to correct a phone
+ * number — the change gets lost in the transcription, and everything the
+ * agent retypes is something it can retype wrong.
+ *
+ * The anchor must occur exactly once. Zero means the caller is working
+ * from a stale reading of the page; more than once means it cannot know
+ * which one it is about to change. Both are refused rather than guessed
+ * at, and content-search returns the surrounding text verbatim, which is
+ * what makes a unique anchor easy to pick.
+ *
+ * Only the block's own markup is touched. The children of a container
+ * have their own paths and are edited there.
+ *
+ * @param array  $blocks  Parsed blocks.
+ * @param array  $path    Target path.
+ * @param string $find    Text to look for, matched literally.
+ * @param string $replace Text to put in its place.
+ * @param int    $n       Operation index, for the message.
+ * @return array|\WP_Error
+ */
+function wpmcp_patch_html( array $blocks, array $path, $find, $replace, $n = 0 ) {
+	$error = null;
+
+	$patched = wpmcp_mutate_at(
+		$blocks,
+		$path,
+		function ( $block ) use ( $find, $replace, $n, &$error ) {
+			$content = is_array( $block['innerContent'] ?? null )
+				? $block['innerContent']
+				: array( (string) ( $block['innerHTML'] ?? '' ) );
+
+			$hits = 0;
+			foreach ( $content as $chunk ) {
+				if ( is_string( $chunk ) ) {
+					$hits += substr_count( $chunk, $find );
+				}
+			}
+
+			if ( 1 !== $hits ) {
+				$error = new \WP_Error(
+					'wpmcp_anchor_not_unique',
+					0 === $hits
+						? sprintf(
+							'Operation %d (patch_html): the text to find does not occur in this block. Read the block again — content-read returns innerHTML unchanged, and content-search gives the surrounding text verbatim.',
+							$n
+						)
+						: sprintf(
+							'Operation %d (patch_html): the text to find occurs %d times in this block, so which one to change is not decided. Extend it until it is unique.',
+							$n,
+							$hits
+						)
+				);
+				return $block;
+			}
+
+			foreach ( $content as $i => $chunk ) {
+				if ( is_string( $chunk ) && false !== strpos( $chunk, $find ) ) {
+					$position      = strpos( $chunk, $find );
+					$content[ $i ] = substr_replace( $chunk, $replace, $position, strlen( $find ) );
+					break;
+				}
+			}
+
+			$block['innerContent'] = $content;
+			$block['innerHTML']    = wpmcp_inner_html_from_content( $content );
+
+			return $block;
+		}
+	);
+
+	if ( $error ) {
+		return $error;
+	}
+
+	return $patched;
 }
 
 /**

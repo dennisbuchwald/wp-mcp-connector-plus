@@ -7,6 +7,26 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.7.0] - 2026-09-03
+
+Aus dem Einsatz auf dbw-media.de: eine Telefonnummer in einem 60-KB-Rechtstext aendern.
+
+### Hinzugefuegt
+
+- **Operation `patch_html`.** Aendert einen Textausschnitt *in* einem Block, statt den Block als Ganzes zu ersetzen: `{"op":"patch_html","path":"4.2","find":"07131 123456","replace":"+49 7131 123456"}`. Bisher verlangte `replace` das komplette Markup des Blocks zurueck - auf einer Datenschutzseite zehntausende Zeichen abtippen, um zwoelf zu korrigieren, und jedes abgetippte Zeichen kann falsch zurueckkommen.
+  - Der Suchtext muss **genau einmal** in diesem Block vorkommen. Keinmal heisst, der Aufrufer arbeitet mit einem veralteten Stand; mehrmals heisst, er kann nicht wissen, welche Stelle er gerade aendert. Beides wird abgelehnt statt geraten. `content-search` liefert den Umgebungstext woertlich - damit ist ein eindeutiger Anker leicht zu finden.
+  - Nur das eigene Markup des Blocks wird angefasst. Kinder eines Containers haben eigene Pfade und werden dort geaendert.
+
+### Geaendert
+
+- **Lange Ausgaben werden gefenstert statt still gekappt.** `content-preview` und `content-fetch-live` schnitten bei 60.000 bzw. 200.000 Zeichen ab und hinterliessen nur einen HTML-Kommentar mitten im Markup - leicht zu uebersehen, und es gab keinen Weg zum Rest. Eine Rechtsseite wurde gelesen, halbiert und nach der Haelfte beurteilt. Beide melden jetzt `bytes`, `offset`, `truncated` und `nextOffset` und nehmen `offset` entgegen.
+
+### Nicht gebaut
+
+Vorgeschlagen war ein Parameter `blocks_file: "/tmp/blocks.json"`, der den Inhalt serverseitig aus einer Datei liest. Zwei Gruende dagegen: Der MCP-Server laeuft auf dem WordPress-Host, die Datei liegt auf dem Rechner des Aufrufers - der Pfad existiert dort gar nicht. Und wenn es funktionierte, waere es ein Datei-Lesegeraet: `blocks_file: "../wp-config.php"` schreibt die Datenbank-Zugangsdaten als Text auf eine Seite. `patch_html` loest dasselbe Problem, ohne eine Datei zu beruehren.
+
+---
+
 ## [0.6.1] - 2026-09-02
 
 Beim ersten echten Einsatz der Reparatur-Tuer aufgefallen: Sie ging auf, aber nur halb.

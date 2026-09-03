@@ -249,7 +249,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
-			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Pass expected_modified (from content-read) so the write is refused if someone edited the page in the meantime. Markup WordPress will not store from an agent account (scripts, iframes) cannot be written: attempting it is an error, named in the dry run before anything is saved. Such markup already on the page is preserved rather than destroyed, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent and any remaining difference is reported. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. When inserting a block type you have not written before, read an existing instance of it first with content-read and mirror its shape — some block libraries keep a per-instance id, generated CSS and matching markup classes that must agree with each other, and a block that merely validates can still be subtly wrong. Validation judges the change, not the page: a problem that already existed in a block you did not touch is reported as a warning and does not block the save, while anything the change itself introduces does. If validation fails, the errors name the exact block path and reason — fix and call again.',
+			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, patch_html, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Pass expected_modified (from content-read) so the write is refused if someone edited the page in the meantime. Markup WordPress will not store from an agent account (scripts, iframes) cannot be written: attempting it is an error, named in the dry run before anything is saved. Such markup already on the page is preserved rather than destroyed, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent and any remaining difference is reported. To change a piece of text inside a block, use patch_html with "find" and "replace" rather than restating the whole block: replace demands the entire markup of the block back, which on a long legal page means retyping tens of thousands of characters to correct a phone number, and everything retyped can be retyped wrong. The "find" text must occur exactly once in that block — content-search returns the surrounding text verbatim, which is how to pick an anchor that is. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. When inserting a block type you have not written before, read an existing instance of it first with content-read and mirror its shape — some block libraries keep a per-instance id, generated CSS and matching markup classes that must agree with each other, and a block that merely validates can still be subtly wrong. Validation judges the change, not the page: a problem that already existed in a block you did not touch is reported as a warning and does not block the save, while anything the change itself introduces does. If validation fails, the errors name the exact block path and reason — fix and call again.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -260,7 +260,7 @@ function wpmcp_register_abilities() {
 					),
 					'ops'     => array(
 						'type'        => 'array',
-						'description' => 'Patch operations, applied in order. Each: {"op":"insert|replace|remove|set_attrs|move","path":"2.1", ...}. insert/replace take "block" or "blocks"; set_attrs takes "attrs" (null value removes a key); move takes "to". Insert places the block at that position, shifting the rest down.',
+						'description' => 'Patch operations, applied in order. Each: {"op":"insert|replace|remove|set_attrs|patch_html|move","path":"2.1", ...}. insert/replace take "block" or "blocks"; set_attrs takes "attrs" (null value removes a key); patch_html takes "find" and "replace"; move takes "to". Insert places the block at that position, shifting the rest down.',
 						'items'       => array( 'type' => 'object' ),
 					),
 					'tree'    => array(
@@ -353,6 +353,11 @@ function wpmcp_register_abilities() {
 						'default'     => true,
 						'description' => 'Return the rendered HTML, not just the link.',
 					),
+					'offset'       => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Byte to start the returned HTML at. Long pages come back in windows of 60000 bytes; when one is not the whole page the answer says so in "truncated" and names the "nextOffset" to ask for.',
+					),
 				),
 				'required'   => array( 'post_id' ),
 			),
@@ -361,7 +366,8 @@ function wpmcp_register_abilities() {
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_preview_content(
 					(int) ( $input['post_id'] ?? 0 ),
-					! isset( $input['include_html'] ) || (bool) $input['include_html']
+					! isset( $input['include_html'] ) || (bool) $input['include_html'],
+					(int) ( $input['offset'] ?? 0 )
 				);
 			},
 			'meta' => $read_only,
@@ -513,6 +519,11 @@ function wpmcp_register_abilities() {
 						'default'     => true,
 						'description' => 'Append a unique query parameter to bypass caches. Turn off to see exactly what a normal visitor gets.',
 					),
+					'offset'       => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Byte to start the returned HTML at. Long pages come back in windows of 200000 bytes; when one is not the whole page the answer says so in "truncated" and names the "nextOffset" to ask for.',
+					),
 				),
 				'required'   => array( 'post_id' ),
 			),
@@ -521,7 +532,8 @@ function wpmcp_register_abilities() {
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_fetch_live(
 					(int) ( $input['post_id'] ?? 0 ),
-					! isset( $input['cache_buster'] ) || (bool) $input['cache_buster']
+					! isset( $input['cache_buster'] ) || (bool) $input['cache_buster'],
+					(int) ( $input['offset'] ?? 0 )
 				);
 			},
 			'meta' => $read_only,
