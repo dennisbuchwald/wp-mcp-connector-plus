@@ -3,7 +3,7 @@
  * Plugin Name:       WP MCP Connector Plus
  * Plugin URI:        https://dennisbuchwald.de/apps/wp-mcp-connector-plus
  * Description:       MCP server for WordPress that lets AI agents operate a site the way an editor does: reads and writes pages as a Gutenberg block tree, exposes the block kit with its schemas and nesting rules, and validates every change before it is saved.
- * Version:           0.7.1
+ * Version:           0.8.0
  * Requires at least: 6.9
  * Tested up to:      7.0
  * Requires PHP:      8.1
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPMCP_VERSION', '0.7.1' );
+define( 'WPMCP_VERSION', '0.8.0' );
 define( 'WPMCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPMCP_FILE', __FILE__ );
 
@@ -116,6 +116,7 @@ function wpmcp_load_abilities() {
 	require_once WPMCP_DIR . 'includes/content.php';
 	require_once WPMCP_DIR . 'includes/search.php';
 	require_once WPMCP_DIR . 'includes/cache.php';
+	require_once WPMCP_DIR . 'includes/media.php';
 	require_once WPMCP_DIR . 'includes/abilities.php';
 
 	wpmcp_register_abilities();

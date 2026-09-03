@@ -64,7 +64,7 @@ everything needed is actually in place:
 | Step | What it checks |
 |---|---|
 | WordPress with the Abilities API | core 6.9+, otherwise nothing can register |
-| Abilities registered | all eight made it into the registry |
+| Abilities registered | every one of them made it into the registry |
 | MCP transport | a usable mcp-adapter, and the endpoint URL |
 | Agent user and credential | the account your agent will use |
 
@@ -210,20 +210,24 @@ agent never sees them.
 | `wpmcp/blocks-describe` | Full attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. |
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one section), or `full`. |
-| `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`) or a full tree replacement. Dry run by default. |
+| `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
+| `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. |
+| `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers included. |
+| `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
+| `wpmcp/media-read` | One attachment in the same shape. |
+| `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No upload, no delete, no file replacement. |
 
 ### Deliberately not covered
 
-The agent works on the block tree, and only on that. It cannot upload
-media, set a featured image, change categories or tags, edit a post title
-after creation, or *write* SEO metadata — it can read those fields with
-`include_meta`, which is enough for a review but not for authoring. A
-generated draft is therefore complete as *content* but not as a finished
-editorial artefact.
+The agent works on the block tree, the SEO fields and the two text fields
+of an attachment. It cannot upload or delete media, replace a file, set a
+featured image, change categories or tags, or edit a post title after
+creation. A generated draft is therefore complete as *content* and as
+metadata, but a human still decides what gets published.
 
 Slug, status and post type stay untouched by design: a slug is what a URL
 hangs on, and making that writable is a separate decision with its own
@@ -266,6 +270,20 @@ not enough:
   none of it.
 - **After:** the stored content is compared against what was sent, and any
   remaining difference is reported. The same check runs after duplicating.
+
+**SEO fields** go through the same tool. `meta` can travel with `ops` or
+on its own — correcting a canonical URL is not a reason to touch the block
+tree, and a meta-only write leaves the content and its modified date
+alone:
+
+```json
+{"post_id": 2816, "meta": {"rank_math_canonical_url": "https://example.com/x/"}, "dry_run": false}
+```
+
+Only SEO keys are accepted; anything else is refused by name. And unlike
+content, **meta has no revision behind it** — WordPress does not version
+post meta. The previous value is therefore in the dry run, in the
+response, and in the activity log, because nothing else will hold it.
 
 **Changing text inside a block** is `patch_html`, not `replace`. `replace`
 demands the whole block back, which on a long legal page means retyping
@@ -453,6 +471,8 @@ php tests/privacy-page.php                       # the privacy page exception st
 php tests/patch-html.php                         # editing text inside a block, and when it refuses
 php tests/long-output.php                        # long pages are windowed, never quietly halved
 php tests/save-refusal.php                       # a refusal from elsewhere says where it came from
+php tests/meta-write.php                         # SEO fields: whitelist, diff, and the old value
+php tests/media.php                              # alt text, and what an image is used on
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -484,6 +504,11 @@ Each suite exists because of a specific failure:
 - **save-refusal** — a plugin refused a save with a message nobody
   recognised, right after a dry run had said yes. It read as a connector
   bug and cost an afternoon, so the error now says where it came from.
+- **meta-write** — SEO meta is the one write with no revision behind it.
+  These pin the whitelist and that the previous value reaches the log,
+  because otherwise there is no way back.
+- **media** — alt text lives on the attachment, not on the block, so an
+  audit of the markup alone can count images and explain none of them.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

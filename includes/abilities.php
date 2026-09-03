@@ -258,6 +258,10 @@ function wpmcp_register_abilities() {
 						'type'        => 'integer',
 						'description' => 'The post/page ID to write to.',
 					),
+					'meta'    => array(
+						'type'        => 'object',
+						'description' => 'SEO meta fields to set, as key => value: rank_math_title, rank_math_description, rank_math_focus_keyword, rank_math_canonical_url, and the _yoast_wpseo_ equivalents. null clears a field. Can be sent on its own, without ops or tree, when only the meta needs changing — that leaves the page content and its modified date untouched. Only these keys are accepted; anything else is an error naming the allowed set. The dry run reports the previous and new value of every field. Note that WordPress revisions do not cover post meta, so unlike a content change this cannot be rolled back with one click; the previous values are in the response and the activity log.',
+					),
 					'ops'     => array(
 						'type'        => 'array',
 						'description' => 'Patch operations, applied in order. Each: {"op":"insert|replace|remove|set_attrs|patch_html|move","path":"2.1", ...}. insert/replace take "block" or "blocks"; set_attrs takes "attrs" (null value removes a key); patch_html takes "find" and "replace"; move takes "to". Insert places the block at that position, shifting the rest down.',
@@ -537,6 +541,111 @@ function wpmcp_register_abilities() {
 				);
 			},
 			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/media-list',
+		array(
+			'label'       => 'Mediathek durchsehen',
+			'description' => 'Lists attachments with their alt text, title and — the reason the tool exists — every post that embeds them. Alt text usually lives on the attachment, not on the block that displays the image, so a page can look like it has no alt text while the theme fills one in from here, or the other way round. Pass missing_alt: true to see only attachments with none. "usedIn" counts both markup references and featured images, so an image used only as a featured image does not look unused.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'search'      => array(
+						'type'        => 'string',
+						'description' => 'Filter by filename, title or caption.',
+					),
+					'mime_type'   => array(
+						'type'        => 'string',
+						'description' => 'Filter by MIME type or prefix, e.g. "image" or "image/png".',
+					),
+					'missing_alt' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Only attachments whose alt text is empty or unset.',
+					),
+					'per_page'    => array(
+						'type'        => 'integer',
+						'default'     => 25,
+						'description' => 'Attachments per page, up to 100.',
+					),
+					'page'        => array(
+						'type'        => 'integer',
+						'default'     => 1,
+						'description' => 'Page of results.',
+					),
+				),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_media_list( is_array( $input ) ? $input : array() );
+			},
+			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/media-read',
+		array(
+			'label'       => 'Mediendatei lesen',
+			'description' => 'One attachment with its alt text, title, caption, URL, MIME type and the posts that embed it. Use it to check a single image before or after changing it.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'id' => array(
+						'type'        => 'integer',
+						'description' => 'The attachment ID.',
+					),
+				),
+				'required'   => array( 'id' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_media_read( (int) ( $input['id'] ?? 0 ) );
+			},
+			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/media-update',
+		array(
+			'label'       => 'Mediendatei beschriften',
+			'description' => 'Sets the alt text or title of an attachment. Nothing else: no upload, no delete, no replacing the file, and no other field. Dry run by default; pass dry_run: false to save. Alt text describes what the image shows to someone who cannot see it — it is not a place for keywords, and a decorative image is better with an empty alt than with an invented one. Attachment fields have no revisions, so the previous values are reported and logged.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'id'      => array(
+						'type'        => 'integer',
+						'description' => 'The attachment ID.',
+					),
+					'alt'     => array(
+						'type'        => 'string',
+						'description' => 'New alt text. Pass an empty string to clear it, which is right for a purely decorative image.',
+					),
+					'title'   => array(
+						'type'        => 'string',
+						'description' => 'New title, as shown in the media library.',
+					),
+					'dry_run' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Report the change without saving. Defaults to true.',
+					),
+				),
+				'required'   => array( 'id' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_media_update( is_array( $input ) ? $input : array() );
+			},
 		)
 	);
 }

@@ -20,15 +20,21 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string[]
  */
 function wpmcp_allowed_post_types() {
+	// Public is the whole test. Requiring show_ui as well used to hide any
+	// post type a plugin registers in code without an admin screen — a
+	// site-wide search then reported nothing and looked right doing it.
 	$types = array();
-	foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $type ) {
-		if ( ! $type->public && 'page' !== $type->name ) {
-			continue;
-		}
+	foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
+		// Media has its own tools; an attachment holds no block tree.
 		if ( in_array( $type->name, array( 'attachment' ), true ) ) {
 			continue;
 		}
 		$types[] = $type->name;
+	}
+
+	// A page is not public in the post-type sense but is always in scope.
+	if ( ! in_array( 'page', $types, true ) && post_type_exists( 'page' ) ) {
+		$types[] = 'page';
 	}
 
 	// Synced patterns are not a public post type, so they need saying so.
@@ -297,17 +303,33 @@ function wpmcp_write_content( array $args ) {
 
 	$has_tree = isset( $args['tree'] ) && is_array( $args['tree'] );
 	$has_ops  = isset( $args['ops'] ) && is_array( $args['ops'] ) && ! empty( $args['ops'] );
+	$has_meta = isset( $args['meta'] ) && is_array( $args['meta'] ) && ! empty( $args['meta'] );
 
-	if ( $has_tree === $has_ops ) {
+	if ( $has_tree && $has_ops ) {
 		return new \WP_Error(
 			'wpmcp_bad_request',
-			'Provide either "tree" (replace the whole page) or "ops" (patch operations), not both and not neither.'
+			'Provide either "tree" (replace the whole page) or "ops" (patch operations), not both.'
 		);
 	}
 
+	// Meta stands on its own: correcting a canonical URL is not a reason to
+	// touch the block tree.
+	if ( ! $has_tree && ! $has_ops && ! $has_meta ) {
+		return new \WP_Error(
+			'wpmcp_bad_request',
+			'Provide "ops" (patch operations), "tree" (replace the whole page) or "meta" (SEO fields).'
+		);
+	}
+
+	$meta_diff = $has_meta
+		? wpmcp_meta_diff( $post, $args['meta'] )
+		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
+
 	$op_summary = array();
 
-	if ( $has_tree ) {
+	if ( ! $has_tree && ! $has_ops ) {
+		$blocks = $before_blocks;
+	} elseif ( $has_tree ) {
 		$errors = array();
 		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors );
 		if ( ! empty( $errors ) ) {
@@ -384,6 +406,8 @@ function wpmcp_write_content( array $args ) {
 		}
 	}
 
+	$errors = array_merge( $errors, $meta_diff['errors'] );
+
 	$response = array(
 		'ok'       => empty( $errors ),
 		'dryRun'   => $dry_run,
@@ -392,6 +416,14 @@ function wpmcp_write_content( array $args ) {
 		'errors'   => $errors,
 		'warnings' => $warnings,
 	);
+
+	if ( $has_meta ) {
+		$response['meta'] = array(
+			'fields'  => $meta_diff['fields'],
+			'changes' => $meta_diff['changes'],
+			'note'    => 'WordPress revisions cover post content, not post meta. The previous values are listed above and in the activity log; there is no one-click rollback for these.',
+		);
+	}
 
 	if ( ! empty( $errors ) ) {
 		wpmcp_log(
@@ -420,31 +452,53 @@ function wpmcp_write_content( array $args ) {
 		return $response;
 	}
 
-	// Real write. wp_slash() is essential: without it WordPress strips
-	// backslashes out of the block attribute JSON.
-	$postarr = array(
-		'ID'           => $post->ID,
-		'post_content' => wp_slash( $validation['serialized'] ),
-	);
+	$revision_id = 0;
 
-	$updated = wpmcp_should_preserve_markup( $impact, $post )
-		? wpmcp_update_post_preserving( $postarr )
-		: wp_update_post( $postarr, true );
+	// Only touch post content when the change actually has content in it.
+	// A meta-only write must not bump the modified date or spend a
+	// revision on an identical page.
+	if ( $has_tree || $has_ops ) {
+		// wp_slash() is essential: without it WordPress strips backslashes
+		// out of the block attribute JSON.
+		$postarr = array(
+			'ID'           => $post->ID,
+			'post_content' => wp_slash( $validation['serialized'] ),
+		);
 
-	if ( is_wp_error( $updated ) ) {
-		return wpmcp_explain_save_refusal( $updated, $impact );
+		$updated = wpmcp_should_preserve_markup( $impact, $post )
+			? wpmcp_update_post_preserving( $postarr )
+			: wp_update_post( $postarr, true );
+
+		if ( is_wp_error( $updated ) ) {
+			return wpmcp_explain_save_refusal( $updated, $impact );
+		}
+
+		// What we sent is not necessarily what got stored.
+		$stored_warnings = wpmcp_verify_stored( $post->ID, $validation['serialized'] );
+		if ( ! empty( $stored_warnings ) ) {
+			$response['warnings'] = array_merge( $response['warnings'], $stored_warnings );
+			$response['contentAltered'] = true;
+		}
+
+		$revisions   = wp_get_post_revisions( $post->ID, array( 'numberposts' => 1 ) );
+		$revision    = ! empty( $revisions ) ? reset( $revisions ) : null;
+		$revision_id = $revision ? (int) $revision->ID : 0;
 	}
 
-	// What we sent is not necessarily what got stored.
-	$stored_warnings = wpmcp_verify_stored( $post->ID, $validation['serialized'] );
-	if ( ! empty( $stored_warnings ) ) {
-		$response['warnings'] = array_merge( $response['warnings'], $stored_warnings );
-		$response['contentAltered'] = true;
-	}
+	if ( $has_meta && $meta_diff['changes'] > 0 ) {
+		$written = wpmcp_apply_meta( $post, $meta_diff['fields'] );
+		$response['meta']['written'] = $written;
 
-	$revisions   = wp_get_post_revisions( $post->ID, array( 'numberposts' => 1 ) );
-	$revision    = ! empty( $revisions ) ? reset( $revisions ) : null;
-	$revision_id = $revision ? (int) $revision->ID : 0;
+		wpmcp_log(
+			'wpmcp/content-write',
+			array(
+				'post_id'   => $post->ID,
+				'operation' => 'meta',
+				'dry_run'   => false,
+				'summary'   => wpmcp_meta_log_line( $meta_diff['fields'] ),
+			)
+		);
+	}
 
 	$response['message']    = 'Saved.';
 	$response['revisionId'] = $revision_id;
@@ -1125,6 +1179,158 @@ function wpmcp_readable_meta_keys() {
  * @param \WP_Post $post Post.
  * @return array
  */
+/**
+ * Meta fields the agent may change.
+ *
+ * A whitelist, not an open door to post meta. Everything here belongs to
+ * an SEO plugin and is a plain string that a human would otherwise retype
+ * in a settings screen. Anything a block, a page builder or a licence
+ * check keeps in meta stays out of reach.
+ *
+ * @return array<string, string> Key => how the value is cleaned.
+ */
+function wpmcp_writable_meta_keys() {
+	return apply_filters(
+		'wpmcp_writable_meta_keys',
+		array(
+			'rank_math_title'         => 'text',
+			'rank_math_description'   => 'text',
+			'rank_math_focus_keyword' => 'text',
+			'rank_math_canonical_url' => 'url',
+			'_yoast_wpseo_title'      => 'text',
+			'_yoast_wpseo_metadesc'   => 'text',
+			'_yoast_wpseo_focuskw'    => 'text',
+			'_yoast_wpseo_canonical'  => 'url',
+		)
+	);
+}
+
+/**
+ * Work out what a meta change would do, before it does it.
+ *
+ * Meta is the one thing a write cannot take back: WordPress revisions
+ * cover post content, not post meta, so the usual one-click rollback does
+ * not apply here. The previous value is therefore reported in the dry run
+ * and recorded in the log, which is what makes the change reversible at
+ * all.
+ *
+ * @param \WP_Post $post Post.
+ * @param array    $meta Requested key => value.
+ * @return array { fields: array, errors: string[], changes: int }
+ */
+function wpmcp_meta_diff( $post, array $meta ) {
+	$allowed = wpmcp_writable_meta_keys();
+	$labels  = wpmcp_readable_meta_keys();
+
+	$fields  = array();
+	$errors  = array();
+	$changes = 0;
+
+	foreach ( $meta as $key => $value ) {
+		if ( ! isset( $allowed[ $key ] ) ) {
+			$errors[] = sprintf(
+				'"%s" is not a meta field this connector writes. Allowed: %s.',
+				(string) $key,
+				implode( ', ', array_keys( $allowed ) )
+			);
+			continue;
+		}
+
+		if ( null !== $value && ! is_scalar( $value ) ) {
+			$errors[] = sprintf( '"%s" must be a string, or null to clear it.', (string) $key );
+			continue;
+		}
+
+		$from = (string) get_post_meta( $post->ID, $key, true );
+		$to   = ( null === $value ) ? '' : wpmcp_clean_meta_value( (string) $value, $allowed[ $key ] );
+
+		if ( 'url' === $allowed[ $key ] && '' !== $to && ! wp_http_validate_url( $to ) ) {
+			$errors[] = sprintf( '"%s" is not a usable URL: %s', (string) $key, (string) $value );
+			continue;
+		}
+
+		$fields[ $key ] = array(
+			'label'   => $labels[ $key ] ?? $key,
+			'from'    => $from,
+			'to'      => $to,
+			'changed' => ( $from !== $to ),
+		);
+
+		if ( $from !== $to ) {
+			++$changes;
+		}
+	}
+
+	return array(
+		'fields'  => $fields,
+		'errors'  => $errors,
+		'changes' => $changes,
+	);
+}
+
+/**
+ * A log line that carries the old value, because nothing else will.
+ *
+ * The revision system does not cover meta. If this line does not say what
+ * the field used to hold, nobody can put it back.
+ *
+ * @param array $fields Result of wpmcp_meta_diff()['fields'].
+ * @return string
+ */
+function wpmcp_meta_log_line( array $fields ) {
+	$parts = array();
+
+	foreach ( $fields as $key => $field ) {
+		if ( empty( $field['changed'] ) ) {
+			continue;
+		}
+		$parts[] = sprintf(
+			'%s: "%s" -> "%s"',
+			$key,
+			wpmcp_shorten( $field['from'], 80 ),
+			wpmcp_shorten( $field['to'], 80 )
+		);
+	}
+
+	return 'Meta ' . implode( '; ', $parts );
+}
+
+/**
+ * Clean a meta value for its kind.
+ *
+ * @param string $value Raw value.
+ * @param string $kind  'text' or 'url'.
+ * @return string
+ */
+function wpmcp_clean_meta_value( $value, $kind ) {
+	return 'url' === $kind ? esc_url_raw( trim( $value ) ) : sanitize_text_field( $value );
+}
+
+/**
+ * Write the meta fields a diff decided on.
+ *
+ * @param \WP_Post $post   Post.
+ * @param array    $fields Result of wpmcp_meta_diff()['fields'].
+ * @return string[] Keys actually written.
+ */
+function wpmcp_apply_meta( $post, array $fields ) {
+	$written = array();
+
+	foreach ( $fields as $key => $field ) {
+		if ( empty( $field['changed'] ) ) {
+			continue;
+		}
+		if ( '' === $field['to'] ) {
+			delete_post_meta( $post->ID, $key );
+		} else {
+			update_post_meta( $post->ID, $key, $field['to'] );
+		}
+		$written[] = $key;
+	}
+
+	return $written;
+}
+
 function wpmcp_read_meta( $post ) {
 	$fields = array();
 

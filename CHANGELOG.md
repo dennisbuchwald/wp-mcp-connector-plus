@@ -7,6 +7,26 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.8.0] - 2026-09-03
+
+Drei Befunde aus der Arbeit an dbw-media.de: SEO endete immer im Browser, die Mediathek war ein blinder Fleck, und eine Suche fand einen Custom-Post-Type nicht.
+
+### Hinzugefuegt
+
+- **`content-write` schreibt SEO-Felder.** Neuer Parameter `meta` mit Titel, Description, Focus-Keyword und Canonical (Rank Math und Yoast). Whitelist, keine offene Tuer zu `post_meta` - Bloecke, Page-Builder und Lizenzpruefungen legen dort auch Dinge ab, die niemanden etwas angehen. Ein unbekannter Schluessel ist ein Fehler und nennt die erlaubten. Canonical wird als URL geprueft, Text von Markup und Zeilenumbruechen befreit.
+  - `meta` steht fuer sich: Eine Canonical zu korrigieren ist kein Grund, den Blockbaum anzufassen. Ohne `ops` und `tree` bleiben Inhalt und Aenderungsdatum unberuehrt, und es wird keine Revision verbraucht.
+  - **Wichtig:** WordPress versioniert `post_meta` nicht. Fuer Meta gibt es also kein Zurueck per Klick. Der Probelauf zeigt deshalb alten und neuen Wert jedes Feldes, die Antwort sagt es ausdruecklich, und die Protokollzeile traegt den alten Wert - sonst waere er weg.
+- **Drei Medien-Werkzeuge.** `media-list` und `media-read` (Lesestufe) zeigen Alt-Text, Titel, Bildunterschrift, URL, MIME-Typ und - der eigentliche Punkt - **jede Seite, die das Bild einbindet**. `media-update` (Schreibstufen) setzt Alt-Text oder Titel. Sonst nichts: kein Upload, kein Loeschen, kein Dateitausch.
+  - Anlass: Ein Audit fand 76 Bilder mit leerem Alt-Attribut im Markup und konnte zu keinem davon etwas sagen. Alt-Text haengt meist am Anhang, nicht am Block - ein leeres Attribut kann also trotzdem korrekt ausgeliefert werden, oder eben nicht. Ohne Blick in die Mediathek ist die Zahl wertlos.
+  - `usedIn` zaehlt Markup-Referenzen (`wp-image-{id}` und den Datei-Pfad, damit auch Seiten aus der Zeit einer alten Domain treffen) **und** Beitragsbilder. Sonst saehe ein Bild, das nur als Beitragsbild dient, unbenutzt aus.
+  - `missing_alt: true` filtert direkt auf die ohne Alt-Text.
+
+### Behoben
+
+- **Custom Post Types waren unsichtbar.** Die Liste der erlaubten Post-Types verlangte `public` **und** `show_ui`. Ein Post-Type, den ein Plugin im Code ohne Admin-Oberflaeche registriert, fiel damit heraus - eine Suche ueber die ganze Seite meldete nichts und sah dabei richtig aus. Jetzt zaehlt nur noch `public`, `page` kommt wie bisher immer dazu, Anhaenge bleiben draussen (die haben eigene Werkzeuge).
+
+---
+
 ## [0.7.1] - 2026-09-03
 
 Aus einem Lauf ueber dbw-media.de: 7 Seiten geaendert, 13 abgelehnt mit "This content contains dynamic data". Betroffen war jede Seite mit den Legacy-Containern eines bestimmten Block-Plugins.
