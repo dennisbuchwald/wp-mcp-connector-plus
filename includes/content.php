@@ -465,12 +465,36 @@ function wpmcp_write_content( array $args ) {
 			'post_content' => wp_slash( $validation['serialized'] ),
 		);
 
-		$updated = wpmcp_should_preserve_markup( $impact, $post )
-			? wpmcp_update_post_preserving( $postarr )
-			: wp_update_post( $postarr, true );
+		// Dynamic data is gated by unfiltered_html in some block libraries.
+		// Where the site has allowed it, the capability is granted for this
+		// one call — and the guard below stands in for the filtering that
+		// WordPress then stops doing.
+		$elevate = wpmcp_dynamic_data_allowed();
+
+		if ( $elevate ) {
+			$unsafe = wpmcp_unsafe_additions( $post->post_content, $validation['serialized'] );
+			if ( ! empty( $unsafe ) && ! wpmcp_filtered_markup_allowed( $post ) ) {
+				return new \WP_Error(
+					'wpmcp_unsafe_markup',
+					wpmcp_unsafe_message( $unsafe, $blocks )
+				);
+			}
+		}
+
+		if ( $elevate ) {
+			$updated = wpmcp_update_post_elevated( $postarr );
+		} elseif ( wpmcp_should_preserve_markup( $impact, $post ) ) {
+			$updated = wpmcp_update_post_preserving( $postarr );
+		} else {
+			$updated = wp_update_post( $postarr, true );
+		}
 
 		if ( is_wp_error( $updated ) ) {
 			return wpmcp_explain_save_refusal( $updated, $impact );
+		}
+
+		if ( $elevate ) {
+			$response['elevated'] = 'unfiltered_html was granted for this save only, because "Dynamic data" is set to allowed. It is not on the agent role.';
 		}
 
 		// What we sent is not necessarily what got stored.
@@ -514,7 +538,12 @@ function wpmcp_write_content( array $args ) {
 			'post_id'     => $post->ID,
 			'operation'   => $has_tree ? 'tree' : 'ops',
 			'dry_run'     => false,
-			'summary'     => sprintf( 'Saved (%+d blocks, %d total).', $diff['delta'], $after_count ),
+			'summary'     => sprintf(
+				'Saved (%+d blocks, %d total).%s',
+				$diff['delta'],
+				$after_count,
+				empty( $response['elevated'] ) ? '' : ' unfiltered_html granted for this save only.'
+			),
 			'revision_id' => $revision_id,
 		)
 	);
@@ -586,8 +615,27 @@ function wpmcp_kses_impact( $before, $after ) {
  * @return \WP_Error
  */
 function wpmcp_explain_save_refusal( $error, array $impact ) {
+	$message = $error->get_error_message();
+
+	// The one refusal with a setting behind it. Left unexplained it read as
+	// "the plugin filters my content", and three separate sprints ended up
+	// editing the database around the API instead of reporting it.
+	if ( wpmcp_looks_like_unfiltered_html( $message ) ) {
+		$user = wp_get_current_user();
+
+		return new \WP_Error(
+			'wpmcp_dynamic_data_blocked',
+			sprintf(
+				'%s The block library on this site requires the unfiltered_html capability to save a page holding dynamic data, and the agent account (%s) does not have it — deliberately, because it permits storing arbitrary HTML and JavaScript. The connector can grant it for the length of a single save: set "Dynamic data" to allowed under Tools > MCP Connector. A write that newly introduces a script tag, an inline event handler or a javascript: URL is still refused then, and the capability never sits on the role. Editing the database directly with WP-CLI gets past this because it runs without a user, which means none of these checks happen at all — that is a way around the problem, not a fix for it.',
+				rtrim( $message, ' .' ) . '.',
+				$user && $user->user_login ? $user->user_login : 'the agent'
+			),
+			$error->get_error_data()
+		);
+	}
+
 	$lines = array(
-		rtrim( $error->get_error_message(), ' .' ) . '.',
+		rtrim( $message, ' .' ) . '.',
 		'This refusal comes from WordPress or another plugin at save time, not from the connector: its own validation passed and the dry run reported no errors.',
 	);
 
@@ -606,6 +654,28 @@ function wpmcp_explain_save_refusal( $error, array $impact ) {
 	$lines[] = 'Granting the agent unfiltered_html will not help here. That capability governs the content filter, which strips markup silently and never refuses a save.';
 
 	return new \WP_Error( $error->get_error_code(), implode( ' ', $lines ), $error->get_error_data() );
+}
+
+/**
+ * Is this refusal the unfiltered_html one wearing another plugin's words?
+ *
+ * Plugins phrase it their own way — "dynamic data", "your account doesn't
+ * have permission to save" — and none of them name the capability. The
+ * shape is recognisable enough to answer usefully, and guessing wrong
+ * only means the caller gets the general explanation instead.
+ *
+ * @param string $message Error message from the save.
+ * @return bool
+ */
+function wpmcp_looks_like_unfiltered_html( $message ) {
+	$message = strtolower( (string) $message );
+
+	if ( false !== strpos( $message, 'unfiltered_html' ) ) {
+		return true;
+	}
+
+	return false !== strpos( $message, 'dynamic data' )
+		&& false !== strpos( $message, 'permission' );
 }
 
 /**
@@ -698,6 +768,183 @@ function wpmcp_plugin_slug_from_path( $file ) {
 	}
 
 	return $slug;
+}
+
+/**
+ * Save with unfiltered_html, for exactly one call.
+ *
+ * Some block libraries refuse to store dynamic data unless the account
+ * holds unfiltered_html. Putting that capability on the agent role would
+ * undo the rest of the role: no publishing, no deleting, no uploads, no
+ * settings — and then permission to store arbitrary HTML and JavaScript.
+ *
+ * So it is granted around one wp_update_post and taken away again. The
+ * filter is scoped to the user being checked, and removed in a finally
+ * block so a fatal inside the save cannot leave it standing.
+ *
+ * Callers must run wpmcp_unsafe_additions() first. With this capability
+ * WordPress stops filtering the content, so that check is not a warning,
+ * it is the replacement for what wp_kses would otherwise have done.
+ *
+ * @param array $postarr Arguments for wp_update_post.
+ * @return int|\WP_Error
+ */
+function wpmcp_update_post_elevated( array $postarr ) {
+	$user_id = get_current_user_id();
+
+	$grant = function ( $allcaps, $caps, $args, $user ) use ( $user_id ) {
+		if ( isset( $user->ID ) && (int) $user->ID === (int) $user_id ) {
+			$allcaps['unfiltered_html'] = true;
+		}
+		return $allcaps;
+	};
+
+	add_filter( 'user_has_cap', $grant, 100, 4 );
+
+	try {
+		return wpmcp_update_post_preserving( $postarr );
+	} finally {
+		remove_filter( 'user_has_cap', $grant, 100 );
+	}
+}
+
+/**
+ * Dangerous markup this change would add that is not already there.
+ *
+ * The counterpart to the elevated save. Whole elements are only half of
+ * it: with unfiltered_html an onclick attribute or a javascript: href
+ * goes straight into the database too, and neither is a tag.
+ *
+ * Only additions count. A page that already embeds a video must stay
+ * editable, or the guard blocks the ordinary work it was meant to
+ * protect.
+ *
+ * @param string $before Content currently stored.
+ * @param string $after  Content about to be written.
+ * @return array<int, array{kind: string, sample: string}>
+ */
+function wpmcp_unsafe_additions( $before, $after ) {
+	$found = array();
+
+	// Whole elements, compared by their exact text.
+	$impact = wpmcp_kses_impact( $before, $after );
+	foreach ( $impact['added'] as $element ) {
+		$found[] = array(
+			'kind'   => $element . '>',
+			'sample' => $element . '>',
+		);
+	}
+
+	$patterns = array(
+		// An inline event handler is script without a script tag.
+		'event handler'   => '#\s(on[a-z]+)\s*=\s*["\']?[^"\'>\s]#i',
+		// A URL that executes rather than navigates.
+		'javascript: URL' => '#(?:href|src|action|formaction)\s*=\s*["\']?\s*javascript:#i',
+		'data: document'  => '#(?:href|src)\s*=\s*["\']?\s*data:text/html#i',
+	);
+
+	foreach ( $patterns as $label => $pattern ) {
+		$in_after  = wpmcp_match_counts( $pattern, (string) $after );
+		$in_before = wpmcp_match_counts( $pattern, (string) $before );
+
+		foreach ( $in_after as $sample => $count ) {
+			if ( $count > ( $in_before[ $sample ] ?? 0 ) ) {
+				$found[] = array(
+					'kind'   => $label,
+					'sample' => trim( $sample ),
+				);
+			}
+		}
+	}
+
+	return $found;
+}
+
+/**
+ * Say what was refused and where, so it can be fixed rather than retried.
+ *
+ * @param array $unsafe Result of wpmcp_unsafe_additions().
+ * @param array $blocks The blocks that were about to be written.
+ * @return string
+ */
+function wpmcp_unsafe_message( array $unsafe, array $blocks ) {
+	$parts = array();
+
+	foreach ( $unsafe as $item ) {
+		$path    = wpmcp_locate_markup( $blocks, $item['sample'] );
+		$parts[] = sprintf(
+			'%s (%s)%s',
+			$item['kind'],
+			wpmcp_shorten( $item['sample'], 60 ),
+			null === $path ? '' : ' in block ' . $path
+		);
+	}
+
+	return sprintf(
+		'This change adds markup that can run code: %s. It is refused because saving pages with dynamic data switches off WordPress\'s own content filtering for that save, so this check stands in its place. Remove it, or have a human add it in the editor.',
+		implode( '; ', $parts )
+	);
+}
+
+/**
+ * Count each distinct match of a pattern.
+ *
+ * @param string $pattern Regular expression.
+ * @param string $content Content.
+ * @return array<string, int>
+ */
+function wpmcp_match_counts( $pattern, $content ) {
+	$counts = array();
+
+	if ( preg_match_all( $pattern, $content, $matches ) ) {
+		foreach ( $matches[0] as $match ) {
+			$key            = strtolower( trim( $match ) );
+			$counts[ $key ] = ( $counts[ $key ] ?? 0 ) + 1;
+		}
+	}
+
+	return $counts;
+}
+
+/**
+ * Which block a piece of markup sits in.
+ *
+ * A path is worth more than a byte offset: it is what the caller would
+ * use to look at the block or fix it.
+ *
+ * @param array  $blocks Parsed blocks.
+ * @param string $needle Markup to look for.
+ * @param string $prefix Path prefix, for recursion.
+ * @return string|null
+ */
+function wpmcp_locate_markup( array $blocks, $needle, $prefix = '' ) {
+	$index = 0;
+
+	foreach ( $blocks as $block ) {
+		if ( null === $block['blockName'] ) {
+			if ( '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+				++$index;
+			}
+			continue;
+		}
+
+		$path = ( '' === $prefix ) ? (string) $index : $prefix . '.' . $index;
+
+		if ( '' !== $needle && false !== stripos( (string) ( $block['innerHTML'] ?? '' ), $needle ) ) {
+			return $path;
+		}
+
+		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+			$deeper = wpmcp_locate_markup( $block['innerBlocks'], $needle, $path );
+			if ( null !== $deeper ) {
+				return $deeper;
+			}
+		}
+
+		++$index;
+	}
+
+	return null;
 }
 
 /**

@@ -7,6 +7,26 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.9.0] - 2026-09-03
+
+Aus dem Befund, dass fast jede Leistungs- und Branchenseite auf dbw-media.de nicht speicherbar war - also genau die Seiten, fuer die der Konnektor gebaut ist.
+
+### Hinzugefuegt
+
+- **Dritte Achse in den Einstellungen: "Dynamic data"**, Standard *Gesperrt*. Manche Block-Bibliotheken verweigern das Speichern einer Seite mit Dynamic Data, solange das Konto kein `unfiltered_html` hat. Auf *Erlaubt* gesetzt, vergibt der Konnektor die Capability **fuer die Dauer eines einzigen `wp_update_post`** und nimmt sie in einem `finally` wieder weg - ein Fatal mitten im Speichern kann sie also nicht stehen lassen. An der Rolle haengt sie nie.
+- **Ein Guard, der ersetzt, was WordPress dabei nicht mehr tut.** Mit `unfiltered_html` faellt die kses-Filterung fuer diesen Save weg. Abgelehnt wird deshalb jeder Schreibvorgang, der **neu** einbringt: `<script>`, ein Inline-Eventhandler (`onclick=`, `onerror=` ...), eine `javascript:`- oder `data:text/html`-URL, ein iframe/object/embed. Die Meldung nennt Art, konkretes Element und den Blockpfad. Nur Neues zaehlt - eine Seite mit bestehendem Video-Embed bleibt normal bearbeitbar.
+- Jeder Save mit erhoehter Berechtigung sagt das in der Antwort (`elevated`) und im Aktivitaetsprotokoll.
+
+### Geaendert
+
+- **Die Capability-Ablehnung erklaert sich selbst.** Bisher ging der rohe 403 durch. Drei Sprints in Folge wurde daraus "das Plugin filtert" geschlossen und auf WP-CLI ausgewichen - beim Telefonnummer-Sprint gingen so 13 von 20 Seiten an der API vorbei. Die Meldung nennt jetzt die fehlende Capability, den betroffenen Benutzer, die Einstellung, die es behebt, und sagt ausdruecklich, dass WP-CLI daran vorbeigeht, weil es ohne Benutzer laeuft - dass dort also gar nicht geprueft wird.
+
+### Nicht so geloest
+
+`unfiltered_html` dauerhaft an die Rolle: Das waere die weiteste Berechtigung im ganzen Satz, in einer Rolle, die bewusst nicht veroeffentlichen, loeschen, hochladen oder Einstellungen aendern kann. Und keine Sammel-Einstellung "Zugriff auf alle Plugins" - so einen Schalter gibt es nicht. Heute haengt es an `unfiltered_html`, morgen an Feldgruppen-Rechten oder eigenen Produkt-Capabilities; ein Sammel-Label verspraeche eine Abdeckung, die dahinter nicht existiert.
+
+---
+
 ## [0.8.0] - 2026-09-03
 
 Drei Befunde aus der Arbeit an dbw-media.de: SEO endete immer im Browser, die Mediathek war ein blinder Fleck, und eine Suche fand einen Custom-Post-Type nicht.

@@ -172,6 +172,14 @@ activity log.
 table under *Tools → MCP Connector*. If "Abilities registered" is red,
 the MCP server is running but has nothing to offer.
 
+**"This content contains dynamic data, which your account doesn't have
+permission to save."** That message comes from a block library, and the
+gate behind it is the `unfiltered_html` capability, which the agent role
+does not have. Set *Dynamic data* to allowed under *Tools → MCP
+Connector*; see the safety model for what that does and does not grant.
+Editing the database with WP-CLI gets past it because WP-CLI runs without
+a user, so none of these checks happen at all — a way around, not a fix.
+
 **"Another plugin loaded mcp-adapter X".** The adapter is a library that
 other plugins bundle too — Rank Math SEO ships one, for instance — and
 whichever copy loads first wins. This plugin checks whether the loaded
@@ -330,6 +338,24 @@ because editing one changes every page that embeds it at once and a
 pattern has no draft state. When one is written, the dry run reports how
 many pieces of content are affected.
 
+**Dynamic data** is a third setting, off by default. Some block libraries
+refuse to save a page holding dynamic data unless the account has
+`unfiltered_html` — the capability that permits storing arbitrary HTML and
+JavaScript. That would be the widest permission in a role that
+deliberately cannot publish, delete, upload or change settings, so it is
+never given to the role. Switched on, it is granted around a single
+`wp_update_post` and removed again in a `finally`, and the check below
+takes the place of the filtering WordPress then skips:
+
+> a write is refused if it **newly introduces** a script tag, an inline
+> event handler (`onclick=`, `onerror=` …), a `javascript:` or
+> `data:text/html` URL, or an iframe, object or embed — naming the element
+> and the block it sits in. Only additions: a page that already carries a
+> video embed stays editable.
+
+Every save that used the elevated capability says so in its response and
+in the activity log.
+
 Regardless of level:
 
 - **The agent can never publish.** No level grants `publish_*`. New pages
@@ -473,6 +499,7 @@ php tests/long-output.php                        # long pages are windowed, neve
 php tests/save-refusal.php                       # a refusal from elsewhere says where it came from
 php tests/meta-write.php                         # SEO fields: whitelist, diff, and the old value
 php tests/media.php                              # alt text, and what an image is used on
+php tests/dynamic-data.php                       # the guard that replaces kses on an elevated save
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -509,6 +536,9 @@ Each suite exists because of a specific failure:
   because otherwise there is no way back.
 - **media** — alt text lives on the attachment, not on the block, so an
   audit of the markup alone can count images and explain none of them.
+- **dynamic-data** — when the content filter is switched off for a save,
+  this guard is the only thing between an agent and stored JavaScript.
+  Every vector it knows and every shape it must let through is pinned.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

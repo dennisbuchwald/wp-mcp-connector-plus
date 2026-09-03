@@ -23,6 +23,10 @@ function wp_normalize_path( $path ) {
 	return str_replace( '\\', '/', (string) $path );
 }
 
+function wp_get_current_user() {
+	return (object) array( 'ID' => 9, 'user_login' => 'dbw-ki' );
+}
+
 require_once dirname( __DIR__ ) . '/includes/content.php';
 
 $fail = 0;
@@ -119,6 +123,26 @@ check( array() === wpmcp_save_filter_plugins(), 'ohne Hooks kommt eine leere Lis
 
 $GLOBALS['wp_filter'] = array( 'wp_insert_post_data' => new stdClass() );
 check( array() === wpmcp_save_filter_plugins(), 'ein Hook ohne callbacks wirft nichts um' );
+
+echo "\n\033[1mDie Capability-Ablehnung\033[0m\n";
+
+// This one has a setting behind it, so it gets its own answer instead of
+// the general "something else refused" text.
+$blocked = wpmcp_explain_save_refusal(
+	new WP_Error( 'wp_die', "This content contains dynamic data, which your account doesn't have permission to save." ),
+	$impact
+);
+$text = $blocked->get_error_message();
+
+check( 'wpmcp_dynamic_data_blocked' === $blocked->get_error_code(), 'bekommt einen eigenen Fehlercode' );
+check( false !== strpos( $text, 'unfiltered_html' ), 'nennt die fehlende Capability' );
+check( false !== strpos( $text, 'dbw-ki' ), 'nennt den betroffenen Benutzer' );
+check( false !== strpos( $text, 'Dynamic data' ), 'nennt die Einstellung, die es behebt' );
+check(
+	false !== strpos( $text, 'WP-CLI' ),
+	'und sagt, dass WP-CLI daran vorbeigeht',
+	'sonst weicht der naechste Agent wieder auf die Datenbank aus'
+);
 
 echo "\n";
 if ( 0 === $fail ) {

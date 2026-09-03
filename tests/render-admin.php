@@ -127,6 +127,7 @@ function wpmcp_live_edit_enabled() { return 'full' === wpmcp_access_level(); }
 function wpmcp_can_write() { return 'read' !== wpmcp_access_level(); }
 function wpmcp_access_level() { return $GLOBALS['stub']['level'] ?? 'draft'; }
 function wpmcp_pattern_access() { return $GLOBALS['stub']['patterns'] ?? 'read'; }
+function wpmcp_dynamic_data_allowed() { return ! empty( $GLOBALS['stub']['dynamic'] ); }
 function wpmcp_access_levels() {
 	return array(
 		'read'  => array( 'label' => 'Read only', 'description' => 'Look only.' ),
@@ -226,6 +227,8 @@ $GLOBALS['stub']['registered'] = 15;
 $html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level'] = 'draft'; } );
 expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );
 expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
+expect_contains( $html, 'Dynamic data', 'zeigt die Dynamic-Data-Einstellung' );
+expect_contains( $html, 'unfiltered_html', 'und benennt die Capability dahinter' );
 
 $GLOBALS['stub']['registered'] = 11;
 $html = render_case( 'Stufe: nur lesen', function () { $GLOBALS['stub']['level'] = 'read'; } );

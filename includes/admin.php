@@ -47,6 +47,18 @@ function wpmcp_admin_init() {
 
 	register_setting(
 		'wpmcp_settings',
+		'wpmcp_dynamic_data',
+		array(
+			'type'              => 'string',
+			'sanitize_callback' => function ( $value ) {
+				return 'allowed' === $value ? 'allowed' : 'blocked';
+			},
+			'default'           => 'blocked',
+		)
+	);
+
+	register_setting(
+		'wpmcp_settings',
 		'wpmcp_pattern_access',
 		array(
 			'type'              => 'string',
@@ -278,6 +290,32 @@ function wpmcp_render_admin_page() {
 							<?php if ( defined( 'WPMCP_ACCESS_LEVEL' ) ) : ?>
 								<br><strong><?php esc_html_e( 'Currently fixed by a constant in wp-config.php.', 'wp-mcp-connector-plus' ); ?></strong>
 							<?php endif; ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Dynamic data', 'wp-mcp-connector-plus' ); ?></th>
+					<td>
+						<?php
+						$dynamic_current = wpmcp_dynamic_data_allowed() ? 'allowed' : 'blocked';
+						$dynamic_options = array(
+							'blocked' => __( 'Blocked — pages containing dynamic data stay read-only', 'wp-mcp-connector-plus' ),
+							'allowed' => __( 'Allowed — the agent may save them too', 'wp-mcp-connector-plus' ),
+						);
+						?>
+						<?php foreach ( $dynamic_options as $key => $label ) : ?>
+							<p>
+								<label>
+									<input type="radio" name="wpmcp_dynamic_data"
+										value="<?php echo esc_attr( $key ); ?>"
+										<?php checked( $dynamic_current, $key ); ?>
+										<?php disabled( defined( 'WPMCP_DYNAMIC_DATA' ) || ( 'allowed' === $key && ! wpmcp_can_write() ) ); ?> />
+									<?php echo esc_html( $label ); ?>
+								</label>
+							</p>
+						<?php endforeach; ?>
+						<p class="description">
+							<?php esc_html_e( 'Some block libraries refuse to save a page holding dynamic data unless the account has unfiltered_html — the capability that permits storing arbitrary HTML and JavaScript. That would be the widest permission in a role that deliberately cannot publish, delete, upload or change settings, so it is never given to the role. When this is allowed, it is granted for the length of one save and taken away again, and a write that newly introduces a script tag, an inline event handler or a javascript: URL is still refused. Every such save is marked in the activity log.', 'wp-mcp-connector-plus' ); ?>
 						</p>
 					</td>
 				</tr>

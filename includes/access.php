@@ -109,6 +109,35 @@ function wpmcp_pattern_access() {
 }
 
 /**
+ * May the agent save pages whose blocks carry dynamic data?
+ *
+ * A separate decision from the access level, for the same reason synced
+ * patterns are: a different risk, not a wider one. Some block libraries
+ * gate dynamic data behind unfiltered_html — the capability that lets an
+ * account store arbitrary HTML and JavaScript. Whole service and industry
+ * pages are unwritable without it, which is most of what this connector
+ * exists for, and the alternative people reach for is editing the
+ * database around the API, where nothing is checked at all.
+ *
+ * Off by default. When on, the capability is granted for the length of a
+ * single save and never sits on the role.
+ *
+ * @return bool
+ */
+function wpmcp_dynamic_data_allowed() {
+	if ( defined( 'WPMCP_DYNAMIC_DATA' ) ) {
+		return (bool) WPMCP_DYNAMIC_DATA;
+	}
+
+	// Meaningless without write access in the first place.
+	if ( ! wpmcp_can_write() ) {
+		return false;
+	}
+
+	return 'allowed' === get_option( 'wpmcp_dynamic_data', 'blocked' );
+}
+
+/**
  * Capabilities for a given access level.
  *
  * Never contains publish_*, delete_*, upload_files or manage_options —
