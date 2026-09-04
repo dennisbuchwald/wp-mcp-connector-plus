@@ -98,8 +98,23 @@ class StubRole {
 }
 $GLOBALS['role'] = new StubRole();
 function get_role( $r ) { return $GLOBALS['role']; }
+function post_type_exists( $t ) { return in_array( $t, array( 'page', 'post', 'gp_elements' ), true ); }
+function get_post_types( $args = array(), $output = 'names' ) {
+	$types = array(
+		'post' => (object) array( 'name' => 'post', 'public' => true, 'labels' => (object) array( 'name' => 'Beitraege' ) ),
+		'page' => (object) array( 'name' => 'page', 'public' => true, 'labels' => (object) array( 'name' => 'Seiten' ) ),
+		'gp_elements' => (object) array( 'name' => 'gp_elements', 'public' => false, 'labels' => (object) array( 'name' => 'Elements' ) ),
+	);
+	if ( ! empty( $args['public'] ) ) {
+		$types = array_filter( $types, function ( $t ) { return $t->public; } );
+	}
+	return 'names' === $output ? array_keys( $types ) : $types;
+}
+function get_post_type_object( $t ) { $all = get_post_types( array(), 'objects' ); return $all[ $t ] ?? null; }
+function apply_filters_deprecated() {}
 
 // --- Load the plugin ----------------------------------------------------
+
 
 require_once dirname( __DIR__ ) . '/wp-mcp-connector-plus.php';
 
@@ -256,6 +271,31 @@ check(
 );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
+
+echo "\n\033[1mZusaetzliche Post-Types\033[0m\n";
+
+// Site-wide building blocks are not public, so they stay out until the
+// site owner ticks them — a decision, because a change there lands on
+// every page at once.
+$GLOBALS['options']['wpmcp_extra_post_types'] = array();
+check( ! in_array( 'gp_elements', wpmcp_allowed_post_types(), true ), 'ohne Haken bleibt gp_elements draussen' );
+check( in_array( 'page', wpmcp_allowed_post_types(), true ), 'Seiten sind ohnehin drin' );
+
+$GLOBALS['options']['wpmcp_extra_post_types'] = array( 'gp_elements' );
+check( in_array( 'gp_elements', wpmcp_allowed_post_types(), true ), 'mit Haken kommt er dazu' );
+
+$GLOBALS['options']['wpmcp_extra_post_types'] = array( 'gibt_es_nicht' );
+check( ! in_array( 'gibt_es_nicht', wpmcp_allowed_post_types(), true ), 'ein deaktiviertes Plugin hinterlaesst keinen toten Eintrag' );
+
+$GLOBALS['options']['wpmcp_extra_post_types'] = 'kaputt';
+check( is_array( wpmcp_allowed_post_types() ), 'und eine kaputte Option wirft nichts um' );
+
+$GLOBALS['options']['wpmcp_extra_post_types'] = array( 'gp_elements' );
+$selectable = wpmcp_selectable_post_types();
+check( isset( $selectable['gp_elements'] ), 'die Auswahlliste zeigt auch schon Gewaehltes', 'sonst laesst es sich nicht wieder abwaehlen' );
+check( ! isset( $selectable['page'] ), 'aber nichts, was ohnehin drin ist' );
+
+$GLOBALS['options']['wpmcp_extra_post_types'] = array();
 
 echo "\n";
 if ( 0 === $fail ) {

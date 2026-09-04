@@ -47,6 +47,21 @@ function wpmcp_admin_init() {
 
 	register_setting(
 		'wpmcp_settings',
+		'wpmcp_extra_post_types',
+		array(
+			'type'              => 'array',
+			'sanitize_callback' => function ( $value ) {
+				$value = is_array( $value ) ? $value : array();
+				return array_values(
+					array_filter( array_map( 'sanitize_key', $value ), 'post_type_exists' )
+				);
+			},
+			'default'           => array(),
+		)
+	);
+
+	register_setting(
+		'wpmcp_settings',
 		'wpmcp_dynamic_data',
 		array(
 			'type'              => 'string',
@@ -290,6 +305,33 @@ function wpmcp_render_admin_page() {
 							<?php if ( defined( 'WPMCP_ACCESS_LEVEL' ) ) : ?>
 								<br><strong><?php esc_html_e( 'Currently fixed by a constant in wp-config.php.', 'wp-mcp-connector-plus' ); ?></strong>
 							<?php endif; ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Additional post types', 'wp-mcp-connector-plus' ); ?></th>
+					<td>
+						<?php
+						$extra_options  = wpmcp_selectable_post_types();
+						$extra_selected = wpmcp_extra_post_types();
+						?>
+						<?php if ( empty( $extra_options ) ) : ?>
+							<p class="description"><?php esc_html_e( 'This site has no other post types to add.', 'wp-mcp-connector-plus' ); ?></p>
+						<?php else : ?>
+							<?php foreach ( $extra_options as $slug => $label ) : ?>
+								<p>
+									<label>
+										<input type="checkbox" name="wpmcp_extra_post_types[]"
+											value="<?php echo esc_attr( $slug ); ?>"
+											<?php checked( in_array( $slug, $extra_selected, true ) ); ?> />
+										<?php echo esc_html( $label ); ?>
+										<code><?php echo esc_html( $slug ); ?></code>
+									</label>
+								</p>
+							<?php endforeach; ?>
+						<?php endif; ?>
+						<p class="description">
+							<?php esc_html_e( 'Public post types and pages are already in scope. Everything else is listed here — a theme\'s headers, footers, hooks and content templates among them. Adding one is a real decision: those apply to every page at once, the way a synced pattern does, so a change there is not confined to the page being edited. In code, the wpmcp_allowed_post_types filter does the same thing.', 'wp-mcp-connector-plus' ); ?>
 						</p>
 					</td>
 				</tr>

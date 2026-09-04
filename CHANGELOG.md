@@ -7,6 +7,19 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.11.0] - 2026-09-03
+
+Nachtrag zu 0.10.0, auf Nachfrage: Warum eigentlich PHP in der functions.php, wenn es auch ein Haken sein koennte?
+
+### Hinzugefuegt
+
+- **Einstellung "Additional post types".** Listet jeden Post-Type, den die Seite hat und der nicht ohnehin im Zugriff ist - die globalen Bausteine des Themes (Header, Footer, Hooks, Inhaltsvorlagen) darunter. Standard: nichts angehakt. Der Haken ist eine echte Entscheidung, weil eine Aenderung dort auf jede Seite gleichzeitig wirkt, wie bei einem Synced Pattern.
+  - Ein Post-Type, dessen Plugin deaktiviert wird, faellt still wieder raus statt einen toten Eintrag zu hinterlassen.
+  - Bereits Angehaktes bleibt in der Liste, auch wenn es dadurch im Zugriff ist - sonst liesse es sich nicht wieder abwaehlen.
+- Der Filter `wpmcp_allowed_post_types` bleibt daneben, fuer alles, was ein Projekt im Code entscheidet. Die Aufteilung: Einstellung fuer die Entscheidung pro Kundenseite, Filter fuer die pro Projekt.
+
+---
+
 ## [0.10.0] - 2026-09-03
 
 Aus zwei Berichten von der Datenschutzseite: Ein 32-KB-Rechtstext liess sich nicht in einem Aufruf schreiben, und die globalen Bausteine des Themes waren nicht erreichbar.

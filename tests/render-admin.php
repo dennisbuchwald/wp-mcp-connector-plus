@@ -25,6 +25,8 @@ $GLOBALS['stub']       = array(
 	'level'             => 'draft',
 	'patterns'          => 'read',
 	'caps_match'        => true,
+	'extra'             => array( 'gp_elements' ),
+	'selectable'        => array( 'gp_elements' => 'Elements', 'wp_template' => 'Templates' ),
 );
 
 // --- WordPress stubs ----------------------------------------------------
@@ -128,6 +130,8 @@ function wpmcp_can_write() { return 'read' !== wpmcp_access_level(); }
 function wpmcp_access_level() { return $GLOBALS['stub']['level'] ?? 'draft'; }
 function wpmcp_pattern_access() { return $GLOBALS['stub']['patterns'] ?? 'read'; }
 function wpmcp_dynamic_data_allowed() { return ! empty( $GLOBALS['stub']['dynamic'] ); }
+function wpmcp_extra_post_types() { return $GLOBALS['stub']['extra'] ?? array(); }
+function wpmcp_selectable_post_types() { return $GLOBALS['stub']['selectable'] ?? array(); }
 function wpmcp_access_levels() {
 	return array(
 		'read'  => array( 'label' => 'Read only', 'description' => 'Look only.' ),
@@ -228,6 +232,8 @@ $html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level']
 expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );
 expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
 expect_contains( $html, 'Dynamic data', 'zeigt die Dynamic-Data-Einstellung' );
+expect_contains( $html, 'Additional post types', 'zeigt die Post-Type-Auswahl' );
+expect_contains( $html, 'gp_elements', 'listet einen vorhandenen Post-Type' );
 expect_contains( $html, 'unfiltered_html', 'und benennt die Capability dahinter' );
 
 $GLOBALS['stub']['registered'] = 11;

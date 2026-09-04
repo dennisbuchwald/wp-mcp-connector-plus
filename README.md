@@ -345,7 +345,12 @@ because editing one changes every page that embeds it at once and a
 pattern has no draft state. When one is written, the dry run reports how
 many pieces of content are affected.
 
-**Dynamic data** is a third setting, off by default. Some block libraries
+**Additional post types** is a third setting, empty by default. It lists
+every post type the site has that is not already in scope — the theme's
+site-wide building blocks in particular. See *Adapting it to your block
+kit* for what that covers.
+
+**Dynamic data** is a fourth setting, off by default. Some block libraries
 refuse to save a page holding dynamic data unless the account has
 `unfiltered_html` — the capability that permits storing arbitrary HTML and
 JavaScript. That would be the widest permission in a role that
@@ -456,17 +461,18 @@ add_filter( 'wpmcp_hidden_blocks', function ( $blocks ) {
 } );
 ```
 
-Post types follow the same idea. Public post types and pages are in scope
-by default; a theme's site-wide building blocks — headers, footers,
-templates, hooks — usually are not, because they are not public. Adding
-them is one line, and deliberately a decision rather than a default: a
-change there applies to every page at once, the way a synced pattern
-does.
+Post types are a setting rather than a filter, because it is a decision
+per site rather than per project. Public post types and pages are in scope
+on their own; everything else a site has — a theme's headers, footers,
+hooks and content templates among them — is listed under *Additional post
+types* on the settings screen, unticked. Ticking one is a real decision:
+those apply to every page at once, the way a synced pattern does.
+
+The filter is still there for anything a project settles in code:
 
 ```php
-// GeneratePress Elements: headers, footers, hooks, content templates.
 add_filter( 'wpmcp_allowed_post_types', function ( $types ) {
-    $types[] = 'gp_elements';
+    $types[] = 'gp_elements';   // GeneratePress Elements
     return $types;
 } );
 ```

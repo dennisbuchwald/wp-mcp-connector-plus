@@ -109,6 +109,76 @@ function wpmcp_pattern_access() {
 }
 
 /**
+ * Post types the site owner has added by hand.
+ *
+ * Public post types and pages are in scope on their own. A theme's
+ * site-wide building blocks — headers, footers, hooks, content templates —
+ * are not public and stay out until someone says otherwise, because a
+ * change there lands on every page at once.
+ *
+ * That "otherwise" belongs in the admin next to the other decisions, not
+ * in a functions.php: editing code on a customer site to tick a box is a
+ * worse answer than a box.
+ *
+ * @return string[]
+ */
+function wpmcp_extra_post_types() {
+	$stored = get_option( 'wpmcp_extra_post_types', array() );
+
+	if ( ! is_array( $stored ) ) {
+		return array();
+	}
+
+	// A post type can be deactivated with its plugin between two requests.
+	return array_values( array_filter( array_map( 'strval', $stored ), 'post_type_exists' ) );
+}
+
+/**
+ * Post types the site could add, with what they are called.
+ *
+ * Everything registered that is not already in scope, minus the ones that
+ * never hold a block tree — revisions, menu items, the customizer's
+ * scratch space and the like. Offering those would be noise in a list
+ * whose whole job is to be short enough to read.
+ *
+ * @return array<string, string> Slug => label.
+ */
+function wpmcp_selectable_post_types() {
+	$never = array(
+		'attachment',
+		'revision',
+		'nav_menu_item',
+		'custom_css',
+		'customize_changeset',
+		'oembed_cache',
+		'user_request',
+		'wp_block',
+	);
+
+	$already = wpmcp_allowed_post_types();
+	$options = array();
+
+	foreach ( get_post_types( array(), 'objects' ) as $type ) {
+		if ( in_array( $type->name, $never, true ) || in_array( $type->name, $already, true ) ) {
+			continue;
+		}
+		$options[ $type->name ] = $type->labels->name ?? $type->name;
+	}
+
+	// Anything already ticked stays listed, so it can be unticked.
+	foreach ( wpmcp_extra_post_types() as $slug ) {
+		if ( ! isset( $options[ $slug ] ) ) {
+			$type              = get_post_type_object( $slug );
+			$options[ $slug ] = $type ? ( $type->labels->name ?? $slug ) : $slug;
+		}
+	}
+
+	ksort( $options );
+
+	return $options;
+}
+
+/**
  * May the agent save pages whose blocks carry dynamic data?
  *
  * A separate decision from the access level, for the same reason synced

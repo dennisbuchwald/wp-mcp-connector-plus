@@ -42,7 +42,18 @@ function wpmcp_allowed_post_types() {
 		$types[] = 'wp_block';
 	}
 
-	return apply_filters( 'wpmcp_allowed_post_types', $types );
+	// What the site owner ticked under Tools > MCP Connector.
+	$types = array_merge( $types, wpmcp_extra_post_types() );
+
+	/**
+	 * Post types the connector may touch.
+	 *
+	 * The settings screen covers the ordinary case; this is for anything a
+	 * project decides in code.
+	 *
+	 * @param string[] $types Post type slugs.
+	 */
+	return array_values( array_unique( apply_filters( 'wpmcp_allowed_post_types', $types ) ) );
 }
 
 /**
@@ -86,7 +97,7 @@ function wpmcp_get_readable_post( $post_id ) {
 		return new \WP_Error(
 			'wpmcp_forbidden_type',
 			sprintf(
-				'Post type "%s" is not exposed to the connector. Only public post types are, plus pages. A site can add its own — theme template or layout post types, for instance — with the wpmcp_allowed_post_types filter; that is a deliberate decision, because those apply site-wide rather than to one page.',
+				'Post type "%s" is not exposed to the connector. Public post types and pages are, on their own. Anything else — a theme\'s headers, footers, hooks or content templates — has to be ticked under Tools > MCP Connector, because a change there lands on every page at once rather than on one. In code, the wpmcp_allowed_post_types filter does the same.',
 				$post->post_type
 			)
 		);
