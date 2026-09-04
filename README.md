@@ -272,7 +272,9 @@ not enough:
 
 - **Before:** pass `expected_modified` (returned by `content-read`) and the
   write is refused if someone edited the page in the meantime, rather than
-  silently overwriting them.
+  silently overwriting them. A successful write returns the new `modified`
+  value, so a sequence of writes needs no read between them just to fetch
+  it.
 - **Around it:** accounts without `unfiltered_html` — which the agent
   deliberately is — have their content run through `wp_kses_post` on save,
   which removes scripts and iframes. Writing such markup is therefore an
@@ -454,6 +456,21 @@ add_filter( 'wpmcp_hidden_blocks', function ( $blocks ) {
 } );
 ```
 
+Post types follow the same idea. Public post types and pages are in scope
+by default; a theme's site-wide building blocks — headers, footers,
+templates, hooks — usually are not, because they are not public. Adding
+them is one line, and deliberately a decision rather than a default: a
+change there applies to every page at once, the way a synced pattern
+does.
+
+```php
+// GeneratePress Elements: headers, footers, hooks, content templates.
+add_filter( 'wpmcp_allowed_post_types', function ( $types ) {
+    $types[] = 'gp_elements';
+    return $types;
+} );
+```
+
 **Get the most out of it** by describing your blocks properly in
 `block.json` — the plugin surfaces all of it:
 
@@ -512,6 +529,7 @@ php tests/save-refusal.php                       # a refusal from elsewhere says
 php tests/meta-write.php                         # SEO fields: whitelist, diff, and the old value
 php tests/media.php                              # alt text, and what an image is used on
 php tests/dynamic-data.php                       # the guard that replaces kses on an elevated save
+php tests/large-payload.php                      # a 32 KB legal text in one call
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -551,6 +569,10 @@ Each suite exists because of a specific failure:
 - **dynamic-data** — when the content filter is switched off for a save,
   this guard is the only thing between an agent and stored JavaScript.
   Every vector it knows and every shape it must let through is pinned.
+- **large-payload** — a 32 KB privacy policy could not be written in one
+  call, and the error blamed the first operation. These pin the shapes a
+  big argument arrives in, and that a mangled one is refused rather than
+  quietly repaired.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

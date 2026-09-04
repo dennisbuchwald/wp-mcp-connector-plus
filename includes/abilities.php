@@ -259,18 +259,22 @@ function wpmcp_register_abilities() {
 						'description' => 'The post/page ID to write to.',
 					),
 					'meta'    => array(
-						'type'        => 'object',
+						'type'        => array( 'object', 'string' ),
 						'description' => 'SEO meta fields to set, as key => value: rank_math_title, rank_math_description, rank_math_focus_keyword, rank_math_canonical_url, and the _yoast_wpseo_ equivalents. null clears a field. Can be sent on its own, without ops or tree, when only the meta needs changing — that leaves the page content and its modified date untouched. Only these keys are accepted; anything else is an error naming the allowed set. The dry run reports the previous and new value of every field. Note that WordPress revisions do not cover post meta, so unlike a content change this cannot be rolled back with one click; the previous values are in the response and the activity log.',
 					),
 					'ops'     => array(
-						'type'        => 'array',
+						// Not "array" alone, and no items schema: a large
+						// argument sometimes arrives as a JSON string, which
+						// the REST layer then splits on commas and rejects
+						// with a message about item 0 not being an object.
+						// The operations are validated properly further in,
+						// where the errors can name the operation and path.
+						'type'        => array( 'array', 'string' ),
 						'description' => 'Patch operations, applied in order. Each: {"op":"insert|replace|remove|set_attrs|patch_html|move","path":"2.1", ...}. insert/replace take "block" or "blocks"; set_attrs takes "attrs" (null value removes a key); patch_html takes "find" and "replace"; move takes "to". Insert places the block at that position, shifting the rest down.',
-						'items'       => array( 'type' => 'object' ),
 					),
 					'tree'    => array(
-						'type'        => 'array',
+						'type'        => array( 'array', 'string' ),
 						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html".',
-						'items'       => array( 'type' => 'object' ),
 					),
 					'dry_run' => array(
 						'type'        => 'boolean',

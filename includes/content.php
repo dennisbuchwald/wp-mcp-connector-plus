@@ -83,7 +83,13 @@ function wpmcp_get_readable_post( $post_id ) {
 		return new \WP_Error( 'wpmcp_not_found', sprintf( 'No post with ID %d.', (int) $post_id ) );
 	}
 	if ( ! in_array( $post->post_type, wpmcp_allowed_post_types(), true ) ) {
-		return new \WP_Error( 'wpmcp_forbidden_type', sprintf( 'Post type "%s" is not exposed to the connector.', $post->post_type ) );
+		return new \WP_Error(
+			'wpmcp_forbidden_type',
+			sprintf(
+				'Post type "%s" is not exposed to the connector. Only public post types are, plus pages. A site can add its own — theme template or layout post types, for instance — with the wpmcp_allowed_post_types filter; that is a deliberate decision, because those apply site-wide rather than to one page.',
+				$post->post_type
+			)
+		);
 	}
 	if ( ! current_user_can( 'edit_post', $post->ID ) && 'publish' !== $post->post_status ) {
 		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to read post %d.', $post->ID ) );
@@ -300,6 +306,19 @@ function wpmcp_write_content( array $args ) {
 
 	$before_blocks = parse_blocks( $post->post_content );
 	$before_count  = wpmcp_count_blocks( $before_blocks );
+
+	// Decode before deciding what was sent: a large argument may arrive as
+	// text, or as the comma-split remains of text.
+	foreach ( array( 'ops', 'tree', 'meta' ) as $key ) {
+		if ( ! isset( $args[ $key ] ) || '' === $args[ $key ] || array() === $args[ $key ] ) {
+			continue;
+		}
+		$decoded = wpmcp_decode_structure( $args[ $key ], $key );
+		if ( is_wp_error( $decoded ) ) {
+			return $decoded;
+		}
+		$args[ $key ] = $decoded;
+	}
 
 	$has_tree = isset( $args['tree'] ) && is_array( $args['tree'] );
 	$has_ops  = isset( $args['ops'] ) && is_array( $args['ops'] ) && ! empty( $args['ops'] );
@@ -527,6 +546,16 @@ function wpmcp_write_content( array $args ) {
 	$response['message']    = 'Saved.';
 	$response['revisionId'] = $revision_id;
 	$response['preview']    = wpmcp_preview_url( $post->ID );
+
+	// The stamp for the next write on this page. Without it a sequence of
+	// writes needs a read between every pair, purely to fetch this one
+	// value — and dropping expected_modified to avoid that throws away the
+	// protection it exists for.
+	$fresh = get_post( $post->ID );
+	if ( $fresh ) {
+		$response['modified'] = $fresh->post_modified_gmt;
+		$response['nextWrite'] = 'Pass this "modified" value as expected_modified on your next write to this page.';
+	}
 
 	// The database is now right; the delivered page may not be. Say which.
 	$response['cache'] = wpmcp_purge_caches( $post->ID );
@@ -977,6 +1006,75 @@ function wpmcp_locate_markup( array $blocks, $needle, $prefix = '' ) {
 	}
 
 	return null;
+}
+
+/**
+ * Take a structured argument in whatever shape it survived the trip in.
+ *
+ * A 32 KB privacy policy could not be written in one call. The error said
+ * `input[ops][0] is not of type object`, which sounds like a bad
+ * operation and is not: past a certain size the client hands the argument
+ * over as a JSON string, and WordPress's REST layer treats a scalar where
+ * it wants an array by splitting it on commas (rest_is_array ->
+ * wp_parse_list). Item 0 is then a fragment of JSON text, and the
+ * complaint is literally true and completely misleading.
+ *
+ * The workaround was thirteen placeholder blocks and fifteen sequential
+ * writes for one page. So a string is accepted and decoded here, and the
+ * schema no longer insists on an array, which is what let the split
+ * happen in the first place.
+ *
+ * The wreckage is not glued back together. Rejoining on commas would
+ * return "Komma, Punkt" as "Komma,Punkt" — a silent change to the
+ * customer's text, which is worse than any error message.
+ *
+ * @param mixed  $value Whatever arrived.
+ * @param string $label Argument name, for the message.
+ * @return array|\WP_Error
+ */
+function wpmcp_decode_structure( $value, $label ) {
+	if ( is_array( $value ) ) {
+		// Structured, as intended: every element is itself a structure.
+		if ( ! empty( $value ) && count( array_filter( $value, 'is_scalar' ) ) !== count( $value ) ) {
+			return $value;
+		}
+
+		if ( ! empty( $value ) ) {
+			return new \WP_Error(
+				'wpmcp_bad_payload',
+				sprintf(
+					'"%s" arrived as a list of %d plain strings rather than operations. That is what WordPress leaves when a large argument is sent as text: it splits it on commas. Sending it as JSON text is fine — the connector decodes that — but it must arrive in one piece.',
+					$label,
+					count( $value )
+				)
+			);
+		}
+
+		return $value;
+	}
+
+	if ( ! is_string( $value ) ) {
+		return new \WP_Error(
+			'wpmcp_bad_request',
+			sprintf( '"%s" must be a list or an object.', $label )
+		);
+	}
+
+	$decoded = json_decode( $value, true );
+
+	if ( ! is_array( $decoded ) ) {
+		return new \WP_Error(
+			'wpmcp_bad_payload',
+			sprintf(
+				'"%s" arrived as text (%d bytes) and is not valid JSON: %s. Large arguments are sometimes sent as a string; the connector decodes those, but this one did not survive the trip intact — it was probably truncated. Split the change into smaller operations.',
+				$label,
+				strlen( $value ),
+				json_last_error_msg()
+			)
+		);
+	}
+
+	return $decoded;
 }
 
 /**

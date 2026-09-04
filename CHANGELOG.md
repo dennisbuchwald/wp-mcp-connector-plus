@@ -7,6 +7,34 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.10.0] - 2026-09-03
+
+Aus zwei Berichten von der Datenschutzseite: Ein 32-KB-Rechtstext liess sich nicht in einem Aufruf schreiben, und die globalen Bausteine des Themes waren nicht erreichbar.
+
+### Behoben
+
+- **Grosse Argumente kommen jetzt an.** Der Fehler lautete `input[ops][0] ist nicht vom Typ object` und klang nach einer kaputten Operation. Er war etwas anderes: Ab einer bestimmten Groesse reicht der Client das Argument als JSON-*Text* durch, und WordPress' REST-Schicht zerlegt einen Skalar, wo sie eine Liste erwartet, an den Kommas (`rest_is_array` -> `wp_parse_list`). Element 0 ist dann ein Textfragment - die Meldung stimmt woertlich und fuehrt nirgendwohin. `ops`, `tree` und `meta` akzeptieren jetzt auch Text und dekodieren ihn, und das Schema besteht nicht mehr auf einer Liste, was die Zerlegung ueberhaupt erst ausgeloest hat.
+  - Der Workaround waren 13 Platzhalter-Bloecke und 15 aufeinanderfolgende Schreibvorgaenge fuer eine Seite, mit dem Textfluss ueber die Chunk-Grenzen von Hand.
+  - **Nicht** geflickt wird eine bereits zerlegte Liste. Ein Zusammenfuegen an Kommas wuerde aus "Komma, Punkt" ein "Komma,Punkt" machen - eine stille Aenderung am Kundentext ist schlimmer als jede Fehlermeldung. Stattdessen wird sie mit Angabe der Ursache abgelehnt.
+
+### Geaendert
+
+- **Ein Schreibvorgang gibt den neuen `modified`-Zeitstempel zurueck.** Bisher brauchte jede Folgeaenderung ein `content-read` dazwischen, nur um diesen einen Wert zu holen - was die Anzahl der Aufrufe verdoppelte. Die Alternative war, `expected_modified` wegzulassen und damit den Schutz gegen paralleles Bearbeiten aufzugeben.
+- **Ein nicht unterstuetzter Post-Type nennt den Filter**, mit dem er sich freischalten laesst, statt nur "wird vom Konnektor nicht angeboten" zu melden.
+
+### Dokumentiert statt eingebaut
+
+`gp_elements` (GeneratePress Elements: Header, Footer, Hooks, Inhaltsvorlagen) kommt nicht per Default dazu. Diese Bausteine sind nicht `public`, und eine Aenderung daran wirkt auf jede Seite gleichzeitig - dieselbe Risikoklasse wie ein Synced Pattern, das deshalb eine eigene Einstellung hat. Das Rezept steht jetzt in der README:
+
+```php
+add_filter( 'wpmcp_allowed_post_types', function ( $types ) {
+    $types[] = 'gp_elements';
+    return $types;
+} );
+```
+
+---
+
 ## [0.9.1] - 2026-09-03
 
 Nachtrag zu 0.9.0: Auf dbw-media.de blieb der Fehler stehen, obwohl "Dynamic data: Allowed" gesetzt war.
