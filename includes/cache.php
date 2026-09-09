@@ -173,8 +173,74 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0 ) {
 			'url'          => $url,
 			'httpStatus'   => $status,
 			'cacheHeaders' => $cache_headers,
+			'head'         => wpmcp_head_summary( $body ),
 			'source'       => 'the public URL, as a visitor receives it',
 		),
 		$slice
 	);
+}
+
+/**
+ * What the delivered page says about itself in its head.
+ *
+ * Writing a meta title and reading it back from the database only proves
+ * the value was stored. Whether the SEO plugin actually puts it in the
+ * head is a different question, and the rendered body — which is all
+ * content-preview returns — cannot answer it. This can, because it is the
+ * page a visitor receives.
+ *
+ * Parsed with a regular expression on purpose: the head is a handful of
+ * flat tags, and loading a DOM parser for them would cost more than it
+ * settles.
+ *
+ * @param string $html Delivered HTML.
+ * @return array
+ */
+function wpmcp_head_summary( $html ) {
+	$head = $html;
+	if ( preg_match( '#<head\b[^>]*>(.*?)</head\s*>#is', $html, $m ) ) {
+		$head = $m[1];
+	}
+
+	$summary = array();
+
+	if ( preg_match( '#<title[^>]*>(.*?)</title\s*>#is', $head, $m ) ) {
+		$summary['title'] = wpmcp_head_text( $m[1] );
+	}
+
+	// name= and property= both occur; og: and twitter: use property.
+	if ( preg_match_all( '#<meta\b[^>]*>#i', $head, $tags ) ) {
+		foreach ( $tags[0] as $tag ) {
+			if ( ! preg_match( '#(?:name|property)\s*=\s*["\']([^"\']+)["\']#i', $tag, $key ) ) {
+				continue;
+			}
+			if ( ! preg_match( '#content\s*=\s*["\']([^"\']*)["\']#is', $tag, $value ) ) {
+				continue;
+			}
+			$name = strtolower( $key[1] );
+			if ( in_array( $name, array( 'description', 'robots', 'og:title', 'og:description', 'og:image', 'twitter:card' ), true ) ) {
+				$summary[ $name ] = wpmcp_head_text( $value[1] );
+			}
+		}
+	}
+
+	if ( preg_match( '#<link\b[^>]*rel\s*=\s*["\']canonical["\'][^>]*>#i', $head, $m )
+		&& preg_match( '#href\s*=\s*["\']([^"\']+)["\']#i', $m[0], $href ) ) {
+		$summary['canonical'] = wpmcp_head_text( $href[1] );
+	}
+
+	// Structured data is a yes/no question far more often than a content one.
+	$summary['jsonLdBlocks'] = preg_match_all( '#<script\b[^>]*application/ld\+json[^>]*>#i', $head );
+
+	return $summary;
+}
+
+/**
+ * Decode and tidy one head value.
+ *
+ * @param string $value Raw attribute or element text.
+ * @return string
+ */
+function wpmcp_head_text( $value ) {
+	return trim( html_entity_decode( wp_strip_all_tags( (string) $value ), ENT_QUOTES, 'UTF-8' ) );
 }

@@ -595,6 +595,38 @@ t_ok(
 );
 
 // ---------------------------------------------------------------------
+t_group( 'Subtree-Pfade sind die echten' );
+
+// Reading paths 0, 1 and 3 used to return three subtrees all claiming to
+// be "0": the tree builder started counting at zero regardless of where
+// the block actually sat. The caller then had to match responses by their
+// order in the list to know which section it was looking at.
+$markup = '<!-- wp:dbw-base/hero /-->'
+	. '<!-- wp:dbw-base/section --><!-- wp:dbw-base/cards --><!-- wp:dbw-base/card-item {"heading":"A"} /--><!-- /wp:dbw-base/cards --><!-- /wp:dbw-base/section -->'
+	. '<!-- wp:dbw-base/usp-list /-->';
+$blocks = parse_blocks( $markup );
+
+$node = wpmcp_blocks_at_path( $blocks, array( 2 ) );
+$tree = wpmcp_blocks_to_tree( array( $node ), array(), false, 2 );
+t_same( '2', $tree[0]['path'], 'Block 2 meldet sich als "2", nicht als "0"' );
+
+$node = wpmcp_blocks_at_path( $blocks, array( 1 ) );
+$tree = wpmcp_blocks_to_tree( array( $node ), array(), false, 1 );
+t_same( '1', $tree[0]['path'], 'und Block 1 als "1"' );
+t_same( '1.0', $tree[0]['innerBlocks'][0]['path'], 'die Kinder zaehlen darunter weiter' );
+t_same( '1.0.0', $tree[0]['innerBlocks'][0]['innerBlocks'][0]['path'], 'auch zwei Ebenen tiefer' );
+
+// A nested subtree keeps its full path, prefix and index together.
+$node = wpmcp_blocks_at_path( $blocks, array( 1, 0 ) );
+$tree = wpmcp_blocks_to_tree( array( $node ), array( 1 ), false, 0 );
+t_same( '1.0', $tree[0]['path'], 'ein verschachtelter Subtree ebenfalls' );
+
+// The paths a subtree reports must be usable as write targets.
+$result = wpmcp_apply_ops( $blocks, array( array( 'op' => 'set_attrs', 'path' => '1.0.0', 'attrs' => array( 'heading' => 'B' ) ) ) );
+t_ok( ! is_wp_error( $result ), 'und derselbe Pfad trifft beim Schreiben' );
+t_same( 'B', $result['blocks'][1]['innerBlocks'][0]['innerBlocks'][0]['attrs']['heading'], 'genau den gelesenen Block' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

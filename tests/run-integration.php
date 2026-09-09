@@ -183,6 +183,44 @@ foreach ( $detailed as $block ) {
 	);
 }
 
+// The reported case: ten blocks at full detail filled a third of a working
+// context. Compact leaves out the prose, which is most of it.
+$ten      = array_slice( array_column( $catalog, 'name' ), 0, 10 );
+$full_10  = strlen( wp_json_encode( wpmcp_describe_blocks( $ten, 'full' ) ) );
+$small_10 = strlen( wp_json_encode( wpmcp_describe_blocks( $ten, 'compact' ) ) );
+
+check(
+	$small_10 < $full_10 / 2,
+	sprintf(
+		'10 Bloecke: voll %.1f KB, kompakt %.1f KB (%d %% gespart)',
+		$full_10 / 1024,
+		$small_10 / 1024,
+		(int) ( 100 - ( $small_10 / max( 1, $full_10 ) * 100 ) )
+	),
+	'Kompakt spart weniger als die Haelfte - dann lohnt der Modus nicht'
+);
+
+// Compact must still be enough to build a block correctly.
+$compact_hero = wpmcp_describe_blocks( array( 'dbw-base/hero' ), 'compact' )[0];
+$first_group  = reset( $compact_hero['attributes'] );
+$first_attr   = reset( $first_group );
+
+check( isset( $first_attr['type'] ), 'kompakt behaelt den Typ' );
+check( ! isset( $first_attr['description'] ), 'aber nicht die Beschreibung' );
+check( ! isset( $compact_hero['example'] ), 'und kein Beispiel' );
+check( ! empty( $compact_hero['description'] ), 'die Beschreibung des Blocks selbst bleibt', 'sie ist eine Zeile und unterscheidet die Bloecke' );
+
+$enum_found = false;
+foreach ( $compact_hero['attributes'] as $group ) {
+	foreach ( $group as $attr ) {
+		if ( isset( $attr['enum'] ) ) {
+			$enum_found = true;
+			break 2;
+		}
+	}
+}
+check( $enum_found, 'erlaubte Werte bleiben ebenfalls', 'ohne Enums waere kompakt nutzlos' );
+
 $catalog_size = strlen( wp_json_encode( $catalog ) );
 check(
 	$catalog_size < 60000,

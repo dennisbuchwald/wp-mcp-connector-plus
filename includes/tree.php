@@ -19,11 +19,17 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param array $blocks           Result of parse_blocks().
  * @param array $prefix           Path prefix (ints) for addressing.
  * @param bool  $include_defaults Whether to keep attributes equal to their default.
+ * @param int   $start            Index the first block sits at. A subtree
+ *                                read has to report the path the block
+ *                                really has on the page: paths that all
+ *                                start at 0 leave the caller counting
+ *                                positions in the response to work out
+ *                                which section it is looking at.
  * @return array
  */
-function wpmcp_blocks_to_tree( array $blocks, array $prefix = array(), $include_defaults = false ) {
+function wpmcp_blocks_to_tree( array $blocks, array $prefix = array(), $include_defaults = false, $start = 0 ) {
 	$out = array();
-	$i   = 0;
+	$i   = (int) $start;
 
 	foreach ( $blocks as $block ) {
 		// parse_blocks() emits whitespace-only "null blocks" between real ones.

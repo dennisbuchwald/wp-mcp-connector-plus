@@ -260,8 +260,11 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 				return new \WP_Error( 'wpmcp_path_not_found', sprintf( 'Path "%s" does not exist in post %d.', (string) $one, $post->ID ) );
 			}
 			$prefix = $segments;
-			array_pop( $prefix );
-			$trees = array_merge( $trees, wpmcp_blocks_to_tree( array( $node ), $prefix, $include_defaults ) );
+			$index  = array_pop( $prefix );
+			$trees  = array_merge(
+				$trees,
+				wpmcp_blocks_to_tree( array( $node ), $prefix, $include_defaults, $index )
+			);
 		}
 
 		$result['tree'] = $trees;
@@ -1568,6 +1571,71 @@ function wpmcp_readable_meta_keys() {
  * @return array
  */
 /**
+ * Active plugins that change what content work means here.
+ *
+ * Not an inventory. Which SEO plugin runs decides which meta keys exist,
+ * a form or page-builder plugin decides what the markup on a page is
+ * allowed to be, and a caching plugin decides whether a live check can be
+ * trusted. Without this an agent infers all of it from failures.
+ *
+ * Only active plugins, and only what they are and which version — enough
+ * to work with, not a security report for anyone who gets the credentials.
+ *
+ * @return array<int, array{name: string, version: string, kind: string}>
+ */
+function wpmcp_relevant_plugins() {
+	if ( ! function_exists( 'get_plugins' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+
+	if ( ! function_exists( 'get_plugins' ) ) {
+		return array();
+	}
+
+	// What a plugin means for content work, by what its folder is called.
+	$kinds = array(
+		'seo'        => '/(seo|rank-math|yoast|aioseo|schema)/i',
+		'forms'      => '/(form|contact|wpcf7|gravity|ninja|fluent)/i',
+		'blocks'     => '/(block|generate|kadence|stackable|spectra|greenshift)/i',
+		'builder'    => '/(elementor|beaver|divi|wpbakery|bricks|oxygen)/i',
+		'cache'      => '/(cache|rocket|litespeed|speed|optimi[sz]e)/i',
+		'multilang'  => '/(polylang|wpml|translat|weglot)/i',
+		'commerce'   => '/(woocommerce|edd|easy-digital)/i',
+		'legal'      => '/(borlabs|cookie|erecht|complianz|consent|dsgvo|gdpr)/i',
+	);
+
+	$out = array();
+
+	foreach ( get_plugins() as $file => $data ) {
+		if ( ! is_plugin_active( $file ) ) {
+			continue;
+		}
+
+		$slug = strtok( $file, '/' );
+		$kind = null;
+
+		foreach ( $kinds as $label => $pattern ) {
+			if ( preg_match( $pattern, $slug . ' ' . ( $data['Name'] ?? '' ) ) ) {
+				$kind = $label;
+				break;
+			}
+		}
+
+		if ( null === $kind ) {
+			continue;
+		}
+
+		$out[] = array(
+			'name'    => (string) ( $data['Name'] ?? $slug ),
+			'version' => (string) ( $data['Version'] ?? '' ),
+			'kind'    => $kind,
+		);
+	}
+
+	return $out;
+}
+
+/**
  * Meta fields the agent may change.
  *
  * A whitelist, not an open door to post meta. Everything here belongs to
@@ -2001,6 +2069,8 @@ function wpmcp_site_info() {
 
 		$info['capabilities']['dynamicData'] = $dynamic;
 	}
+
+	$info['plugins'] = wpmcp_relevant_plugins();
 
 	if ( function_exists( 'dbw_get_settings' ) ) {
 		$settings = dbw_get_settings();

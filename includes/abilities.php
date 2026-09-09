@@ -103,7 +103,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/blocks-describe',
 		array(
 			'label'       => 'Block-Details',
-			'description' => 'Describes block TYPES, not the content of any page — schemas and rules, never the markup of a particular instance; for that read the page with content-read, which returns innerHTML verbatim. Full schema for named blocks: every attribute with its meaning, type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules and a minimal example. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
+			'description' => 'Describes block TYPES, not the content of any page — schemas and rules, never the markup of a particular instance; for that read the page with content-read, which returns innerHTML verbatim. Every attribute with its type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules. Defaults to "compact", which is what you want: it leaves out the prose description of each attribute, and on a design system with dozens of attributes per block that prose is most of the answer. Pass detail: "full" for the descriptions and a worked example, and then for the one block you are unsure about rather than for ten. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -112,6 +112,12 @@ function wpmcp_register_abilities() {
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
 						'description' => 'Block names as listed by blocks-catalog, e.g. ["core/heading", "acme/hero"].',
+					),
+					'detail' => array(
+						'type'        => 'string',
+						'enum'        => array( 'compact', 'full' ),
+						'default'     => 'compact',
+						'description' => 'How much to return per attribute. "compact" gives name, type, allowed values and default — enough to build a block correctly, and a fraction of the size. "full" adds the prose description of every attribute and a worked example; ask for it when a specific attribute is unclear, ideally for that one block rather than ten.',
 					),
 				),
 				'required'   => array( 'names' ),
@@ -123,8 +129,12 @@ function wpmcp_register_abilities() {
 				if ( empty( $names ) ) {
 					return new \WP_Error( 'wpmcp_bad_request', 'Provide at least one block name.' );
 				}
-				wpmcp_log( 'wpmcp/blocks-describe', array( 'summary' => implode( ', ', $names ) ) );
-				return array( 'blocks' => wpmcp_describe_blocks( $names ) );
+				$detail = ( 'full' === ( $input['detail'] ?? 'compact' ) ) ? 'full' : 'compact';
+				wpmcp_log( 'wpmcp/blocks-describe', array( 'summary' => implode( ', ', $names ) . ' (' . $detail . ')' ) );
+				return array(
+					'blocks' => wpmcp_describe_blocks( $names, $detail ),
+					'detail' => $detail,
+				);
 			},
 			'meta' => $read_only,
 		)
@@ -513,7 +523,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-fetch-live',
 		array(
 			'label'       => 'Ausgelieferte Seite abrufen',
-			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable.',
+			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',

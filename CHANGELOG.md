@@ -7,6 +7,25 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.12.0] - 2026-09-09
+
+Aus dem Rueckmeldebericht einer KI, die den Konnektor eine komplette Startseite hat bauen lassen.
+
+### Geaendert
+
+- **`blocks-describe` ist jetzt standardmaessig kompakt.** Zehn Bloecke ergaben 54,8 KB - etwa ein Drittel eines Arbeitskontextes fuer eine einzige Werkzeugantwort, und fast alles davon Fliesstext zu Attributen, deren Name und Enum schon alles sagen. Kompakt laesst die Beschreibungen und das Beispiel weg und behaelt Typ, erlaubte Werte und Default. Gemessen am echten dbw-base-core: **42,6 KB voll gegen 17,8 KB kompakt, 58 % gespart.** `detail: "full"` gibt es weiterhin - fuer den einen Block, bei dem etwas unklar ist, statt fuer zehn.
+
+### Behoben
+
+- **Subtree-Pfade sind die echten.** Wer `paths: ["0","1","2","14"]` las, bekam vier Teilbaeume zurueck, die alle `"path": "0"` behaupteten - der Baumbauer zaehlte unabhaengig davon, wo der Block wirklich sass. Die Zuordnung lief dann ueber die Reihenfolge in der Antwort. Jetzt meldet jeder Teilbaum den Pfad, unter dem er auch beschreibbar ist.
+
+### Hinzugefuegt
+
+- **`content-fetch-live` liefert den ausgewerteten `head`**: Titel, Description, Canonical, Robots, Open Graph und die Anzahl der JSON-LD-Bloecke. Das ist der einzige Weg zu pruefen, ob ein geschriebenes SEO-Feld tatsaechlich auf der Seite ankommt - `content-read` beweist nur, dass der Wert gespeichert ist, und `content-preview` rendert den Body. Nur der Kopf wird ausgewertet, ein Meta-Tag im Fliesstext zaehlt nicht.
+- **`site-info` nennt die aktiven Plugins, die fuer Inhaltsarbeit zaehlen** - SEO, Formulare, Block-Bibliotheken, Page-Builder, Caching, Mehrsprachigkeit, Shop, Rechtstexte. Kein Inventar: welches SEO-Plugin laeuft entscheidet, welche Meta-Felder es gibt, und ein Caching-Plugin entscheidet, ob eine Live-Pruefung ueberhaupt aussagekraeftig ist. Ohne das leitet ein Agent all das aus Fehlschlaegen ab.
+
+---
+
 ## [0.11.0] - 2026-09-03
 
 Nachtrag zu 0.10.0, auf Nachfrage: Warum eigentlich PHP in der functions.php, wenn es auch ein Haken sein koennte?

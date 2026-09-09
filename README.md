@@ -220,16 +220,16 @@ agent never sees them.
 |---|---|
 | `wpmcp/site-info` | Versions, post types, design tokens from `theme.json`. The first call of any session, so nothing has to be guessed. |
 | `wpmcp/blocks-catalog` | The site's block kit: every block with its role (container / child / standalone), purpose, nesting rules and main variants — plus your editorial playbook if you ship one. |
-| `wpmcp/blocks-describe` | Full attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. |
+| `wpmcp/blocks-describe` | Attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. Compact by default; `detail: "full"` adds the prose and an example. |
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
-| `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one section), or `full`. |
+| `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one or several sections, each reporting its real path), or `full`. |
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
 | `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. |
-| `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers included. |
+| `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. |
 | `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
 | `wpmcp/media-read` | One attachment in the same shape. |
 | `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No upload, no delete, no file replacement. |
@@ -536,6 +536,7 @@ php tests/meta-write.php                         # SEO fields: whitelist, diff, 
 php tests/media.php                              # alt text, and what an image is used on
 php tests/dynamic-data.php                       # the guard that replaces kses on an elevated save
 php tests/large-payload.php                      # a 32 KB legal text in one call
+php tests/head-and-plugins.php                   # does the meta title reach the page?
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -579,6 +580,9 @@ Each suite exists because of a specific failure:
   call, and the error blamed the first operation. These pin the shapes a
   big argument arrives in, and that a mangled one is refused rather than
   quietly repaired.
+- **head-and-plugins** — writing a meta title and reading it back proves
+  only that it was stored. Whether the SEO plugin puts it in the head is
+  a different question, and only the delivered page answers it.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

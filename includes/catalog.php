@@ -243,7 +243,8 @@ function wpmcp_key_variants( $type ) {
  * @param string[] $names Block names.
  * @return array
  */
-function wpmcp_describe_blocks( array $names ) {
+function wpmcp_describe_blocks( array $names, $detail = 'full' ) {
+	$compact = ( 'compact' === $detail );
 	$registry = \WP_Block_Type_Registry::get_instance();
 	$out      = array();
 
@@ -262,8 +263,14 @@ function wpmcp_describe_blocks( array $names ) {
 			'title'       => (string) $type->title,
 			'description' => (string) $type->description,
 			'role'        => wpmcp_block_role( $type ),
-			'attributes'  => wpmcp_describe_attributes( $type ),
+			'attributes'  => wpmcp_describe_attributes( $type, $compact ),
 		);
+
+		if ( $compact ) {
+			// The description of the block itself stays — it is one line and
+			// it is what tells them apart.
+			unset( $entry['example'] );
+		}
 
 		if ( ! empty( $type->parent ) ) {
 			$entry['mustBeInside'] = array_values( (array) $type->parent );
@@ -291,7 +298,9 @@ function wpmcp_describe_blocks( array $names ) {
 			}
 		}
 
-		$entry['example'] = wpmcp_block_example( $type, $accepts );
+		if ( ! $compact ) {
+			$entry['example'] = wpmcp_block_example( $type, $accepts );
+		}
 
 		$out[] = $entry;
 	}
@@ -302,10 +311,12 @@ function wpmcp_describe_blocks( array $names ) {
 /**
  * Attribute detail, split into groups so a 77-attribute block stays readable.
  *
- * @param \WP_Block_Type $type Block type.
+ * @param \WP_Block_Type $type    Block type.
+ * @param bool           $compact Leave out the prose: name, type, enum and
+ *                                default only.
  * @return array
  */
-function wpmcp_describe_attributes( $type ) {
+function wpmcp_describe_attributes( $type, $compact = false ) {
 	if ( ! is_array( $type->attributes ) ) {
 		return array();
 	}
@@ -322,7 +333,12 @@ function wpmcp_describe_attributes( $type ) {
 
 		$item = array( 'type' => $def['type'] ?? 'string' );
 
-		if ( '' !== $description ) {
+		// In compact form the descriptions go. Ten blocks came to 54 KB —
+		// about a third of a working context for one tool answer — and
+		// almost all of it was prose for attributes whose name and enum
+		// already say what they are. The two or three that need explaining
+		// are worth a second call at full detail.
+		if ( '' !== $description && ! $compact ) {
 			$item['description'] = $description;
 		}
 		if ( array_key_exists( 'default', $def ) ) {
@@ -336,7 +352,7 @@ function wpmcp_describe_attributes( $type ) {
 				$item['deprecatedValues'] = array_values( $deprecated );
 			}
 		}
-		if ( isset( $def['items']['properties'] ) && is_array( $def['items']['properties'] ) ) {
+		if ( ! $compact && isset( $def['items']['properties'] ) && is_array( $def['items']['properties'] ) ) {
 			$props = array();
 			foreach ( $def['items']['properties'] as $pkey => $pdef ) {
 				$props[ $pkey ] = $pdef['type'] ?? 'string';
