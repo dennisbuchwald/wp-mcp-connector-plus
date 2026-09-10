@@ -19,7 +19,7 @@ define( 'WPMCP_FILE', dirname( __DIR__ ) . '/wp-mcp-connector-plus.php' );
 $GLOBALS['wp_version'] = '7.0';
 $GLOBALS['stub']       = array(
 	'has_abilities_api' => true,
-	'registered'        => 15,
+	'registered'        => 16,
 	'agent_user'        => null,
 	'passwords'         => 0,
 	'level'             => 'draft',
@@ -121,7 +121,7 @@ function wpmcp_ability_names() {
 		'wpmcp/media-read',
 	);
 	return wpmcp_can_write()
-		? array_merge( $read, array( 'wpmcp/content-write', 'wpmcp/content-duplicate', 'wpmcp/content-restore', 'wpmcp/media-update' ) )
+		? array_merge( $read, array( 'wpmcp/content-write', 'wpmcp/content-create', 'wpmcp/content-duplicate', 'wpmcp/content-restore', 'wpmcp/media-update' ) )
 		: $read;
 }
 function wpmcp_adapter_is_usable() { return true; }
@@ -226,7 +226,7 @@ echo "\n\033[1mZugriffsstufen\033[0m\n";
 
 $GLOBALS['stub']['agent_user'] = new WP_User();
 $GLOBALS['stub']['passwords']  = 1;
-$GLOBALS['stub']['registered'] = 15;
+$GLOBALS['stub']['registered'] = 16;
 
 $html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level'] = 'draft'; } );
 expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );

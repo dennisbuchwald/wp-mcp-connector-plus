@@ -259,7 +259,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
-			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, patch_html, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Pass expected_modified (from content-read) so the write is refused if someone edited the page in the meantime. Markup WordPress will not store from an agent account (scripts, iframes) cannot be written: attempting it is an error, named in the dry run before anything is saved. Such markup already on the page is preserved rather than destroyed, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent and any remaining difference is reported. To change a piece of text inside a block, use patch_html with "find" and "replace" rather than restating the whole block: replace demands the entire markup of the block back, which on a long legal page means retyping tens of thousands of characters to correct a phone number, and everything retyped can be retyped wrong. The "find" text must occur exactly once in that block — content-search returns the surrounding text verbatim, which is how to pick an anchor that is. Every real write creates a WordPress revision. Slug, status and post type are never touched, so URLs and publication state stay as they are. When inserting a block type you have not written before, read an existing instance of it first with content-read and mirror its shape — some block libraries keep a per-instance id, generated CSS and matching markup classes that must agree with each other, and a block that merely validates can still be subtly wrong. Validation judges the change, not the page: a problem that already existed in a block you did not touch is reported as a warning and does not block the save, while anything the change itself introduces does. If validation fails, the errors name the exact block path and reason — fix and call again.',
+			'description' => 'Write blocks to a page. Two modes: "ops" applies surgical patches (insert, replace, remove, set_attrs, patch_html, move) addressed by block path — use this for anything short of a rebuild; or "tree" replaces the entire page content — only when you really are rebuilding it. Runs as a dry run by default and returns a validation report plus a block-count diff; pass dry_run: false to actually save. Pass expected_modified (from content-read) so the write is refused if someone edited the page in the meantime. Markup WordPress will not store from an agent account (scripts, iframes) cannot be written: attempting it is an error, named in the dry run before anything is saved. Such markup already on the page is preserved rather than destroyed, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent and any remaining difference is reported. To change a piece of text inside a block, use patch_html with "find" and "replace" rather than restating the whole block: replace demands the entire markup of the block back, which on a long legal page means retyping tens of thousands of characters to correct a phone number, and everything retyped can be retyped wrong. The "find" text must occur exactly once in that block — content-search returns the surrounding text verbatim, which is how to pick an anchor that is. Every real write creates a WordPress revision. Slug, parent and status can be set on a page that has never been published — which is what makes a page the connector created finishable in one call, instead of leaving its address to be corrected by hand. On a published page all three stay as they are: its URL is what every link points at, and taking it back to draft removes it from the site. Publishing is not possible at all, at any status. Post type is never touched. When inserting a block type you have not written before, read an existing instance of it first with content-read and mirror its shape — some block libraries keep a per-instance id, generated CSS and matching markup classes that must agree with each other, and a block that merely validates can still be subtly wrong. Validation judges the change, not the page: a problem that already existed in a block you did not touch is reported as a warning and does not block the save, while anything the change itself introduces does. If validation fails, the errors name the exact block path and reason — fix and call again.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -290,6 +290,19 @@ function wpmcp_register_abilities() {
 						'type'        => 'boolean',
 						'default'     => true,
 						'description' => 'Validate without saving. Defaults to true — pass false to write.',
+					),
+					'slug'    => array(
+						'type'        => 'string',
+						'description' => 'New URL slug. Only while the page has never been published — a published page keeps its address, because that is what every link to it points at. Change that one in the editor, where the redirect is yours to set up.',
+					),
+					'parent'  => array(
+						'type'        => 'integer',
+						'description' => 'ID of the page this one sits under, 0 for none. Same rule as slug: only while the page is not live, because the parent is part of the URL. Must be the same post type, and cannot form a loop.',
+					),
+					'status'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'draft', 'pending' ),
+						'description' => 'draft or pending. There is no value here that publishes, and a published page cannot be taken back to draft — that removes it from the site, which is not a write.',
 					),
 					'expected_modified' => array(
 						'type'        => 'string',
@@ -555,6 +568,63 @@ function wpmcp_register_abilities() {
 				);
 			},
 			'meta' => $read_only,
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/content-create',
+		array(
+			'label'       => 'Seite anlegen',
+			'description' => 'Creates a page with its title, slug, parent and status, and writes the content in the same call when "tree" and "meta" come with it. Use this to build a page rather than duplicating one and overwriting everything: a duplicate inherits the parent it was copied from and a slug derived from the old title, both of which then have to be corrected by hand. Duplicating is still right when an existing page is the template — content-duplicate keeps its taxonomies and meta. Always a draft, whatever status is asked for; publishing stays with a human. Dry run by default. If the page is created but the content is rejected, the answer says so and gives the id: write to that id, do not create it again.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'title'     => array(
+						'type'        => 'string',
+						'description' => 'The page title.',
+					),
+					'post_type' => array(
+						'type'        => 'string',
+						'default'     => 'page',
+						'description' => 'Post type, as listed by site-info. Defaults to "page".',
+					),
+					'slug'      => array(
+						'type'        => 'string',
+						'description' => 'URL slug. Left out, WordPress derives one from the title.',
+					),
+					'parent'    => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'ID of the page this one sits under. Must be the same post type.',
+					),
+					'status'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'draft', 'pending' ),
+						'default'     => 'draft',
+						'description' => 'draft or pending. Nothing here publishes.',
+					),
+					'tree'      => array(
+						'type'        => array( 'array', 'string' ),
+						'description' => 'The block tree for the new page, in the same shape content-write takes. Written in the same call, through the same validation.',
+					),
+					'meta'      => array(
+						'type'        => array( 'object', 'string' ),
+						'description' => 'SEO meta fields, same keys as content-write.',
+					),
+					'dry_run'   => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Report what would be created without creating it. Defaults to true.',
+					),
+				),
+				'required'   => array( 'title' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_create_content( is_array( $input ) ? $input : array() );
+			},
 		)
 	);
 

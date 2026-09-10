@@ -224,6 +224,7 @@ agent never sees them.
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one or several sections, each reporting its real path), or `full`. |
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
+| `wpmcp/content-create` | *Write levels only.* A new page with its title, slug, parent and status — and its content in the same call. Always a draft. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
@@ -242,9 +243,15 @@ featured image, change categories or tags, or edit a post title after
 creation. A generated draft is therefore complete as *content* and as
 metadata, but a human still decides what gets published.
 
-Slug, status and post type stay untouched by design: a slug is what a URL
-hangs on, and making that writable is a separate decision with its own
-safeguards, not a side effect of a convenience feature.
+**Slug, parent and status** follow the page rather than the field. On a
+page that has never been published, all three can be set — that is what
+makes a page the connector just created finishable in one call. On a
+**published** page all three stay put: its slug is what every link to it
+points at, its parent is part of that URL, and taking it back to draft
+removes it from the site. Those belong in the editor, where the redirect
+is yours to set up.
+
+No status publishes, at any level. Post type is never writable at all.
 
 ### Context budget
 
@@ -537,6 +544,7 @@ php tests/media.php                              # alt text, and what an image i
 php tests/dynamic-data.php                       # the guard that replaces kses on an elevated save
 php tests/large-payload.php                      # a 32 KB legal text in one call
 php tests/head-and-plugins.php                   # does the meta title reach the page?
+php tests/placement.php                          # slug, parent and status: where the line runs
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -583,6 +591,9 @@ Each suite exists because of a specific failure:
 - **head-and-plugins** — writing a meta title and reading it back proves
   only that it was stored. Whether the SEO plugin puts it in the head is
   a different question, and only the delivered page answers it.
+- **placement** — the line between a draft, which the agent may move and
+  rename, and a live page, whose address other people's links depend on.
+  Every way past it, including the ones that would publish.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

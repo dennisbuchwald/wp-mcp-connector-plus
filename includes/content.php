@@ -347,15 +347,20 @@ function wpmcp_write_content( array $args ) {
 
 	// Meta stands on its own: correcting a canonical URL is not a reason to
 	// touch the block tree.
-	if ( ! $has_tree && ! $has_ops && ! $has_meta ) {
+	if ( ! $has_tree && ! $has_ops && ! $has_meta && ! $has_placement ) {
 		return new \WP_Error(
 			'wpmcp_bad_request',
-			'Provide "ops" (patch operations), "tree" (replace the whole page) or "meta" (SEO fields).'
+			'Provide "ops" (patch operations), "tree" (replace the whole page), "meta" (SEO fields), or slug/parent/status.'
 		);
 	}
 
 	$meta_diff = $has_meta
 		? wpmcp_meta_diff( $post, $args['meta'] )
+		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
+
+	$has_placement = array_key_exists( 'slug', $args ) || array_key_exists( 'parent', $args ) || array_key_exists( 'status', $args );
+	$placement     = $has_placement
+		? wpmcp_placement_diff( $post, $args )
 		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
 
 	$op_summary = array();
@@ -439,7 +444,7 @@ function wpmcp_write_content( array $args ) {
 		}
 	}
 
-	$errors = array_merge( $errors, $meta_diff['errors'] );
+	$errors = array_merge( $errors, $meta_diff['errors'], $placement['errors'] );
 
 	$response = array(
 		'ok'       => empty( $errors ),
@@ -449,6 +454,13 @@ function wpmcp_write_content( array $args ) {
 		'errors'   => $errors,
 		'warnings' => $warnings,
 	);
+
+	if ( $has_placement ) {
+		$response['placement'] = array(
+			'fields'  => $placement['fields'],
+			'changes' => $placement['changes'],
+		);
+	}
 
 	if ( $has_meta ) {
 		$response['meta'] = array(
@@ -490,13 +502,26 @@ function wpmcp_write_content( array $args ) {
 	// Only touch post content when the change actually has content in it.
 	// A meta-only write must not bump the modified date or spend a
 	// revision on an identical page.
-	if ( $has_tree || $has_ops ) {
+	$placement_fields = array(
+		'slug'   => 'post_name',
+		'parent' => 'post_parent',
+		'status' => 'post_status',
+	);
+
+	if ( $has_tree || $has_ops || $placement['changes'] > 0 ) {
 		// wp_slash() is essential: without it WordPress strips backslashes
 		// out of the block attribute JSON.
-		$postarr = array(
-			'ID'           => $post->ID,
-			'post_content' => wp_slash( $validation['serialized'] ),
-		);
+		$postarr = array( 'ID' => $post->ID );
+
+		if ( $has_tree || $has_ops ) {
+			$postarr['post_content'] = wp_slash( $validation['serialized'] );
+		}
+
+		foreach ( $placement_fields as $key => $column ) {
+			if ( ! empty( $placement['fields'][ $key ]['changed'] ) ) {
+				$postarr[ $column ] = $placement['fields'][ $key ]['to'];
+			}
+		}
 
 		// Dynamic data is gated by unfiltered_html in some block libraries.
 		// Where the site has allowed it, the capability is granted for this
@@ -531,7 +556,9 @@ function wpmcp_write_content( array $args ) {
 		}
 
 		// What we sent is not necessarily what got stored.
-		$stored_warnings = wpmcp_verify_stored( $post->ID, $validation['serialized'] );
+		$stored_warnings = ( $has_tree || $has_ops )
+			? wpmcp_verify_stored( $post->ID, $validation['serialized'] )
+			: array();
 		if ( ! empty( $stored_warnings ) ) {
 			$response['warnings'] = array_merge( $response['warnings'], $stored_warnings );
 			$response['contentAltered'] = true;
@@ -567,8 +594,17 @@ function wpmcp_write_content( array $args ) {
 	// protection it exists for.
 	$fresh = get_post( $post->ID );
 	if ( $fresh ) {
-		$response['modified'] = $fresh->post_modified_gmt;
+		$response['modified']  = $fresh->post_modified_gmt;
 		$response['nextWrite'] = 'Pass this "modified" value as expected_modified on your next write to this page.';
+
+		// A slug or parent change moves the page. Say where it went, rather
+		// than leaving the caller to work the URL out from the pieces.
+		if ( $placement['changes'] > 0 ) {
+			$response['slug']   = $fresh->post_name;
+			$response['parent'] = (int) $fresh->post_parent;
+			$response['status'] = $fresh->post_status;
+			$response['url']    = get_permalink( $fresh );
+		}
 	}
 
 	// The database is now right; the delivered page may not be. Say which.
@@ -1636,6 +1672,154 @@ function wpmcp_relevant_plugins() {
 }
 
 /**
+ * Statuses the agent may set. Never one that publishes.
+ *
+ * @return string[]
+ */
+function wpmcp_writable_statuses() {
+	return array( 'draft', 'pending' );
+}
+
+/**
+ * Work out what a change to slug, parent or status would do.
+ *
+ * These three were untouchable, and the reason was sound for exactly one
+ * of the two cases they cover. A published page's slug is what its URL
+ * hangs on and what every link to it points at; its parent is part of
+ * that URL too, and taking it back to draft removes it from the site.
+ * None of that is an agent's call.
+ *
+ * A page that has never been published has none of those problems. It has
+ * no URL anyone knows and no links pointing at it — and it is exactly
+ * what the agent has just created. Refusing there meant building
+ * twenty-two pages and then fixing twenty-two slugs and parents by hand
+ * in wp-admin, which is not a safeguard, only work.
+ *
+ * So the line moves from "these fields" to "a page that is live". Nothing
+ * published changes address or disappears, and a draft is a draft.
+ *
+ * @param \WP_Post $post Post being written.
+ * @param array    $args { slug, parent, status } as supplied.
+ * @return array { fields: array, errors: string[], changes: int }
+ */
+function wpmcp_placement_diff( $post, array $args ) {
+	$fields  = array();
+	$errors  = array();
+	$changes = 0;
+	$live    = in_array( $post->post_status, array( 'publish', 'future', 'private' ), true );
+
+	$wanted = array();
+
+	if ( array_key_exists( 'slug', $args ) && null !== $args['slug'] ) {
+		$wanted['slug'] = array(
+			'from' => $post->post_name,
+			'to'   => sanitize_title( (string) $args['slug'] ),
+		);
+		if ( '' === $wanted['slug']['to'] ) {
+			$errors[] = sprintf( '"%s" leaves nothing usable as a slug.', (string) $args['slug'] );
+			unset( $wanted['slug'] );
+		}
+	}
+
+	if ( array_key_exists( 'parent', $args ) && null !== $args['parent'] ) {
+		$parent = (int) $args['parent'];
+		$check  = wpmcp_check_parent( $post, $parent );
+		if ( is_wp_error( $check ) ) {
+			$errors[] = $check->get_error_message();
+		} else {
+			$wanted['parent'] = array(
+				'from' => (int) $post->post_parent,
+				'to'   => $parent,
+			);
+		}
+	}
+
+	if ( array_key_exists( 'status', $args ) && null !== $args['status'] ) {
+		$status = (string) $args['status'];
+		if ( ! in_array( $status, wpmcp_writable_statuses(), true ) ) {
+			$errors[] = sprintf(
+				'"%s" is not a status this connector sets. Allowed: %s. Publishing is never possible, and taking a live page off the site is not a write, it is a removal — both stay with a human.',
+				$status,
+				implode( ', ', wpmcp_writable_statuses() )
+			);
+		} else {
+			$wanted['status'] = array(
+				'from' => $post->post_status,
+				'to'   => $status,
+			);
+		}
+	}
+
+	foreach ( $wanted as $key => $field ) {
+		$field['changed'] = ( (string) $field['from'] !== (string) $field['to'] );
+
+		if ( $field['changed'] && $live ) {
+			$errors[] = sprintf(
+				'Post %d is published, so its %s stays as it is. Changing it would %s. Do it in the editor, where the redirect is yours to set up.',
+				$post->ID,
+				$key,
+				'status' === $key ? 'take a live page off the site' : 'change the URL of a page that is already linked to'
+			);
+			continue;
+		}
+
+		$fields[ $key ] = $field;
+
+		if ( $field['changed'] ) {
+			++$changes;
+		}
+	}
+
+	return array(
+		'fields'  => $fields,
+		'errors'  => $errors,
+		'changes' => $changes,
+	);
+}
+
+/**
+ * Is this a parent the post may actually have?
+ *
+ * @param \WP_Post $post   Post being moved.
+ * @param int      $parent Requested parent, 0 for none.
+ * @return true|\WP_Error
+ */
+function wpmcp_check_parent( $post, $parent ) {
+	if ( 0 === $parent ) {
+		return true;
+	}
+
+	if ( $parent === (int) $post->ID ) {
+		return new \WP_Error( 'wpmcp_bad_parent', 'A page cannot be its own parent.' );
+	}
+
+	$target = get_post( $parent );
+	if ( ! $target ) {
+		return new \WP_Error( 'wpmcp_bad_parent', sprintf( 'No post with ID %d to use as a parent.', $parent ) );
+	}
+
+	if ( $target->post_type !== $post->post_type ) {
+		return new \WP_Error(
+			'wpmcp_bad_parent',
+			sprintf( 'Post %d is a "%s"; a "%s" cannot sit under it.', $parent, $target->post_type, $post->post_type )
+		);
+	}
+
+	// A loop would take the page out of the tree entirely.
+	$seen   = array( (int) $post->ID );
+	$cursor = $target;
+	while ( $cursor && (int) $cursor->post_parent ) {
+		if ( in_array( (int) $cursor->post_parent, $seen, true ) ) {
+			return new \WP_Error( 'wpmcp_bad_parent', sprintf( 'Post %d sits below this page; making it the parent would form a loop.', $parent ) );
+		}
+		$seen[]  = (int) $cursor->ID;
+		$cursor = get_post( $cursor->post_parent );
+	}
+
+	return true;
+}
+
+/**
  * Meta fields the agent may change.
  *
  * A whitelist, not an open door to post meta. Everything here belongs to
@@ -2084,4 +2268,156 @@ function wpmcp_site_info() {
 	}
 
 	return $info;
+}
+
+/**
+ * Create a page and, if content came with it, fill it in the same call.
+ *
+ * Duplicating was the only way to make a page, and a duplicate inherits
+ * the parent it was copied from and gets whatever slug WordPress derives
+ * from the title. Building twenty-two pages that way meant overwriting
+ * twenty-two duplicates and then correcting twenty-two slugs and parents
+ * in wp-admin — a whole afternoon of work the connector had created.
+ *
+ * Always a draft, whatever is asked for: publishing stays human, and
+ * that is the one line no argument moves.
+ *
+ * @param array $args { title, post_type, slug, parent, status, tree, meta, dry_run }.
+ * @return array|\WP_Error
+ */
+function wpmcp_create_content( array $args ) {
+	$title = trim( (string) ( $args['title'] ?? '' ) );
+	if ( '' === $title ) {
+		return new \WP_Error( 'wpmcp_bad_request', 'A new page needs a "title".' );
+	}
+
+	$post_type = (string) ( $args['post_type'] ?? 'page' );
+	if ( ! in_array( $post_type, wpmcp_allowed_post_types(), true ) ) {
+		return new \WP_Error(
+			'wpmcp_forbidden_type',
+			sprintf( 'Post type "%s" is not exposed to the connector.', $post_type )
+		);
+	}
+
+	$type_object = get_post_type_object( $post_type );
+	if ( ! $type_object || ! current_user_can( $type_object->cap->create_posts ) ) {
+		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to create %s content.', $post_type ) );
+	}
+
+	$status = (string) ( $args['status'] ?? 'draft' );
+	if ( ! in_array( $status, wpmcp_writable_statuses(), true ) ) {
+		return new \WP_Error(
+			'wpmcp_bad_request',
+			sprintf(
+				'"%s" is not a status this connector sets. Allowed: %s. Publishing stays with a human.',
+				$status,
+				implode( ', ', wpmcp_writable_statuses() )
+			)
+		);
+	}
+
+	$parent = isset( $args['parent'] ) ? (int) $args['parent'] : 0;
+	if ( $parent ) {
+		$target = get_post( $parent );
+		if ( ! $target || $target->post_type !== $post_type ) {
+			return new \WP_Error(
+				'wpmcp_bad_parent',
+				sprintf( 'No "%s" with ID %d to use as a parent.', $post_type, $parent )
+			);
+		}
+	}
+
+	$slug = isset( $args['slug'] ) ? sanitize_title( (string) $args['slug'] ) : '';
+
+	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+
+	if ( $dry_run ) {
+		return array(
+			'ok'      => true,
+			'dryRun'  => true,
+			'title'   => $title,
+			'type'    => $post_type,
+			'slug'    => '' !== $slug ? $slug : sanitize_title( $title ),
+			'parent'  => $parent,
+			'status'  => $status,
+			'message' => 'Dry run only — nothing was created. Call again with dry_run: false. Content sent as "tree" or "meta" is written in the same call once the page exists.',
+		);
+	}
+
+	$post_id = wp_insert_post(
+		wp_slash(
+			array(
+				'post_title'  => $title,
+				'post_type'   => $post_type,
+				'post_name'   => $slug,
+				'post_parent' => $parent,
+				'post_status' => $status,
+				'post_author' => get_current_user_id(),
+				'post_content' => '',
+			)
+		),
+		true
+	);
+
+	if ( is_wp_error( $post_id ) ) {
+		return $post_id;
+	}
+
+	$created = get_post( $post_id );
+
+	$result = array(
+		'ok'      => true,
+		'dryRun'  => false,
+		'id'      => (int) $post_id,
+		'title'   => $created->post_title,
+		'type'    => $created->post_type,
+		'slug'    => $created->post_name,
+		'parent'  => (int) $created->post_parent,
+		'status'  => $created->post_status,
+		'url'     => get_permalink( $created ),
+		'message' => 'Created.',
+	);
+
+	wpmcp_log(
+		'wpmcp/content-create',
+		array(
+			'post_id'   => (int) $post_id,
+			'operation' => 'create',
+			'summary'   => sprintf( 'Created "%s" (%s, parent %d).', $title, $post_type, $parent ),
+		)
+	);
+
+	// Content in the same call, so one page is one round trip.
+	$has_content = ( isset( $args['tree'] ) && ! empty( $args['tree'] ) )
+		|| ( isset( $args['meta'] ) && ! empty( $args['meta'] ) );
+
+	if ( ! $has_content ) {
+		$result['modified']  = $created->post_modified_gmt;
+		$result['nextWrite'] = 'Pass this "modified" value as expected_modified when you write the content.';
+		return $result;
+	}
+
+	$written = wpmcp_write_content(
+		array(
+			'post_id' => (int) $post_id,
+			'tree'    => $args['tree'] ?? null,
+			'meta'    => $args['meta'] ?? null,
+			'dry_run' => false,
+		)
+	);
+
+	if ( is_wp_error( $written ) ) {
+		// The page exists; only the content failed. Say both, or the caller
+		// creates it a second time.
+		$result['ok']           = false;
+		$result['contentError'] = $written->get_error_message();
+		$result['message']      = 'The page was created but its content was not written. Fix the content and write to this id — do not create it again.';
+		return $result;
+	}
+
+	$result['content'] = $written;
+	$result['ok']      = ! empty( $written['ok'] );
+	$result['message'] = $result['ok'] ? 'Created and written.' : 'The page was created but its content was rejected. Fix it and write to this id.';
+
+	return $result;
 }

@@ -268,6 +268,7 @@ function wpmcp_ability_names() {
 		$read,
 		array(
 			'wpmcp/content-write',
+			'wpmcp/content-create',
 			'wpmcp/content-duplicate',
 			'wpmcp/content-restore',
 			'wpmcp/media-update',

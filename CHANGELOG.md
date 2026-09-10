@@ -7,6 +7,23 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.13.0] - 2026-09-10
+
+Aus dem naechsten Rueckmeldebericht: 22 Seiten gebaut, danach 22 Slugs und Elternteile von Hand in wp-admin korrigiert.
+
+### Hinzugefuegt
+
+- **`content-create`.** Legt eine Seite mit Titel, Slug, Elternteil und Status an - und schreibt den Inhalt im selben Aufruf, wenn `tree` und `meta` mitkommen. Bisher war Duplizieren der einzige Weg zu einer neuen Seite: ein Duplikat erbt den Elternteil der Vorlage und bekommt einen aus dem alten Titel abgeleiteten Slug, beides danach Handarbeit. Immer ein Entwurf, egal was angefragt wird. Schlaegt das Schreiben fehl, nachdem die Seite existiert, sagt die Antwort das mitsamt der ID - damit niemand die Seite ein zweites Mal anlegt.
+- **`content-write` nimmt `slug`, `parent` und `status`.** Damit ist eine Seite in einem Aufruf fertig: Blockbaum, SEO-Meta und Einordnung.
+
+### Geaendert
+
+- **Die Grenze verlaeuft jetzt an der Seite, nicht am Feld.** Bisher galt "Slug, Status und Post-Type werden nie angefasst". Der Grund dafuer stimmte fuer genau einen der beiden Faelle: Bei einer **veroeffentlichten** Seite ist der Slug das, worauf jeder Link zeigt, der Elternteil steckt im URL-Pfad, und ein Zurueckstufen auf Entwurf nimmt sie von der Seite - alles drei bleiben gesperrt und verweisen auf den Editor, wo die Weiterleitung in deiner Hand liegt. Eine Seite, die **nie veroeffentlicht war**, hat keines dieser Probleme: keine bekannte URL, keine Links darauf. Genau die hat der Agent gerade selbst angelegt.
+- Geprueft wird dabei mehr als die Berechtigung: der Elternteil muss existieren, denselben Post-Type haben, darf nicht die Seite selbst sein und keinen Kreis bilden. Ein Kreis haenge den Zweig sonst aus dem Baum aus.
+- **Veroeffentlichen bleibt unmoeglich.** Setzbar sind nur `draft` und `pending`; `publish`, `future` und `private` werden abgelehnt. Post-Type ist weiterhin gar nicht schreibbar.
+
+---
+
 ## [0.12.0] - 2026-09-09
 
 Aus dem Rueckmeldebericht einer KI, die den Konnektor eine komplette Startseite hat bauen lassen.
