@@ -614,13 +614,13 @@ Each suite exists because of a specific failure:
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
-**v0.4.0.** Running on two live sites for reading, including a full QA pass
-over a draft built from a real design system — the agent fetched block
-schemas to learn the defaults, and could then tell a deliberately set value
-from an unset one. The write path is exercised by tests but has not yet
-produced a page that went live.
+**v0.13.1.** In daily use on customer sites, reading and writing. Whole
+pages have been built through it — created, filled, given their SEO fields
+and put in the right place in the tree — and long legal texts have been
+corrected across eighteen pages at once.
 
-What the first real install taught, all of it now handled:
+Every release since 0.4.0 came out of a real job going wrong, which is why
+the changelog reads the way it does. The things that cost the most time:
 
 - **Other plugins bundle the same library.** Rank Math SEO ships
   `mcp-adapter`, and whichever copy loads first wins. Compatibility is
@@ -636,6 +636,17 @@ What the first real install taught, all of it now handled:
   destroyed its JSON-LD schema, and the validation pipeline had no way of
   knowing: it checks what is about to be sent, not what arrived. Hence the
   comparison after every write.
+- **A refusal that explains nothing gets worked around.** A block library
+  refused every save on pages holding dynamic data, with a message naming
+  neither the cause nor the fix. Three separate sessions read it as content
+  filtering and went around the API through the database, where none of
+  these checks exist. Errors now say where they came from and what settles
+  them.
+- **Half a dependency is worse than none.** The adapter pulls in the
+  Jetpack autoloader, and shipping its manifests without the file they
+  point at took down a WooCommerce site on activation — in someone else's
+  plugin, on every request. Hence a test over what the package announces
+  to its neighbours.
 
 ## Licence
 

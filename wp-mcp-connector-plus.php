@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       WP MCP Connector Plus
- * Plugin URI:        https://dennisbuchwald.de/apps/wp-mcp-connector-plus
+ * Plugin URI:        https://www.dennisbuchwald.de/apps/wp-mcp-connector
  * Description:       MCP server for WordPress that lets AI agents operate a site the way an editor does: reads and writes pages as a Gutenberg block tree, exposes the block kit with its schemas and nesting rules, and validates every change before it is saved.
  * Version:           0.13.1
  * Requires at least: 6.9
