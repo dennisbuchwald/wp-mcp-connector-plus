@@ -361,12 +361,28 @@ because editing one changes every page that embeds it at once and a
 pattern has no draft state. When one is written, the dry run reports how
 many pieces of content are affected.
 
-**Additional post types** is a third setting, empty by default. It lists
+**A work session** opens everything for a set window — one, four or eight
+hours — and closes itself. While it runs, published pages are editable,
+synced patterns are writable and dynamic data is allowed; when it ends,
+the saved settings are what the site falls back to, and the role's
+capabilities are pulled back with them.
+
+It exists because the wide settings are the ones people switch on for an
+afternoon and never switch off, which leaves a site permanently on the
+widest setting — exactly what having settings was meant to prevent. The
+closing is a timestamp, not something anyone has to remember.
+
+What a session never touches: the post types in scope, because that is a
+decision about the site rather than a risk window and on a shop the list
+contains other people's orders. And publishing, which nothing in this
+plugin has ever been able to reach.
+
+**Additional post types** is a fourth setting, empty by default. It lists
 every post type the site has that is not already in scope — the theme's
 site-wide building blocks in particular. See *Adapting it to your block
 kit* for what that covers.
 
-**Dynamic data** is a fourth setting, off by default. Some block libraries
+**Dynamic data** is a fifth setting, off by default. Some block libraries
 refuse to save a page holding dynamic data unless the account has
 `unfiltered_html` — the capability that permits storing arbitrary HTML and
 JavaScript. That would be the widest permission in a role that
@@ -555,6 +571,7 @@ php tests/large-payload.php                      # a 32 KB legal text in one cal
 php tests/head-and-plugins.php                   # does the meta title reach the page?
 php tests/placement.php                          # slug, parent and status: where the line runs
 php tests/shipped-files.php                      # what the vendor folder announces to other plugins
+php tests/work-session.php                       # the window closes itself, and what it never opens
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -607,6 +624,10 @@ Each suite exists because of a specific failure:
 - **shipped-files** — a shop site went down on activation, from a fatal
   inside another plugin. Half a Jetpack autoloader was being shipped: the
   half that announces one, without the half anyone can load.
+- **work-session** — mostly about the closing, because the opening is the
+  easy half: that the level falls back on its own, that the capabilities
+  follow, that a second cleanup does nothing, and that no window ever
+  reaches publishing or ticks a post type.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

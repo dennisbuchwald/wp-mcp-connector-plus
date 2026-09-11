@@ -26,7 +26,15 @@ $GLOBALS['stub']       = array(
 	'patterns'          => 'read',
 	'caps_match'        => true,
 	'extra'             => array( 'gp_elements' ),
-	'selectable'        => array( 'gp_elements' => 'Elements', 'wp_template' => 'Templates' ),
+	'session'           => 0,
+	'selectable'        => array(
+		'gp_elements'   => 'Elements',
+		'wp_template'   => 'Templates',
+		'wp_navigation' => 'Menues',
+		'gp_font'       => 'Fonts',
+		'acf-field'     => 'Felder',
+		'shop_order'    => 'Bestellungen',
+	),
 );
 
 // --- WordPress stubs ----------------------------------------------------
@@ -63,6 +71,8 @@ function get_edit_post_link( $id ) { return 'https://example.test/edit/' . (int)
 function get_the_title( $id ) { return 'Stub page'; }
 function get_edit_user_link( $id ) { return 'https://example.test/user/' . (int) $id; }
 function wp_verify_nonce( ...$a ) { return true; }
+function wpmcp_end_work_session() {}
+function wpmcp_start_work_session( $h ) { return time() + 3600; }
 function is_wp_error( $t ) { return $t instanceof WP_Error; }
 function get_user_by( $f, $v ) { return $GLOBALS['stub']['agent_user']; }
 function wp_insert_user( $a ) { return 42; }
@@ -132,6 +142,12 @@ function wpmcp_pattern_access() { return $GLOBALS['stub']['patterns'] ?? 'read';
 function wpmcp_dynamic_data_allowed() { return ! empty( $GLOBALS['stub']['dynamic'] ); }
 function wpmcp_extra_post_types() { return $GLOBALS['stub']['extra'] ?? array(); }
 function wpmcp_selectable_post_types() { return $GLOBALS['stub']['selectable'] ?? array(); }
+function wpmcp_post_type_holds_personal_data( $slug ) { return false !== strpos( $slug, 'order' ); }
+function wpmcp_work_session_expires() { return $GLOBALS['stub']['session'] ?? 0; }
+function wpmcp_work_session_remaining() { return '3 Stunden'; }
+function wpmcp_work_session_lengths() { return array( 1 => '1 hour', 4 => '4 hours', 8 => '8 hours' ); }
+function human_time_diff( $a, $b = 0 ) { return '3 Stunden'; }
+function esc_attr_e( $t, $d = null ) { echo htmlspecialchars( (string) $t, ENT_QUOTES ); }
 function wpmcp_access_levels() {
 	return array(
 		'read'  => array( 'label' => 'Read only', 'description' => 'Look only.' ),
@@ -234,6 +250,9 @@ expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
 expect_contains( $html, 'Dynamic data', 'zeigt die Dynamic-Data-Einstellung' );
 expect_contains( $html, 'Additional post types', 'zeigt die Post-Type-Auswahl' );
 expect_contains( $html, 'gp_elements', 'listet einen vorhandenen Post-Type' );
+expect_contains( $html, 'wpmcp-toggle-all', 'bietet "Alle auswaehlen" bei langer Liste' );
+expect_contains( $html, 'indeterminate', 'halb ausgewaehlt sieht auch halb aus' );
+expect_contains( $html, 'personal data', 'markiert Post-Types mit Kundendaten' );
 expect_contains( $html, 'unfiltered_html', 'und benennt die Capability dahinter' );
 
 $GLOBALS['stub']['registered'] = 11;
@@ -246,6 +265,18 @@ $GLOBALS['stub']['registered'] = 8;
 $html = render_case( 'Rechte laufen auseinander', function () { $GLOBALS['stub']['caps_match'] = false; } );
 expect_contains( $html, 'does not grant what the selected level promises', 'meldet nicht passende Rechte' );
 $GLOBALS['stub']['caps_match'] = true;
+
+echo "\n\033[1mArbeitssitzung\033[0m\n";
+
+$html = render_case( 'keine Sitzung laeuft', function () { $GLOBALS['stub']['session'] = 0; } );
+expect_contains( $html, 'Working on the site?', 'bietet den Start an' );
+expect_contains( $html, '4 hours', 'mit den moeglichen Fenstern' );
+
+$html = render_case( 'Sitzung laeuft', function () { $GLOBALS['stub']['session'] = time() + 9000; } );
+expect_contains( $html, 'A work session is running', 'sagt, dass sie laeuft' );
+expect_contains( $html, '3 Stunden', 'und wie lange noch' );
+expect_contains( $html, 'Close now', 'und laesst sie sofort schliessen' );
+$GLOBALS['stub']['session'] = 0;
 
 echo "\n\033[1mVerbindung erzeugen\033[0m\n";
 

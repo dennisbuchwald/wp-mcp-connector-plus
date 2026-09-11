@@ -52,6 +52,12 @@ function wpmcp_access_level() {
 		return WPMCP_ACCESS_LEVEL;
 	}
 
+	// A work session opens everything for a fixed window. The constant
+	// above still wins: a site that fixed the level in wp-config meant it.
+	if ( wpmcp_work_session_active() ) {
+		return 'full';
+	}
+
 	$level = get_option( 'wpmcp_access_level', null );
 
 	// Migrate the older boolean switch on first read.
@@ -98,6 +104,10 @@ function wpmcp_pattern_access() {
 
 	if ( ! in_array( $value, array( 'none', 'read', 'write' ), true ) ) {
 		return 'read';
+	}
+
+	if ( ! defined( 'WPMCP_PATTERN_ACCESS' ) && wpmcp_work_session_active() ) {
+		return 'write';
 	}
 
 	// Patterns can never be more open than the site as a whole.
@@ -179,6 +189,43 @@ function wpmcp_selectable_post_types() {
 }
 
 /**
+ * Does this post type usually hold other people's personal data?
+ *
+ * A shop lists thirty post types on the settings screen, and three or
+ * four of them are orders: names, addresses, what someone bought. Ticking
+ * a box there is not the same decision as ticking "Elements", and on a
+ * list that long nobody reads thirty labels before clicking select-all.
+ *
+ * A guess by name, so it errs towards warning. It changes nothing about
+ * what is allowed — it only stops the two kinds of box looking alike.
+ *
+ * @param string $slug Post type slug.
+ * @return bool
+ */
+function wpmcp_post_type_holds_personal_data( $slug ) {
+	$patterns = array(
+		'#^shop_order#i',
+		'#(^|_)order(s)?($|_)#i',
+		'#subscription#i',
+		'#(^|_)customer#i',
+		'#(entry|entries|submission|lead)#i',
+		// Flamingo stores contact-form submissions under its own names.
+		'#flamingo#i',
+		'#user_request#i',
+		'#booking|appointment|reservation#i',
+		'#invoice|refund|payment#i',
+	);
+
+	foreach ( $patterns as $pattern ) {
+		if ( preg_match( $pattern, $slug ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
  * May the agent save pages whose blocks carry dynamic data?
  *
  * A separate decision from the access level, for the same reason synced
@@ -204,7 +251,141 @@ function wpmcp_dynamic_data_allowed() {
 		return false;
 	}
 
+	if ( wpmcp_work_session_active() ) {
+		return true;
+	}
+
 	return 'allowed' === get_option( 'wpmcp_dynamic_data', 'blocked' );
+}
+
+/**
+ * A work session: everything open, and it closes itself.
+ *
+ * The settings exist because the wide ones are dangerous. What actually
+ * happens is that someone opens them for an afternoon of work and never
+ * closes them again — so the site sits on the widest setting permanently,
+ * which is exactly what the settings were meant to prevent.
+ *
+ * A session inverts that. It opens the same doors, and the closing is not
+ * a thing anyone has to remember: it is a timestamp. Nothing here can be
+ * left on by accident, only by choosing a longer window.
+ *
+ * What it does not touch: the post types, because which content is in
+ * scope is not a risk window but a decision about the site — and on a shop
+ * that list contains other people's orders. And publishing, which no
+ * setting in this plugin has ever been able to reach.
+ *
+ * @return int Unix timestamp the session ends at, 0 when none is running.
+ */
+function wpmcp_work_session_expires() {
+	$until = (int) get_option( 'wpmcp_work_session_until', 0 );
+
+	return ( $until > time() ) ? $until : 0;
+}
+
+/**
+ * Is a work session running right now?
+ *
+ * @return bool
+ */
+function wpmcp_work_session_active() {
+	return wpmcp_work_session_expires() > 0;
+}
+
+/**
+ * How much of it is left, for a human.
+ *
+ * @return string
+ */
+function wpmcp_work_session_remaining() {
+	$until = wpmcp_work_session_expires();
+	if ( ! $until ) {
+		return '';
+	}
+
+	return human_time_diff( time(), $until );
+}
+
+/**
+ * Windows a session can be opened for.
+ *
+ * Deliberately short. An open-ended option would be the permanent setting
+ * again, wearing a different label.
+ *
+ * @return array<int, string> Hours => label.
+ */
+function wpmcp_work_session_lengths() {
+	return array(
+		1 => __( '1 hour', 'wp-mcp-connector-plus' ),
+		4 => __( '4 hours', 'wp-mcp-connector-plus' ),
+		8 => __( '8 hours', 'wp-mcp-connector-plus' ),
+	);
+}
+
+/**
+ * Open a session, or extend the one running.
+ *
+ * @param int $hours How long.
+ * @return int The timestamp it now ends at.
+ */
+function wpmcp_start_work_session( $hours ) {
+	$hours = (int) $hours;
+	if ( ! array_key_exists( $hours, wpmcp_work_session_lengths() ) ) {
+		$hours = 1;
+	}
+
+	$until = time() + ( $hours * HOUR_IN_SECONDS );
+	update_option( 'wpmcp_work_session_until', $until, false );
+
+	// The role has to follow, or the second line of defence is still narrow
+	// while the first one is open.
+	wpmcp_sync_role_capabilities();
+
+	wpmcp_log(
+		'wpmcp/work-session',
+		array(
+			'summary' => sprintf(
+				'Work session opened for %d hour(s), everything wide until %s UTC.',
+				$hours,
+				gmdate( 'Y-m-d H:i', $until )
+			),
+		)
+	);
+
+	return $until;
+}
+
+/**
+ * Close it now, without waiting for the clock.
+ */
+function wpmcp_end_work_session() {
+	if ( ! wpmcp_work_session_active() ) {
+		return;
+	}
+
+	delete_option( 'wpmcp_work_session_until' );
+	wpmcp_sync_role_capabilities();
+
+	wpmcp_log( 'wpmcp/work-session', array( 'summary' => 'Work session closed.' ) );
+}
+
+/**
+ * Put the role back where the settings say, once a session has run out.
+ *
+ * The level drops on its own — it is read fresh every request — but the
+ * capabilities are stored, and nothing writes them back unless somebody
+ * opens wp-admin. This runs on the connector's own endpoint too, so the
+ * second line of defence narrows at the same moment the first one does.
+ */
+function wpmcp_close_expired_work_session() {
+	if ( ! get_option( 'wpmcp_work_session_until', 0 ) || wpmcp_work_session_active() ) {
+		return;
+	}
+
+	delete_option( 'wpmcp_work_session_until' );
+	wpmcp_sync_role_capabilities();
+
+	wpmcp_log( 'wpmcp/work-session', array( 'summary' => 'Work session expired; everything back to the saved settings.' ) );
 }
 
 /**
@@ -407,3 +588,4 @@ function wpmcp_reconcile_role() {
 	}
 }
 add_action( 'admin_init', 'wpmcp_reconcile_role' );
+add_action( 'admin_init', 'wpmcp_close_expired_work_session' );

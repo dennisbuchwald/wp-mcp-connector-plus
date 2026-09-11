@@ -297,6 +297,34 @@ check( ! isset( $selectable['page'] ), 'aber nichts, was ohnehin drin ist' );
 
 $GLOBALS['options']['wpmcp_extra_post_types'] = array();
 
+echo "\n\033[1mPost-Types mit Kundendaten\033[0m\n";
+
+// A shop lists thirty of these, and three or four are orders. Ticking one
+// is not the same decision as ticking "Elements", and nobody reads thirty
+// labels before clicking select-all.
+$expected = array(
+	'shop_order'         => true,
+	'shop_order_refund'  => true,
+	'wc_subscription'    => true,
+	'flamingo_inbound'   => true,
+	'user_request'       => true,
+	'booking'            => true,
+	'gp_elements'        => false,
+	'wp_template'        => false,
+	'acf-field'          => false,
+	'product'            => false,
+	'shop_coupon'        => false,
+	'wpcf7_contact_form' => false,
+);
+
+foreach ( $expected as $slug => $want ) {
+	check(
+		wpmcp_post_type_holds_personal_data( $slug ) === $want,
+		sprintf( '%s: %s', $slug, $want ? 'markiert' : 'nicht markiert' ),
+		$want ? 'Kundendaten wuerden ungekennzeichnet freigegeben' : 'eine falsche Warnung stumpft die echten ab'
+	);
+}
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mRegistrierung in Ordnung.\033[0m\n";

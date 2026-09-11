@@ -87,6 +87,33 @@ function wpmcp_admin_init() {
 add_action( 'admin_init', 'wpmcp_admin_init' );
 
 /**
+ * Start or stop a work session from the settings screen.
+ *
+ * Its own form rather than part of the settings form: opening a window is
+ * an action with a time attached, not a preference, and it must not ride
+ * along with a Save somebody pressed for another reason.
+ */
+function wpmcp_handle_work_session_post() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+
+	$nonce = isset( $_POST['wpmcp_session_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['wpmcp_session_nonce'] ) ) : '';
+	if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'wpmcp_work_session' ) ) {
+		return;
+	}
+
+	if ( isset( $_POST['wpmcp_session_stop'] ) ) {
+		wpmcp_end_work_session();
+		return;
+	}
+
+	if ( isset( $_POST['wpmcp_session_start'] ) ) {
+		wpmcp_start_work_session( (int) $_POST['wpmcp_session_start'] );
+	}
+}
+
+/**
  * How many of our abilities actually made it into the registry.
  *
  * @return int|null Null when the Abilities API cannot be queried.
@@ -233,6 +260,8 @@ function wpmcp_render_admin_page() {
 	require_once WPMCP_DIR . 'includes/setup.php';
 	$setup_result = wpmcp_handle_setup_post();
 
+	wpmcp_handle_work_session_post();
+
 	global $wpdb;
 	$table = wpmcp_audit_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- custom plugin table, no core API available.
@@ -279,6 +308,41 @@ function wpmcp_render_admin_page() {
 		<?php wpmcp_render_setup_panel( $setup_result ); ?>
 
 		<h2><?php esc_html_e( 'Settings', 'wp-mcp-connector-plus' ); ?></h2>
+		<?php
+		$session_until = wpmcp_work_session_expires();
+		?>
+		<div class="notice <?php echo $session_until ? 'notice-warning' : 'notice-info'; ?>" style="padding:12px">
+			<?php if ( $session_until ) : ?>
+				<p style="margin:0 0 8px">
+					<strong><?php esc_html_e( 'A work session is running.', 'wp-mcp-connector-plus' ); ?></strong>
+					<?php
+					printf(
+						/* translators: %s: remaining time, e.g. "3 hours". */
+						esc_html__( 'Everything is open for another %s: published pages, synced patterns and dynamic data. It closes itself, you do not have to remember it.', 'wp-mcp-connector-plus' ),
+						esc_html( wpmcp_work_session_remaining() )
+					);
+					?>
+				</p>
+				<form method="post" style="display:inline">
+					<?php wp_nonce_field( 'wpmcp_work_session', 'wpmcp_session_nonce' ); ?>
+					<button class="button" name="wpmcp_session_stop" value="1"><?php esc_html_e( 'Close now', 'wp-mcp-connector-plus' ); ?></button>
+				</form>
+			<?php else : ?>
+				<p style="margin:0 0 8px">
+					<strong><?php esc_html_e( 'Working on the site?', 'wp-mcp-connector-plus' ); ?></strong>
+					<?php esc_html_e( 'Open everything for a set time instead of leaving a wide setting on. A session lifts the access level to published pages, makes synced patterns editable and allows dynamic data — and closes itself when the time is up. The settings below are what the site falls back to.', 'wp-mcp-connector-plus' ); ?>
+				</p>
+				<form method="post" style="display:inline">
+					<?php wp_nonce_field( 'wpmcp_work_session', 'wpmcp_session_nonce' ); ?>
+					<?php foreach ( wpmcp_work_session_lengths() as $hours => $label ) : ?>
+						<button class="button" name="wpmcp_session_start" value="<?php echo esc_attr( $hours ); ?>">
+							<?php echo esc_html( $label ); ?>
+						</button>
+					<?php endforeach; ?>
+				</form>
+			<?php endif; ?>
+		</div>
+
 		<form method="post" action="options.php">
 			<?php settings_fields( 'wpmcp_settings' ); ?>
 			<table class="form-table" role="presentation">
@@ -318,20 +382,81 @@ function wpmcp_render_admin_page() {
 						<?php if ( empty( $extra_options ) ) : ?>
 							<p class="description"><?php esc_html_e( 'This site has no other post types to add.', 'wp-mcp-connector-plus' ); ?></p>
 						<?php else : ?>
-							<?php foreach ( $extra_options as $slug => $label ) : ?>
-								<p>
-									<label>
-										<input type="checkbox" name="wpmcp_extra_post_types[]"
-											value="<?php echo esc_attr( $slug ); ?>"
-											<?php checked( in_array( $slug, $extra_selected, true ) ); ?> />
-										<?php echo esc_html( $label ); ?>
-										<code><?php echo esc_html( $slug ); ?></code>
-									</label>
-								</p>
-							<?php endforeach; ?>
+							<div id="wpmcp-post-types">
+								<?php if ( count( $extra_options ) > 5 ) : ?>
+									<p>
+										<label>
+											<input type="checkbox" id="wpmcp-toggle-all" />
+											<strong><?php esc_html_e( 'Select all', 'wp-mcp-connector-plus' ); ?></strong>
+											<span class="description" id="wpmcp-post-type-count"></span>
+										</label>
+									</p>
+								<?php endif; ?>
+								<?php foreach ( $extra_options as $slug => $label ) : ?>
+									<?php $sensitive = wpmcp_post_type_holds_personal_data( $slug ); ?>
+									<p>
+										<label>
+											<input type="checkbox" name="wpmcp_extra_post_types[]"
+												value="<?php echo esc_attr( $slug ); ?>"
+												<?php checked( in_array( $slug, $extra_selected, true ) ); ?> />
+											<?php echo esc_html( $label ); ?>
+											<code><?php echo esc_html( $slug ); ?></code>
+											<?php if ( $sensitive ) : ?>
+												<span style="color:#b32d2e" title="<?php esc_attr_e( 'This post type usually holds other people\'s data.', 'wp-mcp-connector-plus' ); ?>">
+													<?php esc_html_e( 'personal data', 'wp-mcp-connector-plus' ); ?>
+												</span>
+											<?php endif; ?>
+										</label>
+									</p>
+								<?php endforeach; ?>
+							</div>
+							<?php
+							// Inline and on this screen only. Nothing this plugin does
+							// is worth an enqueued file on a page nobody is looking at.
+							?>
+							<script>
+							( function () {
+								var wrap = document.getElementById( 'wpmcp-post-types' );
+								if ( ! wrap ) { return; }
+
+								var all   = wrap.querySelector( '#wpmcp-toggle-all' );
+								var boxes = wrap.querySelectorAll( 'input[name="wpmcp_extra_post_types[]"]' );
+								var count = wrap.querySelector( '#wpmcp-post-type-count' );
+
+								function sync() {
+									var on = 0;
+									boxes.forEach( function ( box ) { if ( box.checked ) { on++; } } );
+
+									if ( count ) {
+										count.textContent = '(' + on + ' / ' + boxes.length + ')';
+									}
+									if ( all ) {
+										all.checked = ( on === boxes.length );
+										// Half-selected has to look like half-selected,
+										// or the next click is a guess.
+										all.indeterminate = ( on > 0 && on < boxes.length );
+									}
+								}
+
+								if ( all ) {
+									all.addEventListener( 'change', function () {
+										boxes.forEach( function ( box ) { box.checked = all.checked; } );
+										sync();
+									} );
+								}
+								boxes.forEach( function ( box ) {
+									box.addEventListener( 'change', sync );
+								} );
+
+								sync();
+							}() );
+							</script>
 						<?php endif; ?>
 						<p class="description">
 							<?php esc_html_e( 'Public post types and pages are already in scope. Everything else is listed here — a theme\'s headers, footers, hooks and content templates among them. Adding one is a real decision: those apply to every page at once, the way a synced pattern does, so a change there is not confined to the page being edited. In code, the wpmcp_allowed_post_types filter does the same thing.', 'wp-mcp-connector-plus' ); ?>
+							<br>
+							<strong><?php esc_html_e( 'The ones marked "personal data" are a different question.', 'wp-mcp-connector-plus' ); ?></strong>
+							<?php esc_html_e( 'Orders, subscriptions and form entries hold your customers\' names and addresses. Ticking one lets the agent read them. That is rarely what you want from a tool for editing pages, and on a shop it is a decision your privacy policy has to cover.', 'wp-mcp-connector-plus' ); ?>
 						</p>
 					</td>
 				</tr>

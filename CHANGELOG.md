@@ -7,6 +7,21 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.15.0] - 2026-09-11
+
+Zwei Komfort-Wuensche, einer davon mit Sicherheitsgewinn.
+
+### Hinzugefuegt
+
+- **Arbeitssitzung.** Ein Knopf oben auf der Einstellungsseite oeffnet alles fuer 1, 4 oder 8 Stunden: Veroeffentlichtes bearbeitbar, Muster schreibbar, Dynamic Data erlaubt. Danach faellt alles auf die gespeicherten Einstellungen zurueck, und die Rollenrechte werden mitgezogen.
+  - Das ist **sicherer als der Ist-Zustand**, nicht lockerer. Die weiten Einstellungen sind die, die jemand fuer einen Nachmittag anschaltet und nie wieder aus - die Seite steht dann dauerhaft auf der weitesten Stufe, also genau dem, was die Einstellungen verhindern sollten. Das Schliessen ist jetzt ein Zeitstempel statt einer Erinnerung.
+  - Das Fenster schliesst sich auch dann, wenn niemand ins Backend geht: die Stufe wird ohnehin bei jedem Request frisch gelesen, und die gespeicherten Rollenrechte raeumt der Konnektor an seinem eigenen Endpunkt auf.
+  - **Was eine Sitzung nie anfasst:** die Post-Types (welche Inhalte im Zugriff sind, ist eine Entscheidung ueber die Seite, kein Risikofenster - und auf einem Shop stehen dort fremde Bestellungen) und das Veroeffentlichen, das kein Schalter in diesem Plugin je erreichen konnte.
+- **"Alle auswaehlen" bei den Post-Types**, ab sechs Eintraegen, mit Zaehler und Zwischenzustand fuer halb ausgewaehlt. Auf einem WooCommerce-Shop stehen dort dreissig Haken.
+- **Post-Types mit Kundendaten sind markiert.** Bestellungen, Abos, Formulareingaenge, Buchungen: rot gekennzeichnet, mit einem Satz darunter, was das Anhaken bedeutet. Das aendert nichts an dem, was erlaubt ist - es sorgt nur dafuer, dass ein Haken an `shop_order` nicht aussieht wie ein Haken an `gp_elements`. Gerade mit einem "Alle auswaehlen" daneben ist das keine Kosmetik.
+
+---
+
 ## [0.14.0] - 2026-09-11
 
 Auf die Frage, warum der Konnektor so viele Token verbraucht. Gemessen statt geschaetzt - und das meiste davon war Wiederholung, nicht Sicherheit.

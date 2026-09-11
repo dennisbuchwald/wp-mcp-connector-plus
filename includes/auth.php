@@ -84,5 +84,12 @@ add_filter( 'wp_is_application_passwords_available_for_user', 'wpmcp_app_passwor
  * @return bool
  */
 function wpmcp_transport_permission() {
+	// A session that ran out between two requests has to close here too:
+	// nothing else runs on this endpoint, and waiting for someone to open
+	// wp-admin would leave the capabilities wide for as long as nobody does.
+	if ( function_exists( 'wpmcp_close_expired_work_session' ) ) {
+		wpmcp_close_expired_work_session();
+	}
+
 	return is_user_logged_in() && current_user_can( WPMCP_CAP );
 }
