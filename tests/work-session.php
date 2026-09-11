@@ -33,7 +33,13 @@ function __( $t, $d = null ) { return $t; }
 function get_role( $r ) { return null; }
 function is_multisite() { return false; }
 function post_type_exists( $t ) { return true; }
-function get_post_types( $a = array(), $o = 'names' ) { return array(); }
+function get_post_types( $a = array(), $o = 'names' ) {
+	$all = array( 'gp_elements', 'wp_template', 'acf-field-group', 'product', 'shop_order', 'shop_order_refund', 'wc_subscription', 'revision', 'attachment' );
+	if ( 'names' === $o ) { return $all; }
+	$out = array();
+	foreach ( $all as $n ) { $out[ $n ] = (object) array( 'name' => $n, 'public' => in_array( $n, array( 'product' ), true ), 'labels' => (object) array( 'name' => $n ) ); }
+	return $out;
+}
 function get_post_type_object( $t ) { return null; }
 function human_time_diff( $a, $b = 0 ) { return (int) ( ( $b - $a ) / 60 ) . ' Minuten'; }
 function wpmcp_allowed_post_types() { return array( 'page' ); }
@@ -128,9 +134,33 @@ check(
 	'vergeben: ' . implode( ', ', array_intersect( $forbidden, $granted ) )
 );
 
-// Which content is in scope is a decision about the site, not a window.
+// The building blocks come along: an hour of work must not start with
+// thirty ticks. Somebody else's orders do not.
 $GLOBALS['options']['wpmcp_extra_post_types'] = array();
-check( array() === wpmcp_extra_post_types(), 'sie hakt keine Post-Types an', 'auf einem Shop stehen dort fremde Bestellungen' );
+$in_scope = wpmcp_extra_post_types();
+
+check( in_array( 'gp_elements', $in_scope, true ), 'sie oeffnet die Bausteine der Seite' );
+check( in_array( 'wp_template', $in_scope, true ), 'auch die Templates' );
+check( in_array( 'acf-field-group', $in_scope, true ), 'und die Feldgruppen' );
+
+check( ! in_array( 'shop_order', $in_scope, true ), 'aber keine Bestellungen', 'kein Zeitfenster macht fremde Adressen zum Nebeneffekt' );
+check( ! in_array( 'shop_order_refund', $in_scope, true ), 'keine Erstattungen' );
+check( ! in_array( 'wc_subscription', $in_scope, true ), 'keine Abos' );
+check( ! in_array( 'revision', $in_scope, true ), 'und nichts ohne Blockbaum' );
+
+// A tick made by hand was a decision and survives the window either way.
+$GLOBALS['options']['wpmcp_extra_post_types'] = array( 'shop_order' );
+check(
+	in_array( 'shop_order', wpmcp_extra_post_types(), true ),
+	'ein von Hand gesetzter Haken zaehlt weiterhin',
+	'die Sitzung setzt ihn nicht, nimmt ihn aber auch niemandem weg'
+);
+
+// And he is gone again the moment the window closes.
+$GLOBALS['options']['wpmcp_extra_post_types'] = array();
+$GLOBALS['options']['wpmcp_work_session_until'] = time() - 60;
+check( array() === wpmcp_extra_post_types(), 'nach Ablauf ist die Erweiterung weg' );
+$GLOBALS['options']['wpmcp_work_session_until'] = time() + 3600;
 
 // An unreasonable window falls back to the shortest.
 $GLOBALS['options'] = array();

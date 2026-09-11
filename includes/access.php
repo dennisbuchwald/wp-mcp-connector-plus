@@ -140,7 +140,16 @@ function wpmcp_extra_post_types() {
 	}
 
 	// A post type can be deactivated with its plugin between two requests.
-	return array_values( array_filter( array_map( 'strval', $stored ), 'post_type_exists' ) );
+	$ticked = array_values( array_filter( array_map( 'strval', $stored ), 'post_type_exists' ) );
+
+	// A session reaches the site's own building blocks without thirty ticks.
+	// What was ticked by hand stays either way — including anything holding
+	// personal data, which a session never adds on its own.
+	if ( wpmcp_work_session_active() ) {
+		return array_values( array_unique( array_merge( $ticked, wpmcp_session_post_types() ) ) );
+	}
+
+	return $ticked;
 }
 
 /**
@@ -154,17 +163,7 @@ function wpmcp_extra_post_types() {
  * @return array<string, string> Slug => label.
  */
 function wpmcp_selectable_post_types() {
-	$never = array(
-		'attachment',
-		'revision',
-		'nav_menu_item',
-		'custom_css',
-		'customize_changeset',
-		'oembed_cache',
-		'user_request',
-		'wp_block',
-	);
-
+	$never   = wpmcp_never_offered_post_types();
 	$already = wpmcp_allowed_post_types();
 	$options = array();
 
@@ -186,6 +185,59 @@ function wpmcp_selectable_post_types() {
 	ksort( $options );
 
 	return $options;
+}
+
+/**
+ * Post types that never hold a block tree, so offering them is noise.
+ *
+ * @return string[]
+ */
+function wpmcp_never_offered_post_types() {
+	return array(
+		'attachment',
+		'revision',
+		'nav_menu_item',
+		'custom_css',
+		'customize_changeset',
+		'oembed_cache',
+		'user_request',
+		'wp_block',
+	);
+}
+
+/**
+ * What a work session adds to the scope on its own.
+ *
+ * Everything the site has, minus two kinds: what never holds a block tree,
+ * and what holds other people's data. A session is a window on this site's
+ * own building blocks — headers, templates, field groups — so that an hour
+ * of work does not begin with thirty ticks.
+ *
+ * Orders, subscriptions and form entries are not that. They are somebody
+ * else's name and address, and no length of window turns reading them into
+ * a side effect of working on a page. Those stay a tick somebody makes
+ * deliberately, and a tick already made still counts: it was a decision.
+ *
+ * Computed without wpmcp_allowed_post_types(), which would call back into
+ * the function this feeds.
+ *
+ * @return string[]
+ */
+function wpmcp_session_post_types() {
+	$never = wpmcp_never_offered_post_types();
+	$types = array();
+
+	foreach ( get_post_types( array(), 'objects' ) as $type ) {
+		if ( in_array( $type->name, $never, true ) ) {
+			continue;
+		}
+		if ( wpmcp_post_type_holds_personal_data( $type->name ) ) {
+			continue;
+		}
+		$types[] = $type->name;
+	}
+
+	return $types;
 }
 
 /**

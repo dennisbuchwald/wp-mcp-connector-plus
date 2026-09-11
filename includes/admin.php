@@ -318,7 +318,7 @@ function wpmcp_render_admin_page() {
 					<?php
 					printf(
 						/* translators: %s: remaining time, e.g. "3 hours". */
-						esc_html__( 'Everything is open for another %s: published pages, synced patterns and dynamic data. It closes itself, you do not have to remember it.', 'wp-mcp-connector-plus' ),
+						esc_html__( 'Everything is open for another %s: published pages, synced patterns, dynamic data, and every post type this site has apart from the ones holding customer data. It closes itself, you do not have to remember it.', 'wp-mcp-connector-plus' ),
 						esc_html( wpmcp_work_session_remaining() )
 					);
 					?>
@@ -330,7 +330,7 @@ function wpmcp_render_admin_page() {
 			<?php else : ?>
 				<p style="margin:0 0 8px">
 					<strong><?php esc_html_e( 'Working on the site?', 'wp-mcp-connector-plus' ); ?></strong>
-					<?php esc_html_e( 'Open everything for a set time instead of leaving a wide setting on. A session lifts the access level to published pages, makes synced patterns editable and allows dynamic data — and closes itself when the time is up. The settings below are what the site falls back to.', 'wp-mcp-connector-plus' ); ?>
+					<?php esc_html_e( 'Open everything for a set time instead of leaving a wide setting on. A session lifts the access level to published pages, makes synced patterns editable, allows dynamic data and brings every post type into scope — apart from the ones holding customer data, which stay a tick somebody makes on purpose. It closes itself when the time is up; the settings below are what the site falls back to.', 'wp-mcp-connector-plus' ); ?>
 				</p>
 				<form method="post" style="display:inline">
 					<?php wp_nonce_field( 'wpmcp_work_session', 'wpmcp_session_nonce' ); ?>

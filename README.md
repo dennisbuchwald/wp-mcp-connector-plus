@@ -372,10 +372,16 @@ afternoon and never switch off, which leaves a site permanently on the
 widest setting — exactly what having settings was meant to prevent. The
 closing is a timestamp, not something anyone has to remember.
 
-What a session never touches: the post types in scope, because that is a
-decision about the site rather than a risk window and on a shop the list
-contains other people's orders. And publishing, which nothing in this
-plugin has ever been able to reach.
+A session also brings the site's own building blocks into scope —
+headers, templates, field groups, whatever else is registered — so an hour
+of work does not begin with thirty ticks. **Except** the post types
+holding other people's data: orders, subscriptions, form entries,
+bookings. No length of window turns reading a customer's address into a
+side effect of editing a page, so those stay a tick somebody makes
+deliberately. A tick already made survives the window either way.
+
+And publishing, which nothing in this plugin has ever been able to
+reach.
 
 **Additional post types** is a fourth setting, empty by default. It lists
 every post type the site has that is not already in scope — the theme's

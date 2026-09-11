@@ -7,6 +7,18 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.15.1] - 2026-09-11
+
+Auf Nachfrage: Eine Arbeitssitzung soll auch die Post-Types mitbringen, sonst ist es kein Dev-Modus.
+
+### Geaendert
+
+- **Eine Sitzung oeffnet jetzt auch die Post-Types** - Header, Templates, Feldgruppen, alles was die Seite sonst registriert. Der Einwand war richtig: eine Stunde Arbeit darf nicht mit dreissig Haken anfangen.
+- **Ausser denen mit Kundendaten.** Bestellungen, Abos, Formulareingaenge, Buchungen bleiben draussen. Kein Zeitfenster macht das Lesen fremder Adressen zum Nebeneffekt einer Seitenbearbeitung - das bleibt ein Haken, den jemand bewusst setzt. Ein bereits gesetzter Haken zaehlt weiterhin, auch waehrend einer Sitzung: das war eine Entscheidung.
+- Nach Ablauf faellt die Erweiterung weg wie alles andere auch.
+
+---
+
 ## [0.15.0] - 2026-09-11
 
 Zwei Komfort-Wuensche, einer davon mit Sicherheitsgewinn.
