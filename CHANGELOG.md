@@ -7,6 +7,24 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.13.1] - 2026-09-11
+
+Aus dem ersten Aktivierungsversuch auf einer Shop-Seite: Die ganze Seite lag im Fatal Error, und zwar in WooCommerce Germanized.
+
+### Behoben
+
+- **Das Plugin lieferte einen halben Jetpack-Autoloader aus.** Der mcp-adapter haengt von `automattic/jetpack-autoloader` ab, und dessen Manifeste (`vendor/composer/jetpack_autoload_*.php`) lagen im Paket - waehrend das Composer-Plugin, das `vendor/autoload_packages.php` erzeugt, bewusst abgeschaltet ist. Damit war die Haelfte da, die anmeldet ("ich habe Autoloader-Version 5.0.23"), und die Haelfte fehlte, die jemand laden kann.
+  - Jedes Plugin mit demselben Autoloader - Jetpack, WooCommerce, Germanized - durchsucht die aktiven Plugins, liest `jetpack_autoload_classmap.php`, haelt unseren fuer den neuesten und laedt `vendor/autoload_packages.php`. Die Datei gab es nie. Fatal Error bei **jedem Request**, nicht nur im Backend.
+  - Auf Seiten ohne ein solches Plugin faellt es nicht auf - deshalb lief es auf navok.org und dbw-media.de monatelang unauffaellig.
+- Die Manifeste sind raus, stehen in der `.gitignore` und werden von einem `post-install-cmd` entfernt, falls ein `composer install` sie neu erzeugt. Der gewoehnliche Composer-Autoloader (`vendor/autoload.php`) traegt unveraendert; er hat die Jetpack-Dateien nie gebraucht.
+- Neue Testsuite `shipped-files`, die prueft, was das Paket an andere Plugins meldet.
+
+### Wenn eine Seite gerade haengt
+
+Ordner `wp-content/plugins/wp-mcp-connector-plus*` per FTP oder Dateimanager umbenennen. WordPress deaktiviert das Plugin dann von selbst und die Seite laeuft sofort wieder. Danach 0.13.1 installieren.
+
+---
+
 ## [0.13.0] - 2026-09-10
 
 Aus dem naechsten Rueckmeldebericht: 22 Seiten gebaut, danach 22 Slugs und Elternteile von Hand in wp-admin korrigiert.

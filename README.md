@@ -185,6 +185,15 @@ included. Nothing in this plugin can reach past that.
 Editing the database with WP-CLI gets past it because WP-CLI runs without
 a user, so none of these checks happen at all — a way around, not a fix.
 
+**A fatal error naming `vendor/autoload_packages.php` in another plugin**
+(Jetpack, WooCommerce, Germanized). That file belongs to the Jetpack
+autoloader, which this plugin does not use — but the mcp-adapter depends on
+the package, and up to 0.13.0 its manifests were shipped in
+`vendor/composer/`. They announce an autoloader without providing one, so
+every plugin sharing that mechanism picked this one as the newest and
+required a file that was never generated. Fixed in 0.13.1: update, or
+delete the folder over FTP to bring the site back first.
+
 **"Another plugin loaded mcp-adapter X".** The adapter is a library that
 other plugins bundle too — Rank Math SEO ships one, for instance — and
 whichever copy loads first wins. This plugin checks whether the loaded
@@ -545,6 +554,7 @@ php tests/dynamic-data.php                       # the guard that replaces kses 
 php tests/large-payload.php                      # a 32 KB legal text in one call
 php tests/head-and-plugins.php                   # does the meta title reach the page?
 php tests/placement.php                          # slug, parent and status: where the line runs
+php tests/shipped-files.php                      # what the vendor folder announces to other plugins
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -594,6 +604,9 @@ Each suite exists because of a specific failure:
 - **placement** — the line between a draft, which the agent may move and
   rename, and a live page, whose address other people's links depend on.
   Every way past it, including the ones that would publish.
+- **shipped-files** — a shop site went down on activation, from a fatal
+  inside another plugin. Half a Jetpack autoloader was being shipped: the
+  half that announces one, without the half anyone can load.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 

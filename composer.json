@@ -20,6 +20,11 @@
         "wordpress/mcp-adapter": "0.6.1",
         "yahnis-elsts/plugin-update-checker": "^5.7"
     },
+    "scripts": {
+        "post-install-cmd": "@drop-jetpack-manifests",
+        "post-update-cmd": "@drop-jetpack-manifests",
+        "drop-jetpack-manifests": "rm -f vendor/composer/jetpack_autoload_*.php vendor/autoload_packages.php"
+    },
     "config": {
         "allow-plugins": {
             "automattic/jetpack-autoloader": false

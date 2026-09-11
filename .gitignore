@@ -4,3 +4,12 @@
 
 /tests/wp-shim/
 .DS_Store
+
+# Half a Jetpack autoloader is worse than none. The mcp-adapter pulls in
+# automattic/jetpack-autoloader, whose Composer plugin we deliberately do
+# not run — so these manifests would advertise an autoloader this plugin
+# does not have, and every other plugin using the same autoloader (Jetpack,
+# WooCommerce, Germanized) would require a vendor/autoload_packages.php
+# that was never generated. That is a fatal error on the whole site.
+/vendor/composer/jetpack_autoload_*.php
+/vendor/autoload_packages.php
