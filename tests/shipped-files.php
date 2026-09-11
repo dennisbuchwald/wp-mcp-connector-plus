@@ -99,6 +99,42 @@ check(
 	'sonst kommen sie beim naechsten composer install zurueck'
 );
 
+echo "\n\033[1mWas jede Sitzung im Kontext traegt\033[0m\n";
+
+// Tool descriptions are sent once per session and sit there for its whole
+// length. They are also what makes the agent behave like an editor rather
+// than a CRUD client, so the answer is not "as short as possible" — it is
+// "no repetition". This budget is here so twelve more releases of
+// appending do not quietly double it again.
+$src = file_get_contents( $root . '/includes/abilities.php' );
+preg_match_all( "/wp_register_ability\(\s*'([^']+)'/", $src, $names );
+
+$total   = 0;
+$largest = array( 'name' => '', 'len' => 0 );
+
+foreach ( $names[1] as $name ) {
+	$chunk = substr( $src, strpos( $src, "'" . $name . "'" ), 6000 );
+	if ( ! preg_match( "/'description' => '((?:[^'\\\\]|\\\\.)*)'/", $chunk, $d ) ) {
+		continue;
+	}
+	$len    = strlen( stripslashes( $d[1] ) );
+	$total += $len;
+	if ( $len > $largest['len'] ) {
+		$largest = array( 'name' => $name, 'len' => $len );
+	}
+}
+
+check(
+	$total > 0 && $total < 11000,
+	sprintf( 'alle Beschreibungen zusammen: %s Zeichen (~%d Tokens)', number_format( $total ), (int) ( $total / 4 ) ),
+	'ueber 11000 Zeichen - pruefen, was sich doppelt'
+);
+check(
+	$largest['len'] < 2000,
+	sprintf( 'die laengste ist %s mit %d Zeichen (~%d Tokens)', $largest['name'], $largest['len'], (int) ( $largest['len'] / 4 ) ),
+	'eine Beschreibung ueber 2000 Zeichen erklaert etwas zweimal'
+);
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mAuslieferung in Ordnung.\033[0m\n";

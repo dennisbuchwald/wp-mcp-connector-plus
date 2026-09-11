@@ -627,6 +627,35 @@ t_ok( ! is_wp_error( $result ), 'und derselbe Pfad trifft beim Schreiben' );
 t_same( 'B', $result['blocks'][1]['innerBlocks'][0]['innerBlocks'][0]['attrs']['heading'], 'genau den gelesenen Block' );
 
 // ---------------------------------------------------------------------
+t_group( 'Wiederholung ist keine Information' );
+
+// Forty identical cards produced forty identical warnings: 2,577 tokens of
+// the same sentence, in every dry run and every write, saying nothing the
+// first one did not.
+$many = wpmcp_validate_blocks( parse_blocks( str_repeat( '<!-- wp:dbw-base/cards /-->', 80 ) ) );
+t_same( 1, count( $many['warnings'] ), '80 gleiche Warnungen werden zu einer' );
+t_ok( false !== strpos( $many['warnings'][0], '80 blocks' ), 'die Anzahl steht drin' );
+t_ok( false !== strpos( $many['warnings'][0], 'for example 0, 1, 2' ), 'und ein paar Fundstellen' );
+
+// Few enough to read stays in full — the point is repetition, not detail.
+$few = wpmcp_summarise_issues( array( '0: Problem A', '1: Problem A' ) );
+t_same( 2, count( $few ), 'zwei gleiche Meldungen bleiben einzeln' );
+
+$mixed = wpmcp_summarise_issues(
+	array( '0: A', '1: A', '2: A', '3: A', '9: B' )
+);
+t_same( 2, count( $mixed ), 'verschiedene Probleme bleiben getrennt' );
+t_ok( in_array( '9: B', $mixed, true ), 'das seltene unveraendert' );
+
+// The false alarm behind most of that volume: a list item holds text, not
+// blocks, and declares allowedBlocks only so lists can nest.
+$filled = wpmcp_validate_blocks( parse_blocks( '<!-- wp:dbw-base/cards --><p>Text drin</p><!-- /wp:dbw-base/cards -->' ) );
+t_same( 0, count( $filled['warnings'] ), 'ein Container mit Text gilt nicht als leer' );
+
+$empty = wpmcp_validate_blocks( parse_blocks( '<!-- wp:dbw-base/cards /-->' ) );
+t_same( 1, count( $empty['warnings'] ), 'ein wirklich leerer weiterhin schon' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

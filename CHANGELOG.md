@@ -7,6 +7,29 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.14.0] - 2026-09-11
+
+Auf die Frage, warum der Konnektor so viele Token verbraucht. Gemessen statt geschaetzt - und das meiste davon war Wiederholung, nicht Sicherheit.
+
+### Geaendert
+
+- **Eine Warnung, die achtzigmal dasselbe sagt, steht jetzt einmal da.** Eine Seite mit vierzig gleichartigen Karten erzeugte vierzig identische Warnungen: **2.577 Tokens desselben Satzes, in jedem Probelauf und jedem Schreibvorgang**. Zusammengefasst sind es 39 - mit Anzahl und drei Beispielpfaden, also allem, was zum Handeln noetig ist. Kommt ein Problem nur wenige Male vor, steht es weiterhin einzeln da; es geht um Wiederholung, nicht um Details.
+- **Die groesste Werkzeugbeschreibung war ueber zwoelf Releases angewachsen** und erklaerte manches zweimal. `content-write` von 2.488 auf 1.633 Zeichen (622 auf 408 Tokens), alle sechzehn zusammen von ~2.368 auf ~2.154 Tokens. Jede Regel ist noch drin, nur die Begruendungen sind kuerzer - die Beschreibungen steuern das Verhalten des Agenten, das ist kein Ort zum Sparen um jeden Preis.
+
+### Behoben
+
+- **Fehlalarm bei Listenpunkten.** Die Warnung "Container ohne Bloecke" traf jeden Block, der `allowedBlocks` deklariert und Text statt Bloecke enthaelt - ein `core/list-item` deklariert das nur, damit Listen sich verschachteln lassen. Auf einer echten Seite waren das achtzig falsche Warnungen, und sie machten den Loewenanteil der Antwort aus. Ein Container mit Text gilt nicht mehr als leer.
+
+### Dazu
+
+- Die Testsuite `shipped-files` prueft jetzt auch das Kontextbudget: alle Beschreibungen zusammen unter 11.000 Zeichen, keine einzelne ueber 2.000. Damit waechst das nicht wieder still zu.
+
+### Was nicht teuer ist
+
+Die Sicherheitsstufen. Sie laufen in PHP auf dem Server und kosten **null Tokens**: die fuenfstufige Validierung, der Berechtigungsvergleich, die kses-Analyse, der Guard gegen Scripts. Teuer war, was der Konnektor *sagt*, nicht was er *prueft*.
+
+---
+
 ## [0.13.1] - 2026-09-11
 
 Aus dem ersten Aktivierungsversuch auf einer Shop-Seite: Die ganze Seite lag im Fatal Error, und zwar in WooCommerce Germanized.

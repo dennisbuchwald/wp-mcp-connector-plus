@@ -60,6 +60,55 @@ function wpmcp_has_orphaned_structured_data( $html ) {
 }
 
 /**
+ * Say a repeated problem once, with the count and a few places it occurs.
+ *
+ * A page of forty identical cards produced forty identical warnings —
+ * 2,577 tokens of the same sentence, in every dry run and every write.
+ * The caller learns nothing from the fortieth that the first did not
+ * already say, and it is paying for all of them.
+ *
+ * Anything occurring a handful of times is still listed in full: the
+ * point is to drop repetition, not detail.
+ *
+ * @param string[] $messages Errors or warnings.
+ * @param int      $examples How many paths to name for a collapsed group.
+ * @return string[]
+ */
+function wpmcp_summarise_issues( array $messages, $examples = 3 ) {
+	$groups = array();
+
+	foreach ( $messages as $message ) {
+		$shape              = wpmcp_issue_shape( $message );
+		$groups[ $shape ][] = $message;
+	}
+
+	$out = array();
+
+	foreach ( $groups as $shape => $found ) {
+		if ( count( $found ) <= $examples ) {
+			$out = array_merge( $out, $found );
+			continue;
+		}
+
+		$paths = array();
+		foreach ( array_slice( $found, 0, $examples ) as $message ) {
+			if ( preg_match( '/^([0-9]+(?:\.[0-9]+)*):/', $message, $m ) ) {
+				$paths[] = $m[1];
+			}
+		}
+
+		$out[] = sprintf(
+			'%d blocks: %s%s',
+			count( $found ),
+			$shape,
+			empty( $paths ) ? '' : ' (for example ' . implode( ', ', $paths ) . ')'
+		);
+	}
+
+	return $out;
+}
+
+/**
  * Strip the leading block path from a message, so the same problem in a
  * different position counts as the same problem. Paths shift whenever a
  * block is inserted or removed.
@@ -174,8 +223,8 @@ function wpmcp_validate_blocks( array $blocks, ?array $before = null ) {
 	}
 
 	return array(
-		'errors'     => $errors,
-		'warnings'   => $warnings,
+		'errors'     => wpmcp_summarise_issues( $errors ),
+		'warnings'   => wpmcp_summarise_issues( $warnings ),
 		'serialized' => $serialized,
 	);
 }
@@ -242,7 +291,15 @@ function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$e
 
 		// A closed container with nothing in it renders as nothing. Usually
 		// a leftover from a template that was adapted but not emptied.
-		if ( ! empty( $type->allowed_blocks ) && empty( $block['innerBlocks'] ) ) {
+		//
+		// "Nothing in it" has to mean nothing at all. A core/list-item
+		// declares allowedBlocks so a list can nest, and then every
+		// ordinary bullet point looks like an empty container: one real
+		// page produced eighty identical warnings this way, which is both
+		// wrong and the bulk of the answer.
+		$holds_text = '' !== trim( wp_strip_all_tags( (string) ( $block['innerHTML'] ?? '' ) ) );
+
+		if ( ! empty( $type->allowed_blocks ) && empty( $block['innerBlocks'] ) && ! $holds_text ) {
 			$warnings[] = sprintf(
 				'%s: "%s" is a container and holds no blocks. It renders as an empty section — either fill it or remove it.',
 				$path,
