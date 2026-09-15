@@ -316,6 +316,21 @@ content, **meta has no revision behind it** — WordPress does not version
 post meta. The previous value is therefore in the dry run, in the
 response, and in the activity log, because nothing else will hold it.
 
+**Plugin settings on their own post type.** Some post types are nothing
+but their plugin's settings — a GeneratePress element without its type,
+location and display conditions saves cleanly and shows nowhere. For
+those, the plugin's own meta prefix is readable and writable, arrays
+included, on that post type only (`gp_elements`: `_generate_*`; more via
+the `wpmcp_post_type_meta_prefixes` filter). Read an existing element
+first with `include_meta` and copy its keys: they differ between plugin
+versions, and a guessed key produces an element that displays nowhere.
+
+Two things stay out regardless. No meta key that could make a post run
+code — GeneratePress's "Execute PHP" switch among them — is ever written.
+And an element that already has that switch on is not writable at all,
+because its content is PHP evaluated on the server, which the markup
+guard cannot see.
+
 **Changing text inside a block** is `patch_html`, not `replace`. `replace`
 demands the whole block back, which on a long legal page means retyping
 tens of thousands of characters to correct a phone number — and every

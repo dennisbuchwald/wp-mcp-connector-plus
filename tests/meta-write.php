@@ -22,7 +22,11 @@ require_once __DIR__ . '/bootstrap.php';
 $GLOBALS['meta']    = array();
 $GLOBALS['deleted'] = array();
 
-function get_post_meta( $id, $key, $single = false ) {
+function get_post_meta( $id, $key = '', $single = false ) {
+	if ( '' === $key ) {
+		// WordPress returns every key with a list of values.
+		return array_map( function ( $v ) { return array( $v ); }, $GLOBALS['meta'] );
+	}
 	return $GLOBALS['meta'][ $key ] ?? '';
 }
 function update_post_meta( $id, $key, $value ) {
@@ -135,6 +139,55 @@ $GLOBALS['meta'] = array( 'rank_math_title' => 'Gleich' );
 $diff    = wpmcp_meta_diff( $post, array( 'rank_math_title' => 'Gleich' ) );
 $written = wpmcp_apply_meta( $post, $diff['fields'] );
 check( empty( $written ), 'ein unveraendertes Feld wird nicht angefasst' );
+
+echo "\n\033[1mPlugin-Meta auf ihrem eigenen Post-Type\033[0m\n";
+
+// A GeneratePress element is nothing but its settings. Created through the
+// connector without them, it saves cleanly and displays nowhere.
+$element = (object) array( 'ID' => 7, 'post_type' => 'gp_elements' );
+$page    = (object) array( 'ID' => 8, 'post_type' => 'page' );
+
+$GLOBALS['meta'] = array();
+$conditions      = array( array( 'rule' => 'general:site', 'object' => '' ) );
+
+$diff = wpmcp_meta_diff( $element, array( '_generate_block_type' => 'site-footer', '_generate_element_display_conditions' => $conditions ) );
+check( empty( $diff['errors'] ), 'auf gp_elements ist _generate_* schreibbar', implode( ' ', $diff['errors'] ) );
+check( $conditions === $diff['fields']['_generate_element_display_conditions']['to'], 'auch als Array, in seiner Form' );
+check( 2 === $diff['changes'], 'beide Felder zaehlen als Aenderung' );
+
+$written = wpmcp_apply_meta( $element, $diff['fields'] );
+check( $conditions === $GLOBALS['meta']['_generate_element_display_conditions'], 'und landet so in der Datenbank' );
+check(
+	false !== strpos( wpmcp_meta_log_line( $diff['fields'] ), 'general:site' ),
+	'die Protokollzeile kann Arrays',
+	'sonst stirbt der Log genau bei den Feldern ohne Revision'
+);
+
+$diff = wpmcp_meta_diff( $element, array( '_generate_element_display_conditions' => $conditions ) );
+check( 0 === $diff['changes'], 'dasselbe Array noch einmal ist keine Aenderung' );
+
+$diff = wpmcp_meta_diff( $page, array( '_generate_block_type' => 'site-footer' ) );
+check( ! empty( $diff['errors'] ), 'auf einer normalen Seite bleibt das Praefix gesperrt' );
+
+echo "\n\033[1mNie ueber Meta: Code ausfuehren\033[0m\n";
+
+$diff = wpmcp_meta_diff( $element, array( '_generate_hook_execute_php' => 'true' ) );
+check( ! empty( $diff['errors'] ), 'der Execute-PHP-Schalter ist nicht schreibbar, obwohl das Praefix passt' );
+check(
+	! empty( $diff['errors'] ) && false !== strpos( $diff['errors'][0], 'run its content as code' ),
+	'und die Meldung sagt warum',
+	$diff['errors'][0] ?? ''
+);
+
+$GLOBALS['meta'] = array( '_generate_hook_execute_php' => 'true', '_generate_hook' => 'wp_footer' );
+check( wpmcp_runs_code( $element ), 'ein Element mit Execute PHP wird erkannt', 'dessen Inhalt waere PHP auf dem Server' );
+
+$read = wpmcp_read_plugin_meta( $element );
+check( isset( $read['_generate_hook'] ), 'lesen liefert die Einstellungen des Elements' );
+check( ! isset( $read['_generate_hook_execute_php'] ), 'aber nicht den Code-Schalter' );
+
+$GLOBALS['meta'] = array( '_generate_hook_execute_php' => '' );
+check( ! wpmcp_runs_code( $element ), 'ausgeschaltet ist es ein gewoehnliches Element' );
 
 echo "\n";
 if ( 0 === $fail ) {

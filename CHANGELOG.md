@@ -7,6 +7,27 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.16.0] - 2026-09-15
+
+Aus dem Bericht zur Ersteinrichtung von berlin-marine.de. Drei der fuenf Punkte gab es schon (content-create, Slug/Parent/Status seit 0.13.0, kompaktes blocks-describe seit 0.12.0) - der Bericht war gegen eine aeltere Version geschrieben. Neu war der Footer als GeneratePress-Element.
+
+### Hinzugefuegt
+
+- **Plugin-Meta auf ihrem eigenen Post-Type.** Ein GP-Element ist ohne seine Meta-Felder eine leere Huelle: gespeichert, aber nirgends angezeigt. Auf `gp_elements` ist jetzt `_generate_*` les- und schreibbar, auch als Array. Nur dort, nie auf einer Seite. Weitere Post-Types per Filter `wpmcp_post_type_meta_prefixes`.
+- `content-read` mit `include_meta` liefert diese Felder unter `plugin`. Das ist der vorgesehene Weg: ein bestehendes Element lesen und Schluessel und Form uebernehmen. Die Schluessel unterscheiden sich je nach GP-Version, und die im Bericht vorgeschlagenen (`_generate_element_location`, Regel `entire_site`) sind geraten - mit denen waere das Element wieder nirgends erschienen.
+
+### Sicherheit
+
+- **Kein Meta-Schluessel, der Code ausfuehren kann, ist schreibbar**, auch wenn das Praefix passt. GeneratePress hat fuer Hook-Elemente einen Schalter "Execute PHP", der den Inhalt bei jedem Seitenaufruf als PHP auswertet.
+- **Ein Element mit eingeschaltetem Execute PHP ist gar nicht schreibbar.** Das war schon seit 0.11.0 eine Luecke, sobald jemand `gp_elements` freigab: Der Script-Guard sucht nach Markup, das im Browser laeuft - eine Zeile PHP ist fuer ihn gewoehnlicher Text. Den Inhalt eines solchen Elements zu schreiben hiesse, Code auf den Server zu schreiben.
+
+### Bewusst nicht gebaut
+
+- **Status `publish`**, auch nicht auf der Vollstufe. "Veroeffentlichen bleibt beim Menschen" war eine Grundentscheidung von Anfang an, und die kippe ich nicht in einem Feature-Request. Offen zur Entscheidung.
+- **Bild-Upload** - weiterhin offen zur Entscheidung, siehe 0.12.0.
+
+---
+
 ## [0.15.1] - 2026-09-11
 
 Auf Nachfrage: Eine Arbeitssitzung soll auch die Post-Types mitbringen, sonst ist es kein Dev-Modus.

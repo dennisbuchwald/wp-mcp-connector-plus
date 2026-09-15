@@ -270,7 +270,7 @@ function wpmcp_register_abilities() {
 					),
 					'meta'    => array(
 						'type'        => array( 'object', 'string' ),
-						'description' => 'SEO meta fields to set, as key => value: rank_math_title, rank_math_description, rank_math_focus_keyword, rank_math_canonical_url, and the _yoast_wpseo_ equivalents. null clears a field. Can be sent on its own, without ops or tree, when only the meta needs changing — that leaves the page content and its modified date untouched. Only these keys are accepted; anything else is an error naming the allowed set. The dry run reports the previous and new value of every field. Note that WordPress revisions do not cover post meta, so unlike a content change this cannot be rolled back with one click; the previous values are in the response and the activity log.',
+						'description' => 'SEO meta fields to set, as key => value: rank_math_title, rank_math_description, rank_math_focus_keyword, rank_math_canonical_url, and the _yoast_wpseo_ equivalents. null clears a field. Can be sent on its own, without ops or tree, when only the meta needs changing — that leaves the page content and its modified date untouched. On post types that are nothing but their plugin settings, the prefix of the owning plugin is writable too (gp_elements: _generate_*), arrays included — read an existing element with content-read include_meta first and copy its keys and shapes, since they differ per plugin version. Keys that could make a post run code are never accepted. Anything else is an error naming the allowed set. The dry run reports the previous and new value of every field. Note that WordPress revisions do not cover post meta, so unlike a content change this cannot be rolled back with one click; the previous values are in the response and the activity log.',
 					),
 					'ops'     => array(
 						// Not "array" alone, and no items schema: a large
@@ -610,7 +610,7 @@ function wpmcp_register_abilities() {
 					),
 					'meta'      => array(
 						'type'        => array( 'object', 'string' ),
-						'description' => 'SEO meta fields, same keys as content-write.',
+						'description' => 'Meta fields, same rules as content-write: SEO keys, plus the plugin prefix on post types like gp_elements.',
 					),
 					'dry_run'   => array(
 						'type'        => 'boolean',

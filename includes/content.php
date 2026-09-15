@@ -302,6 +302,16 @@ function wpmcp_write_content( array $args ) {
 		);
 	}
 
+	if ( wpmcp_runs_code( $post ) ) {
+		return new \WP_Error(
+			'wpmcp_runs_code',
+			sprintf(
+				'Post %d runs its content as PHP ("Execute PHP" is switched on for this element). Writing it would mean writing code onto the server, so it is not writable through the connector. Edit it in the editor.',
+				$post->ID
+			)
+		);
+	}
+
 	// Optimistic locking. The agent reads, thinks, then writes; in between
 	// a human may have saved the same page. Without this the human's work
 	// disappears silently.
@@ -1820,6 +1830,131 @@ function wpmcp_check_parent( $post, $parent ) {
 }
 
 /**
+ * Meta prefixes a post type's own plugin keeps its settings under.
+ *
+ * A GeneratePress element is an empty shell without its meta: where it
+ * shows, what kind it is, under which conditions. Creating one through the
+ * connector and leaving those unset produces an element that displays
+ * nowhere. So for post types that are nothing but their settings, the
+ * plugin's own prefix is readable and writable — on that post type only,
+ * never on a page.
+ *
+ * @return array<string, string[]> Post type => meta key prefixes.
+ */
+function wpmcp_post_type_meta_prefixes() {
+	return apply_filters(
+		'wpmcp_post_type_meta_prefixes',
+		array(
+			'gp_elements' => array( '_generate_' ),
+		)
+	);
+}
+
+/**
+ * Meta keys that are never writable, whatever prefix they match.
+ *
+ * Some plugins keep a switch in meta that makes the post's content run as
+ * PHP. Reachable through a prefix, that would be code execution on the
+ * server by way of a settings field.
+ *
+ * @param string $key Meta key.
+ * @return bool
+ */
+function wpmcp_meta_key_forbidden( $key ) {
+	return (bool) preg_match( '/(php|execute|eval|(^|_)code($|_))/i', (string) $key );
+}
+
+/**
+ * May this plugin meta key be read and written on this post?
+ *
+ * @param \WP_Post $post Post.
+ * @param string   $key  Meta key.
+ * @return bool
+ */
+function wpmcp_plugin_meta_allowed( $post, $key ) {
+	if ( wpmcp_meta_key_forbidden( $key ) ) {
+		return false;
+	}
+
+	$type     = isset( $post->post_type ) ? (string) $post->post_type : '';
+	$prefixes = wpmcp_post_type_meta_prefixes()[ $type ] ?? array();
+
+	foreach ( $prefixes as $prefix ) {
+		if ( '' !== $prefix && 0 === strpos( (string) $key, $prefix ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Does this post run its own content as code?
+ *
+ * A GeneratePress hook element with "Execute PHP" switched on evaluates
+ * its content on every page view. The script guard looks for markup that
+ * runs in a browser; a line of PHP is plain text to it. Writing that
+ * content would be writing code onto the server, so such a post is not
+ * writable through the connector at all.
+ *
+ * @param \WP_Post $post Post.
+ * @return bool
+ */
+function wpmcp_runs_code( $post ) {
+	$flag = get_post_meta( $post->ID, '_generate_hook_execute_php', true );
+
+	return ! empty( $flag ) && 'false' !== $flag;
+}
+
+/**
+ * Clean a structured plugin meta value, keeping its shape.
+ *
+ * @param mixed $value Value as sent.
+ * @return mixed
+ */
+function wpmcp_clean_plugin_meta( $value ) {
+	if ( is_array( $value ) ) {
+		$clean = array();
+		foreach ( $value as $k => $v ) {
+			$clean[ is_int( $k ) ? $k : sanitize_text_field( (string) $k ) ] = wpmcp_clean_plugin_meta( $v );
+		}
+		return $clean;
+	}
+
+	if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+		return $value;
+	}
+
+	return sanitize_text_field( (string) $value );
+}
+
+/**
+ * Plugin meta on a post, as far as its post type exposes any.
+ *
+ * Reading comes first for a reason: the keys and value shapes differ per
+ * plugin and version, and guessing them produces an element that saves
+ * cleanly and displays nowhere. An existing element is the reference.
+ *
+ * @param \WP_Post $post Post.
+ * @return array<string, mixed>
+ */
+function wpmcp_read_plugin_meta( $post ) {
+	$out = array();
+
+	foreach ( (array) get_post_meta( $post->ID ) as $key => $values ) {
+		if ( ! wpmcp_plugin_meta_allowed( $post, $key ) ) {
+			continue;
+		}
+		$raw         = is_array( $values ) ? ( $values[0] ?? '' ) : $values;
+		$out[ $key ] = function_exists( 'maybe_unserialize' ) ? maybe_unserialize( $raw ) : $raw;
+	}
+
+	ksort( $out );
+
+	return $out;
+}
+
+/**
  * Meta fields the agent may change.
  *
  * A whitelist, not an open door to post meta. Everything here belongs to
@@ -1867,12 +2002,36 @@ function wpmcp_meta_diff( $post, array $meta ) {
 	$changes = 0;
 
 	foreach ( $meta as $key => $value ) {
-		if ( ! isset( $allowed[ $key ] ) ) {
-			$errors[] = sprintf(
-				'"%s" is not a meta field this connector writes. Allowed: %s.',
-				(string) $key,
-				implode( ', ', array_keys( $allowed ) )
+		// A post type's own plugin settings, on that post type only.
+		if ( ! isset( $allowed[ $key ] ) && wpmcp_plugin_meta_allowed( $post, $key ) ) {
+			$from = get_post_meta( $post->ID, $key, true );
+			$to   = ( null === $value ) ? '' : wpmcp_clean_plugin_meta( $value );
+
+			$fields[ $key ] = array(
+				'label'   => $key,
+				'from'    => $from,
+				'to'      => $to,
+				'changed' => ( wp_json_encode( $from ) !== wp_json_encode( $to ) ),
 			);
+
+			if ( $fields[ $key ]['changed'] ) {
+				++$changes;
+			}
+			continue;
+		}
+
+		if ( ! isset( $allowed[ $key ] ) ) {
+			$type     = isset( $post->post_type ) ? (string) $post->post_type : '';
+			$prefixes = wpmcp_post_type_meta_prefixes()[ $type ] ?? array();
+
+			$errors[] = wpmcp_meta_key_forbidden( $key )
+				? sprintf( '"%s" is never written through the connector: a key like this can make a post run its content as code.', (string) $key )
+				: sprintf(
+					'"%s" is not a meta field this connector writes. Allowed: %s%s.',
+					(string) $key,
+					implode( ', ', array_keys( $allowed ) ),
+					empty( $prefixes ) ? '' : ', and on this post type keys starting with ' . implode( ', ', $prefixes )
+				);
 			continue;
 		}
 
@@ -1927,8 +2086,8 @@ function wpmcp_meta_log_line( array $fields ) {
 		$parts[] = sprintf(
 			'%s: "%s" -> "%s"',
 			$key,
-			wpmcp_shorten( $field['from'], 80 ),
-			wpmcp_shorten( $field['to'], 80 )
+			wpmcp_shorten( is_scalar( $field['from'] ) ? (string) $field['from'] : wp_json_encode( $field['from'] ), 80 ),
+			wpmcp_shorten( is_scalar( $field['to'] ) ? (string) $field['to'] : wp_json_encode( $field['to'] ), 80 )
 		);
 	}
 
@@ -1987,12 +2146,19 @@ function wpmcp_read_meta( $post ) {
 
 	$thumbnail = get_post_thumbnail_id( $post->ID );
 
-	return array(
+	$result = array(
 		'seo'           => $fields,
 		'featuredImage' => $thumbnail ? (int) $thumbnail : null,
 		'excerpt'       => $post->post_excerpt,
 		'template'      => get_page_template_slug( $post->ID ),
 	);
+
+	$plugin = wpmcp_read_plugin_meta( $post );
+	if ( ! empty( $plugin ) ) {
+		$result['plugin'] = $plugin;
+	}
+
+	return $result;
 }
 
 /**
