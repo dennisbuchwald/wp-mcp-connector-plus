@@ -497,16 +497,20 @@ function wpmcp_ability_names() {
 		return $read;
 	}
 
-	return array_merge(
-		$read,
-		array(
-			'wpmcp/content-write',
-			'wpmcp/content-create',
-			'wpmcp/content-duplicate',
-			'wpmcp/content-restore',
-			'wpmcp/media-update',
-		)
+	$write = array(
+		'wpmcp/content-write',
+		'wpmcp/content-create',
+		'wpmcp/content-duplicate',
+		'wpmcp/content-restore',
+		'wpmcp/media-update',
 	);
+
+	// Only while a work session is open: outside one the tool does not exist.
+	if ( wpmcp_work_session_active() ) {
+		$write[] = 'wpmcp/media-upload';
+	}
+
+	return array_merge( $read, $write );
 }
 
 /**

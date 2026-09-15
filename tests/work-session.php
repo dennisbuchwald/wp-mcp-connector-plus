@@ -92,6 +92,8 @@ check( (bool) preg_grep( '/opened for 4 hour/', $GLOBALS['logged'] ), 'und es st
 // The settings themselves are untouched — a session is a window, not a save.
 check( 'draft' === get_option( 'wpmcp_access_level' ), 'die gespeicherte Einstellung bleibt, wie sie war' );
 
+check( in_array( 'wpmcp/media-upload', wpmcp_ability_names(), true ), 'der Upload existiert nur jetzt als Werkzeug' );
+
 echo "\n\033[1mSie schliesst sich selbst\033[0m\n";
 
 // Wind the clock past the end.
@@ -100,6 +102,7 @@ $GLOBALS['options']['wpmcp_work_session_until'] = time() - 60;
 check( ! wpmcp_work_session_active(), 'nach Ablauf laeuft sie nicht mehr' );
 check( 'draft' === wpmcp_access_level(), 'die Stufe faellt von selbst zurueck' );
 check( ! wpmcp_dynamic_data_allowed(), 'Dynamic Data ebenfalls' );
+check( ! in_array( 'wpmcp/media-upload', wpmcp_ability_names(), true ), 'und das Upload-Werkzeug ist wieder weg' );
 check( 'read' === wpmcp_pattern_access(), 'und die Muster' );
 
 // The level drops on its own; the stored capabilities do not.

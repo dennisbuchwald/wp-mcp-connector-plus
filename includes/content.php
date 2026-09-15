@@ -549,12 +549,31 @@ function wpmcp_write_content( array $args ) {
 			}
 		}
 
-		if ( $elevate ) {
-			$updated = wpmcp_update_post_elevated( $postarr );
-		} elseif ( wpmcp_should_preserve_markup( $impact, $post ) ) {
-			$updated = wpmcp_update_post_preserving( $postarr );
-		} else {
-			$updated = wp_update_post( $postarr, true );
+		// Publishing inside a work session: the capability for this one save,
+		// never on the role.
+		$publishing = ! empty( $placement['fields']['status']['changed'] )
+			&& 'publish' === $placement['fields']['status']['to'];
+		$type_obj   = get_post_type_object( $post->post_type );
+		$release    = $publishing && $type_obj
+			? wpmcp_grant_caps_for_request( array( $type_obj->cap->publish_posts ) )
+			: null;
+
+		try {
+			if ( $elevate ) {
+				$updated = wpmcp_update_post_elevated( $postarr );
+			} elseif ( wpmcp_should_preserve_markup( $impact, $post ) ) {
+				$updated = wpmcp_update_post_preserving( $postarr );
+			} else {
+				$updated = wp_update_post( $postarr, true );
+			}
+		} finally {
+			if ( $release ) {
+				$release();
+			}
+		}
+
+		if ( $publishing && ! is_wp_error( $updated ) ) {
+			$response['published'] = 'Published during a work session. It is live now; its revisions are the way back.';
 		}
 
 		if ( is_wp_error( $updated ) ) {
@@ -1682,12 +1701,52 @@ function wpmcp_relevant_plugins() {
 }
 
 /**
- * Statuses the agent may set. Never one that publishes.
+ * Statuses the agent may set.
+ *
+ * Publishing was never the agent's decision, and it still is not: it
+ * becomes possible only while the site owner has a work session open.
+ * Opening one is the human deciding that what gets built in that window
+ * may go live — once, instead of twenty-two clicks afterwards. Outside a
+ * session there is no status here that publishes, at any access level.
  *
  * @return string[]
  */
 function wpmcp_writable_statuses() {
-	return array( 'draft', 'pending' );
+	$statuses = array( 'draft', 'pending' );
+
+	if ( function_exists( 'wpmcp_work_session_active' ) && wpmcp_work_session_active() ) {
+		$statuses[] = 'publish';
+	}
+
+	return $statuses;
+}
+
+/**
+ * Grant capabilities to the current user until the returned callback runs.
+ *
+ * The same shape as the unfiltered_html grant: nothing lands on the role,
+ * and the caller removes it in a finally so a fatal cannot leave it behind.
+ *
+ * @param string[] $caps Capabilities to grant.
+ * @return callable Removes the grant.
+ */
+function wpmcp_grant_caps_for_request( array $caps ) {
+	$user_id = get_current_user_id();
+
+	$grant = function ( $allcaps, $requested, $args, $user ) use ( $caps, $user_id ) {
+		if ( isset( $user->ID ) && (int) $user->ID === (int) $user_id ) {
+			foreach ( $caps as $cap ) {
+				$allcaps[ $cap ] = true;
+			}
+		}
+		return $allcaps;
+	};
+
+	add_filter( 'user_has_cap', $grant, 100, 4 );
+
+	return function () use ( $grant ) {
+		remove_filter( 'user_has_cap', $grant, 100 );
+	};
 }
 
 /**
@@ -1748,8 +1807,11 @@ function wpmcp_placement_diff( $post, array $args ) {
 		$status = (string) $args['status'];
 		if ( ! in_array( $status, wpmcp_writable_statuses(), true ) ) {
 			$errors[] = sprintf(
-				'"%s" is not a status this connector sets. Allowed: %s. Publishing is never possible, and taking a live page off the site is not a write, it is a removal — both stay with a human.',
+				'"%s" is not a status this connector sets%s. Allowed: %s.',
 				$status,
+				'publish' === $status
+					? ' outside a work session — publishing becomes possible only while the site owner has one open'
+					: '',
 				implode( ', ', wpmcp_writable_statuses() )
 			);
 		} else {
@@ -2418,6 +2480,17 @@ function wpmcp_site_info() {
 		}
 
 		$info['capabilities']['dynamicData'] = $dynamic;
+
+		$info['capabilities']['workSession'] = wpmcp_work_session_active()
+			? array(
+				'active'   => true,
+				'until'    => gmdate( 'c', wpmcp_work_session_expires() ),
+				'explains' => 'A work session is open: status publish and media-upload are available until it ends. If media-upload is missing from your tools, reconnect — the tool list is fixed when you connect.',
+			)
+			: array(
+				'active'   => false,
+				'explains' => 'Publishing and uploading media are only possible while the site owner has a work session open.',
+			);
 	}
 
 	$info['plugins'] = wpmcp_relevant_plugins();
@@ -2517,7 +2590,9 @@ function wpmcp_create_content( array $args ) {
 				'post_type'   => $post_type,
 				'post_name'   => $slug,
 				'post_parent' => $parent,
-				'post_status' => $status,
+				// Created as a draft even when publishing was asked for: a page
+				// must not be live for the moment before its content arrives.
+				'post_status' => 'publish' === $status ? 'draft' : $status,
 				'post_author' => get_current_user_id(),
 				'post_content' => '',
 			)
@@ -2560,6 +2635,9 @@ function wpmcp_create_content( array $args ) {
 	if ( ! $has_content ) {
 		$result['modified']  = $created->post_modified_gmt;
 		$result['nextWrite'] = 'Pass this "modified" value as expected_modified when you write the content.';
+		if ( 'publish' === $status ) {
+			wpmcp_publish_created( (int) $post_id, $result );
+		}
 		return $result;
 	}
 
@@ -2585,5 +2663,35 @@ function wpmcp_create_content( array $args ) {
 	$result['ok']      = ! empty( $written['ok'] );
 	$result['message'] = $result['ok'] ? 'Created and written.' : 'The page was created but its content was rejected. Fix it and write to this id.';
 
+	// Only once the content is in: rejected content keeps the page a draft.
+	if ( $result['ok'] && 'publish' === $status ) {
+		wpmcp_publish_created( (int) $post_id, $result );
+	}
+
 	return $result;
+}
+
+/**
+ * Publish a page the connector just created, as the last step.
+ *
+ * @param int   $post_id Post ID.
+ * @param array $result  Result of wpmcp_create_content(), updated in place.
+ */
+function wpmcp_publish_created( $post_id, array &$result ) {
+	$published = wpmcp_write_content(
+		array(
+			'post_id' => $post_id,
+			'status'  => 'publish',
+			'dry_run' => false,
+		)
+	);
+
+	if ( is_wp_error( $published ) || empty( $published['ok'] ) ) {
+		$result['message'] .= ' It was not published: ' . ( is_wp_error( $published ) ? $published->get_error_message() : 'the status change was refused' ) . '. It stays a draft.';
+		return;
+	}
+
+	$result['status']  = 'publish';
+	$result['url']     = $published['url'] ?? ( $result['url'] ?? '' );
+	$result['message'] .= ' Published.';
 }

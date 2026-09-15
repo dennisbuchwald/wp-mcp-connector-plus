@@ -37,7 +37,7 @@ Claude / any MCP client
 | Design system | ignored | `theme.json` palette and lockdown enforced |
 | Before saving | write and pray | five-stage validation with a dry run |
 | If it goes wrong | manual cleanup | WordPress revision, one-click rollback |
-| Publishing | usually allowed | never — the agent role has no publish capability |
+| Publishing | usually allowed | only inside a time-boxed work session the site owner opens — the role itself has no publish capability |
 
 The agent never writes serialized block markup. It sends a JSON tree;
 serialization happens server-side, in PHP, after validation. That single
@@ -163,8 +163,8 @@ reference page or two, duplicates (creating a draft), validates as a dry
 run, writes, and fetches a preview URL to check its own work.
 
 Throughout: drafts only, published pages are read-only unless you switch
-that on, publishing is never possible, and everything lands in the
-activity log.
+that on, publishing and uploading happen only inside a work session you
+open, and everything lands in the activity log.
 
 ## Troubleshooting
 
@@ -260,7 +260,7 @@ points at, its parent is part of that URL, and taking it back to draft
 removes it from the site. Those belong in the editor, where the redirect
 is yours to set up.
 
-No status publishes, at any level. Post type is never writable at all.
+No status publishes outside a work session. Post type is never writable at all.
 
 ### Context budget
 
@@ -395,8 +395,22 @@ bookings. No length of window turns reading a customer's address into a
 side effect of editing a page, so those stay a tick somebody makes
 deliberately. A tick already made survives the window either way.
 
-And publishing, which nothing in this plugin has ever been able to
-reach.
+**Publishing and uploading images happen only inside a session.** Opening
+one is the human deciding that what gets built in it may go live — once,
+instead of clicking publish twenty-two times afterwards. Outside a session
+no status publishes at any access level, and the upload tool does not
+exist. Inside one, the capability is granted for a single save or upload
+and never lands on the role. A page created with `status: publish` goes
+live only after its content is written; rejected content keeps it a draft.
+A live page is still never taken back to draft.
+
+Uploads are judged by their bytes, not their name: JPEG, PNG and WebP
+only, SVG refused because it can carry script, anything with a PHP
+opening tag refused, a size limit (`wpmcp_max_upload_bytes`, 8 MB), and
+the extension replaced by the detected type. Alt text is required, or
+`decorative: true` for an image with no meaning of its own. URL import is
+deliberately absent: the server fetching an address the agent chooses is
+a way into the host's internal network.
 
 **Additional post types** is a fourth setting, empty by default. It lists
 every post type the site has that is not already in scope — the theme's
@@ -430,9 +444,10 @@ attempting it.
 
 Regardless of level:
 
-- **The agent can never publish.** No level grants `publish_*`. New pages
-  and duplicates stay drafts until a human publishes them — enforced by
-  WordPress, not by plugin logic.
+- **The agent cannot publish on its own.** No level grants `publish_*` to
+  the role. Publishing is possible only inside a work session the site
+  owner opens, for one save at a time; outside one, new pages and
+  duplicates stay drafts until a human publishes them.
 - **No deleting, no uploads, no settings access**, at any level.
 - **Dry run is the default.** Writing requires `dry_run: false`.
 - **Every write creates a revision** — rollback is one click.
@@ -593,6 +608,7 @@ php tests/head-and-plugins.php                   # does the meta title reach the
 php tests/placement.php                          # slug, parent and status: where the line runs
 php tests/shipped-files.php                      # what the vendor folder announces to other plugins
 php tests/work-session.php                       # the window closes itself, and what it never opens
+php tests/media-upload.php                       # an image judged by its bytes, only in a session
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```

@@ -33,6 +33,9 @@ function sanitize_title( $title ) {
 	return trim( preg_replace( '/-+/', '-', preg_replace( '/[^a-z0-9]+/', '-', $title ) ), '-' );
 }
 
+$GLOBALS['session'] = false;
+function wpmcp_work_session_active() { return $GLOBALS['session']; }
+
 require_once dirname( __DIR__ ) . '/includes/content.php';
 
 $fail = 0;
@@ -115,6 +118,31 @@ check(
 	array( 'draft', 'pending' ) === wpmcp_writable_statuses(),
 	'es gibt nur zwei setzbare Status',
 	'jeder weitere waere ein Weg zum Veroeffentlichen'
+);
+
+echo "\n\033[1mVeroeffentlichen in einer Arbeitssitzung\033[0m\n";
+
+// Opening a session is the human deciding that what gets built in it may
+// go live. Outside one, nothing publishes.
+$GLOBALS['session'] = true;
+
+check( in_array( 'publish', wpmcp_writable_statuses(), true ), 'waehrend der Sitzung ist publish setzbar' );
+$d = wpmcp_placement_diff( $draft, array( 'status' => 'publish' ) );
+check( empty( $d['errors'] ) && 'publish' === $d['fields']['status']['to'], 'ein Entwurf laesst sich veroeffentlichen', implode( ' ', $d['errors'] ) );
+
+$d = wpmcp_placement_diff( $live, array( 'status' => 'draft' ) );
+check( ! empty( $d['errors'] ), 'eine Live-Seite zurueckzunehmen bleibt gesperrt', 'auch in der Sitzung ist das eine Entfernung' );
+
+$d = wpmcp_placement_diff( $draft, array( 'status' => 'private' ) );
+check( ! empty( $d['errors'] ), 'private bleibt abgelehnt' );
+
+$GLOBALS['session'] = false;
+
+$d = wpmcp_placement_diff( $draft, array( 'status' => 'publish' ) );
+check(
+	! empty( $d['errors'] ) && false !== strpos( $d['errors'][0], 'work session' ),
+	'ohne Sitzung wird publish abgelehnt, mit Hinweis auf die Sitzung',
+	$d['errors'][0] ?? ''
 );
 
 echo "\n\033[1mDer Elternteil muss einer sein koennen\033[0m\n";

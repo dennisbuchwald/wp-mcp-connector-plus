@@ -259,7 +259,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
-			'description' => 'Write to a page: block content, SEO meta, or where the page sits — alone or together. Dry run by default; pass dry_run: false to save. Returns a validation report, a block-count diff, and the new "modified" value to pass as expected_modified on the next write. \n\nContent comes as "ops" (patch operations by block path) or "tree" (replace the page). Use ops for anything short of a rebuild. To change text inside a block use patch_html with "find" and "replace", not replace — replace demands the block\'s entire markup back, and everything retyped can come back wrong. The anchor must occur exactly once; content-search returns the surrounding text verbatim, which is how to pick one that does. \n\nValidation judges the change, not the page: a problem that already existed in a block you did not touch is a warning, anything the change introduces is an error naming the block path. Markup needing unfiltered_html (scripts, iframes) cannot be written and is refused in the dry run; markup of that kind already on the page is preserved, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent. Every write leaves a revision. \n\nslug, parent and status apply only while a page has never been published — a live page keeps its address. No status publishes. Post type is never touched. \n\nBefore inserting a block type you have not written before, read an existing instance with content-read and mirror its shape: some libraries keep a per-instance id, generated CSS and matching classes that must agree, and a block that merely validates can still be wrong.',
+			'description' => 'Write to a page: block content, SEO meta, or where the page sits — alone or together. Dry run by default; pass dry_run: false to save. Returns a validation report, a block-count diff, and the new "modified" value to pass as expected_modified on the next write. \n\nContent comes as "ops" (patch operations by block path) or "tree" (replace the page). Use ops for anything short of a rebuild. To change text inside a block use patch_html with "find" and "replace", not replace — replace demands the block\'s entire markup back, and everything retyped can come back wrong. The anchor must occur exactly once; content-search returns the surrounding text verbatim, which is how to pick one that does. \n\nValidation judges the change, not the page: a problem that already existed in a block you did not touch is a warning, anything the change introduces is an error naming the block path. Markup needing unfiltered_html (scripts, iframes) cannot be written and is refused in the dry run; markup of that kind already on the page is preserved, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent. Every write leaves a revision. \n\nslug, parent and status apply only while a page has never been published — a live page keeps its address. publish is accepted only during a work session. Post type is never touched. \n\nBefore inserting a block type you have not written before, read an existing instance with content-read and mirror its shape: some libraries keep a per-instance id, generated CSS and matching classes that must agree, and a block that merely validates can still be wrong.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -301,8 +301,8 @@ function wpmcp_register_abilities() {
 					),
 					'status'  => array(
 						'type'        => 'string',
-						'enum'        => array( 'draft', 'pending' ),
-						'description' => 'draft or pending. There is no value here that publishes, and a published page cannot be taken back to draft — that removes it from the site, which is not a write.',
+						'enum'        => array( 'draft', 'pending', 'publish' ),
+						'description' => 'draft or pending; publish only while the site owner has a work session open. A published page cannot be taken back to draft — that removes it from the site, which is not a write.',
 					),
 					'expected_modified' => array(
 						'type'        => 'string',
@@ -600,9 +600,9 @@ function wpmcp_register_abilities() {
 					),
 					'status'    => array(
 						'type'        => 'string',
-						'enum'        => array( 'draft', 'pending' ),
+						'enum'        => array( 'draft', 'pending', 'publish' ),
 						'default'     => 'draft',
-						'description' => 'draft or pending. Nothing here publishes.',
+						'description' => 'draft or pending; publish only during a work session, and then only once the content is written.',
 					),
 					'tree'      => array(
 						'type'        => array( 'array', 'string' ),
@@ -729,6 +729,57 @@ function wpmcp_register_abilities() {
 			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_update( is_array( $input ) ? $input : array() );
+			},
+		)
+	);
+
+	// Registered only while a work session is open.
+	if ( ! function_exists( 'wpmcp_work_session_active' ) || ! wpmcp_work_session_active() ) {
+		return;
+	}
+
+	wp_register_ability(
+		'wpmcp/media-upload',
+		array(
+			'label'       => 'Bild hochladen',
+			'description' => 'Uploads an image into the media library and returns its id and url for the image block. Available only during a work session. Send the file base64-encoded as "data". JPEG, PNG and WebP only, judged by the bytes, not the name; SVG is refused. Alt text is required: describe what the image shows, or pass decorative: true for an image with no meaning of its own. Dry run by default.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'filename'   => array(
+						'type'        => 'string',
+						'description' => 'Suggested file name. The extension is replaced by the detected type.',
+					),
+					'data'       => array(
+						'type'        => 'string',
+						'description' => 'The file contents, base64-encoded, or a data: URL.',
+					),
+					'alt'        => array(
+						'type'        => 'string',
+						'description' => 'What the image shows, for someone who cannot see it.',
+					),
+					'decorative' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'True for a purely decorative image; stores an empty alt deliberately.',
+					),
+					'title'      => array(
+						'type'        => 'string',
+						'description' => 'Title in the media library. Defaults to the file name.',
+					),
+					'dry_run'    => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Check the file without storing it. Defaults to true.',
+					),
+				),
+				'required'   => array( 'filename', 'data' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_media_upload( is_array( $input ) ? $input : array() );
 			},
 		)
 	);

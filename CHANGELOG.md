@@ -7,6 +7,30 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.17.0] - 2026-09-15
+
+Die beiden offenen Entscheidungen aus 0.16.0, getroffen: Veroeffentlichen und Bild-Upload - beides nur waehrend einer Arbeitssitzung.
+
+### Hinzugefuegt
+
+- **Veroeffentlichen in einer Arbeitssitzung.** `status: publish` ist in `content-write` und `content-create` setzbar, solange eine Sitzung offen ist. Die Grundregel war nie "22 Mal auf Veroeffentlichen klicken", sondern "ein Mensch entscheidet, ob etwas live geht". Wer eine Sitzung oeffnet, trifft genau diese Entscheidung, einmal.
+  - Ausserhalb einer Sitzung veroeffentlicht kein Status, auf keiner Stufe. Das Recht `publish_*` wird fuer den einen Speichervorgang vergeben und in einem `finally` wieder entzogen, nie an der Rolle.
+  - Eine mit `status: publish` angelegte Seite geht erst live, wenn ihr Inhalt geschrieben ist. Wird der Inhalt abgelehnt, bleibt sie Entwurf.
+  - Eine Live-Seite auf Entwurf zurueckzunehmen bleibt gesperrt, auch in der Sitzung: das ist eine Entfernung.
+- **`media-upload`**, das Werkzeug existiert nur waehrend einer Sitzung. Datei base64-kodiert, Antwort mit ID und URL fuer den Bildblock.
+  - Entschieden wird am Inhalt, nicht am Namen: nur JPEG, PNG, WebP. Ein PNG namens `shell.php` wird `shell.png`, ein SVG namens `foto.jpg` wird abgelehnt.
+  - SVG grundsaetzlich abgelehnt (kann Script tragen), ebenso jede Datei mit PHP-Oeffnungstag.
+  - Groessenlimit 8 MB, per Filter `wpmcp_max_upload_bytes`.
+  - Alt-Text ist Pflicht, oder `decorative: true` fuer ein rein dekoratives Bild.
+  - `upload_files` nur fuer den einen Aufruf, nie an der Rolle. Probelauf ist Standard.
+- `site-info` meldet `capabilities.workSession`, damit der Agent weiss, ob Veroeffentlichen und Upload gerade moeglich sind.
+
+### Bewusst nicht gebaut
+
+- **URL-Import.** Der Server wuerde eine Adresse abrufen, die der Agent vorgibt, inklusive interner Adressen im Netz des Hosters (SSRF). Die Fotos liegen ohnehin lokal, und Claude Code kann sie direkt schicken.
+
+---
+
 ## [0.16.0] - 2026-09-15
 
 Aus dem Bericht zur Ersteinrichtung von berlin-marine.de. Drei der fuenf Punkte gab es schon (content-create, Slug/Parent/Status seit 0.13.0, kompaktes blocks-describe seit 0.12.0) - der Bericht war gegen eine aeltere Version geschrieben. Neu war der Footer als GeneratePress-Element.
