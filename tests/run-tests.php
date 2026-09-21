@@ -656,6 +656,21 @@ $empty = wpmcp_validate_blocks( parse_blocks( '<!-- wp:dbw-base/cards /-->' ) );
 t_same( 1, count( $empty['warnings'] ), 'ein wirklich leerer weiterhin schon' );
 
 // ---------------------------------------------------------------------
+t_group( 'Bild ohne Quelle' );
+
+// An <img> without src renders broken; an image block with no markup at
+// all is the placeholder that opens the upload dialog.
+$broken = wpmcp_validate_blocks( parse_blocks( '<!-- wp:image --><figure class="wp-block-image"><img alt=""/></figure><!-- /wp:image -->' ) );
+t_ok( (bool) preg_grep( '/without a source/', $broken['warnings'] ), 'ein img ohne src wird gemeldet' );
+t_ok( (bool) preg_grep( '/no "html" and no url/', $broken['warnings'] ), 'mit dem Weg zum richtigen Platzhalter' );
+
+$real = wpmcp_validate_blocks( parse_blocks( '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt="x"/></figure><!-- /wp:image -->' ) );
+t_ok( ! preg_grep( '/without a source/', $real['warnings'] ), 'ein Bild mit Quelle nicht' );
+
+$placeholder = wpmcp_validate_blocks( parse_blocks( '<!-- wp:image /-->' ) );
+t_ok( ! preg_grep( '/without a source/', $placeholder['warnings'] ), 'der echte Platzhalter auch nicht' );
+
+// ---------------------------------------------------------------------
 echo "\n";
 $total  = $GLOBALS['dbw_tests'];
 $failed = count( $GLOBALS['dbw_failed'] );

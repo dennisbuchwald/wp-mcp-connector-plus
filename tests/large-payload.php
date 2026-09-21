@@ -115,6 +115,12 @@ check( array() === wpmcp_decode_structure( array(), 'ops' ), 'eine leere Liste b
 check( is_wp_error( wpmcp_decode_structure( 42, 'ops' ) ), 'eine Zahl ist keine Struktur' );
 check( is_wp_error( wpmcp_decode_structure( 'einfach Text', 'ops' ) ), 'beliebiger Text ebenfalls nicht' );
 
+// Meta is a map of plain strings. Split remains are a numbered list;
+// a map keyed by name never is, and must pass as it came.
+$meta = array( 'rank_math_title' => 'Titel, mit Komma', 'rank_math_description' => 'Text' );
+check( $meta === wpmcp_decode_structure( $meta, 'meta' ), 'eine Meta-Map aus Texten kommt unveraendert durch', 'bis 0.17.0 wurde sie als zerlegte Liste abgelehnt' );
+check( is_wp_error( wpmcp_decode_structure( array( '{"op":"remove"', '"path":"0"}' ), 'ops' ) ), 'eine zerlegte Liste bleibt ein Fehler' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mGrosse Payloads in Ordnung.\033[0m\n";

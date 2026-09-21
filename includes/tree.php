@@ -861,3 +861,48 @@ function wpmcp_block_names( array $blocks ) {
 	}
 	return $names;
 }
+
+/**
+ * What each patched block reads now.
+ *
+ * The usual check after a text change was a fetch of the whole live page,
+ * 200 KB of it, searched on disk. For a patch the answer is already here:
+ * the block as it will be stored, cut to the passage around the new text.
+ *
+ * @param array $blocks Blocks after the operations.
+ * @param array $ops    The operations that were applied.
+ * @return array<int, array{path: string, now: string}>
+ */
+function wpmcp_patch_confirmations( array $blocks, array $ops ) {
+	$out = array();
+
+	foreach ( $ops as $op ) {
+		if ( ! is_array( $op ) || 'patch_html' !== ( $op['op'] ?? '' ) ) {
+			continue;
+		}
+
+		$segments = wpmcp_path_parse( $op['path'] ?? '' );
+		$node     = null === $segments ? null : wpmcp_blocks_at_path( $blocks, $segments );
+		if ( null === $node ) {
+			continue;
+		}
+
+		$html    = (string) ( $node['innerHTML'] ?? '' );
+		$replace = (string) ( $op['replace'] ?? '' );
+		$pos     = '' === $replace ? false : strpos( $html, $replace );
+
+		if ( false === $pos ) {
+			$excerpt = substr( $html, 0, 240 );
+		} else {
+			$start   = max( 0, $pos - 80 );
+			$excerpt = ( $start > 0 ? '...' : '' ) . substr( $html, $start, strlen( $replace ) + 160 );
+		}
+
+		$out[] = array(
+			'path' => (string) $op['path'],
+			'now'  => trim( preg_replace( '/\s+/', ' ', $excerpt ) ),
+		);
+	}
+
+	return $out;
+}

@@ -233,13 +233,14 @@ agent never sees them.
 | `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one or several sections, each reporting its real path), or `full`. |
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
-| `wpmcp/content-create` | *Write levels only.* A new page with its title, slug, parent and status — and its content in the same call. Always a draft. |
+| `wpmcp/content-create` | *Write levels only.* A new page with its title, slug, parent and status — and its content in the same call. A draft, unless published during a work session. The dry run validates the tree and meta exactly as the real call will. |
+| `wpmcp/content-batch` | *Write levels only.* The same change on up to 20 posts in one call. Every item is dry-run first; nothing is saved unless all pass. |
 | `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
 | `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. |
-| `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. |
+| `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. `contains` answers "is my change on the page?" in a few hundred bytes; `body_only` drops header, footer, styles and scripts. |
 | `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
 | `wpmcp/media-read` | One attachment in the same shape. |
 | `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No upload, no delete, no file replacement. |
@@ -298,7 +299,11 @@ not enough:
   kind already on the page is *preserved*: WordPress saves the whole page
   on every write, so without this, editing one block would destroy the
   structured data in another. The agent can add none of it and can destroy
-  none of it.
+  none of it. The one exception is **structured data**: a
+  `<script type="application/ld+json">` holding valid JSON is not code, and
+  is accepted. A `<` inside the data is re-encoded as `\u003C`, which closes
+  the only way out of the tag; another type, an extra attribute or content
+  that is not JSON is treated as the script it is.
 - **After:** the stored content is compared against what was sent, and any
   remaining difference is reported. The same check runs after duplicating.
 
@@ -609,6 +614,8 @@ php tests/placement.php                          # slug, parent and status: wher
 php tests/shipped-files.php                      # what the vendor folder announces to other plugins
 php tests/work-session.php                       # the window closes itself, and what it never opens
 php tests/media-upload.php                       # an image judged by its bytes, only in a session
+php tests/jsonld.php                             # structured data in, scripts still out
+php tests/create-and-batch.php                   # a dry run that looks, a batch that is all or nothing
 php tests/render-admin.php                       # admin page renders in every state
 php tests/run-integration.php /path/to/your-theme-or-core
 ```
@@ -665,6 +672,11 @@ Each suite exists because of a specific failure:
   easy half: that the level falls back on its own, that the capabilities
   follow, that a second cleanup does nothing, and that no window ever
   reaches publishing or ticks a post type.
+- **jsonld** — every SEO article carries structured data, and it could not
+  be written. Checks that it now can, byte-identical when it is safe, and
+  that each way of smuggling a script inside it is still refused.
+- **create-and-batch** — a 75-block dry run said "ok" without looking at
+  the tree. Also that a batch with one bad item saves nothing.
 - **run-integration** — loads real `block.json` files and checks the
   catalogue, detail view and validator against them.
 
@@ -672,7 +684,7 @@ Each suite exists because of a specific failure:
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
-**v0.13.1.** In daily use on customer sites, reading and writing. Whole
+**v0.18.0.** In daily use on customer sites, reading and writing. Whole
 pages have been built through it — created, filled, given their SEO fields
 and put in the right place in the tree — and long legal texts have been
 corrected across eighteen pages at once.

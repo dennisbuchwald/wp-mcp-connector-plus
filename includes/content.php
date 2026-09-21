@@ -83,6 +83,33 @@ function wpmcp_pattern_usage_count( $pattern_id ) {
 }
 
 /**
+ * Which posts embed a synced pattern.
+ *
+ * @param int $pattern_id Pattern post ID.
+ * @return int[]
+ */
+function wpmcp_pattern_usage_ids( $pattern_id ) {
+	global $wpdb;
+
+	$needle = '"ref":' . (int) $pattern_id;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- content search, no core API for this.
+	return array_map(
+		'intval',
+		(array) $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts}
+				 WHERE post_status NOT IN ('trash', 'auto-draft')
+				   AND post_type NOT IN ('revision', 'wp_block')
+				   AND post_content LIKE %s
+				 LIMIT 200",
+				'%' . $wpdb->esc_like( $needle ) . '%'
+			)
+		)
+	);
+}
+
+/**
  * Resolve and permission-check a post for reading.
  *
  * @param int $post_id Post ID.
@@ -374,6 +401,7 @@ function wpmcp_write_content( array $args ) {
 		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
 
 	$op_summary = array();
+	$confirm    = array();
 
 	if ( ! $has_tree && ! $has_ops ) {
 		$blocks = $before_blocks;
@@ -395,9 +423,15 @@ function wpmcp_write_content( array $args ) {
 		}
 		$blocks     = $applied['blocks'];
 		$op_summary = $applied['summary'];
+		$confirm    = wpmcp_patch_confirmations( $blocks, $args['ops'] );
 	}
 
 	$validation = wpmcp_validate_blocks( $blocks, $before_blocks );
+
+	// Structured data is stored in its safe form; see wpmcp_normalize_jsonld().
+	if ( '' !== $validation['serialized'] ) {
+		$validation['serialized'] = wpmcp_normalize_jsonld( $validation['serialized'] );
+	}
 	$after_count = wpmcp_count_blocks( $blocks );
 
 	$diff = array(
@@ -438,7 +472,7 @@ function wpmcp_write_content( array $args ) {
 	if ( $impact['alters'] ) {
 		if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
 			$errors[] = sprintf(
-				'This change adds markup WordPress will not store from an agent account (%s). Structured data, embeds and inline scripts cannot be written this way. Remove it, or have a human add it in the editor. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
+				'This change adds markup WordPress will not store from an agent account (%s). Inline scripts, iframes and embeds cannot be written this way; structured data can, as <script type="application/ld+json"> holding valid JSON. Remove it, or have a human add it in the editor. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
 				implode( ', ', $impact['added'] )
 			);
 		} elseif ( $impact['introduces'] ) {
@@ -446,7 +480,7 @@ function wpmcp_write_content( array $args ) {
 				'This change adds markup WordPress would normally refuse from an agent account (%s). It is being written because this site opened the wpmcp_allow_filtered_markup filter. Close it again when the repair is done.',
 				implode( ', ', $impact['added'] )
 			);
-		} else {
+		} elseif ( ! empty( $impact['affected'] ) ) {
 			$warnings[] = sprintf(
 				'The page already contains markup WordPress would normally strip from an agent account (%s). It is preserved: the save keeps what was there rather than destroying it, and nothing new of that kind is added.',
 				implode( ', ', $impact['affected'] )
@@ -464,6 +498,12 @@ function wpmcp_write_content( array $args ) {
 		'errors'   => $errors,
 		'warnings' => $warnings,
 	);
+
+	// What each patched block reads now, so checking a text change does
+	// not take a second call.
+	if ( ! empty( $confirm ) ) {
+		$response['patched'] = $confirm;
+	}
 
 	if ( $has_placement ) {
 		$response['placement'] = array(
@@ -638,6 +678,19 @@ function wpmcp_write_content( array $args ) {
 
 	// The database is now right; the delivered page may not be. Say which.
 	$response['cache'] = wpmcp_purge_caches( $post->ID );
+
+	// A pattern lives inside other pages, and their cached copies still
+	// show the old version: the pattern's own cache was never where a
+	// visitor saw it.
+	if ( 'wp_block' === $post->post_type ) {
+		$embedding = wpmcp_pattern_usage_ids( $post->ID );
+		foreach ( $embedding as $embedding_id ) {
+			wpmcp_purge_caches( $embedding_id );
+		}
+		if ( ! empty( $embedding ) ) {
+			$response['cache']['alsoPurged'] = $embedding;
+		}
+	}
 	$response['verify'] = 'content-read shows what is stored. Use content-fetch-live to see what a visitor gets.';
 
 	wpmcp_log(
@@ -984,8 +1037,8 @@ function wpmcp_unsafe_additions( $before, $after ) {
 	);
 
 	foreach ( $patterns as $label => $pattern ) {
-		$in_after  = wpmcp_match_counts( $pattern, (string) $after );
-		$in_before = wpmcp_match_counts( $pattern, (string) $before );
+		$in_after  = wpmcp_match_counts( $pattern, wpmcp_strip_safe_jsonld( (string) $after ) );
+		$in_before = wpmcp_match_counts( $pattern, wpmcp_strip_safe_jsonld( (string) $before ) );
 
 		foreach ( $in_after as $sample => $count ) {
 			if ( $count > ( $in_before[ $sample ] ?? 0 ) ) {
@@ -1088,6 +1141,80 @@ function wpmcp_locate_markup( array $blocks, $needle, $prefix = '' ) {
 }
 
 /**
+ * The one kind of script the connector writes: structured data.
+ *
+ * JSON-LD is a standard part of every SEO-minded page, and browsers do not
+ * execute it. What makes a script dangerous is code, and a JSON-LD block
+ * holding valid JSON contains none. The single way out of it would be a
+ * "</script>" inside the data, closing the tag early; a "<" anywhere in
+ * the data is therefore re-encoded as \u003C before it is stored, which
+ * JSON parsers read back as the same character.
+ *
+ * Anything else stays refused: another type, an extra attribute on the
+ * tag, or content that is not valid JSON is treated as the script it is.
+ *
+ * @return string
+ */
+function wpmcp_jsonld_regex() {
+	return '#<script\s+type\s*=\s*(["\'])application/ld\+json\1\s*>(.*?)</script\s*>#is';
+}
+
+/**
+ * Is this JSON-LD body safe as it stands?
+ *
+ * @param string $inner Text between the script tags.
+ * @return bool
+ */
+function wpmcp_jsonld_inner_safe( $inner ) {
+	json_decode( (string) $inner );
+
+	return JSON_ERROR_NONE === json_last_error() && false === strpos( (string) $inner, '<' );
+}
+
+/**
+ * Make every JSON-LD block safe to store, leaving safe ones byte-identical.
+ *
+ * @param string $html Serialized content.
+ * @return string
+ */
+function wpmcp_normalize_jsonld( $html ) {
+	return (string) preg_replace_callback(
+		wpmcp_jsonld_regex(),
+		function ( $m ) {
+			if ( wpmcp_jsonld_inner_safe( $m[2] ) ) {
+				return $m[0];
+			}
+
+			$data = json_decode( $m[2], true );
+			if ( JSON_ERROR_NONE !== json_last_error() ) {
+				return $m[0];
+			}
+
+			$json = wp_json_encode( $data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT );
+
+			return '<script type="application/ld+json">' . "\n" . $json . "\n" . '</script>';
+		},
+		(string) $html
+	);
+}
+
+/**
+ * Remove safe JSON-LD before looking for markup that runs.
+ *
+ * @param string $html Content.
+ * @return string
+ */
+function wpmcp_strip_safe_jsonld( $html ) {
+	return (string) preg_replace_callback(
+		wpmcp_jsonld_regex(),
+		function ( $m ) {
+			return wpmcp_jsonld_inner_safe( $m[2] ) ? '' : $m[0];
+		},
+		(string) $html
+	);
+}
+
+/**
  * Take a structured argument in whatever shape it survived the trip in.
  *
  * A 32 KB privacy policy could not be written in one call. The error said
@@ -1115,6 +1242,12 @@ function wpmcp_decode_structure( $value, $label ) {
 	if ( is_array( $value ) ) {
 		// Structured, as intended: every element is itself a structure.
 		if ( ! empty( $value ) && count( array_filter( $value, 'is_scalar' ) ) !== count( $value ) ) {
+			return $value;
+		}
+
+		// A map of named values, like meta: comma-split remains are always
+		// a plain list, never keyed by name.
+		if ( ! empty( $value ) && array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
 			return $value;
 		}
 
@@ -1231,7 +1364,7 @@ function wpmcp_filtered_fragments( $content ) {
 	);
 
 	$found = array();
-	$rest  = $content;
+	$rest  = wpmcp_strip_safe_jsonld( $content );
 
 	foreach ( $patterns as $pattern ) {
 		if ( preg_match_all( $pattern, $rest, $matches ) ) {
@@ -2571,16 +2704,65 @@ function wpmcp_create_content( array $args ) {
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 
 	if ( $dry_run ) {
-		return array(
-			'ok'      => true,
-			'dryRun'  => true,
-			'title'   => $title,
-			'type'    => $post_type,
-			'slug'    => '' !== $slug ? $slug : sanitize_title( $title ),
-			'parent'  => $parent,
-			'status'  => $status,
-			'message' => 'Dry run only — nothing was created. Call again with dry_run: false. Content sent as "tree" or "meta" is written in the same call once the page exists.',
+		$report = array(
+			'ok'       => true,
+			'dryRun'   => true,
+			'title'    => $title,
+			'type'     => $post_type,
+			'slug'     => '' !== $slug ? $slug : sanitize_title( $title ),
+			'parent'   => $parent,
+			'status'   => $status,
+			'errors'   => array(),
+			'warnings' => array(),
 		);
+
+		// The dry run checks what the real call will write, not only the
+		// envelope around it. A seventy-five block tree is exactly when an
+		// "ok" is worth nothing unless the tree was looked at.
+		if ( ! empty( $args['tree'] ) ) {
+			$tree = wpmcp_decode_structure( $args['tree'], 'tree' );
+			if ( is_wp_error( $tree ) ) {
+				return $tree;
+			}
+
+			$tree_errors = array();
+			$blocks      = wpmcp_tree_to_blocks( $tree, '', $tree_errors );
+
+			if ( ! empty( $tree_errors ) ) {
+				$report['errors'] = $tree_errors;
+			} else {
+				$validation         = wpmcp_validate_blocks( $blocks, array() );
+				$report['errors']   = $validation['errors'];
+				$report['warnings'] = $validation['warnings'];
+				$report['blocks']   = wpmcp_count_blocks( $blocks );
+
+				if ( empty( $validation['errors'] ) ) {
+					$impact = wpmcp_kses_impact( '', wpmcp_normalize_jsonld( $validation['serialized'] ) );
+					if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( null ) ) {
+						$report['errors'][] = sprintf(
+							'This adds markup WordPress will not store from an agent account (%s). Structured data in <script type="application/ld+json"> is accepted; other scripts, iframes and embeds are not.',
+							implode( ', ', $impact['added'] )
+						);
+					}
+				}
+			}
+		}
+
+		if ( ! empty( $args['meta'] ) ) {
+			$meta = wpmcp_decode_structure( $args['meta'], 'meta' );
+			if ( is_wp_error( $meta ) ) {
+				return $meta;
+			}
+			$meta_check       = wpmcp_meta_diff( (object) array( 'ID' => 0, 'post_type' => $post_type ), $meta );
+			$report['errors'] = array_merge( $report['errors'], $meta_check['errors'] );
+		}
+
+		$report['ok']      = empty( $report['errors'] );
+		$report['message'] = $report['ok']
+			? 'Dry run only — nothing was created. The tree and meta were checked exactly as the real call will write them. Call again with dry_run: false.'
+			: 'The dry run found problems — nothing was created. Fix them and call again.';
+
+		return $report;
 	}
 
 	$post_id = wp_insert_post(
@@ -2694,4 +2876,131 @@ function wpmcp_publish_created( $post_id, array &$result ) {
 	$result['status']  = 'publish';
 	$result['url']     = $published['url'] ?? ( $result['url'] ?? '' );
 	$result['message'] .= ' Published.';
+}
+
+/**
+ * Apply one change to several posts in a single call.
+ *
+ * Every item is dry-run first, and nothing is saved unless all of them
+ * pass. WordPress has no transaction across posts, so this is as close to
+ * all-or-nothing as it gets: a failure between the check and the save —
+ * someone editing a page in that second — stops the run there and says
+ * which posts were saved and which were not. Each post still gets its own
+ * revision, which is where its own undo lives.
+ *
+ * @param array $args { items: [{ post_id, ops|tree|meta|..., expected_modified }], dry_run }.
+ * @return array|\WP_Error
+ */
+function wpmcp_batch_write( array $args ) {
+	$items = wpmcp_decode_structure( $args['items'] ?? array(), 'items' );
+	if ( is_wp_error( $items ) ) {
+		return $items;
+	}
+
+	if ( empty( $items ) ) {
+		return new \WP_Error( 'wpmcp_bad_request', 'Provide "items": one entry per post, each with a post_id and the change for it.' );
+	}
+
+	if ( count( $items ) > 20 ) {
+		return new \WP_Error( 'wpmcp_bad_request', sprintf( '%d items; the limit is 20 per call. Split the run.', count( $items ) ) );
+	}
+
+	$ids = array();
+	foreach ( $items as $item ) {
+		$id = is_array( $item ) ? (int) ( $item['post_id'] ?? 0 ) : 0;
+		if ( $id && in_array( $id, $ids, true ) ) {
+			return new \WP_Error(
+				'wpmcp_bad_request',
+				sprintf( 'Post %d appears twice. Put all its operations into one item: the second save would find the page already changed by the first.', $id )
+			);
+		}
+		$ids[] = $id;
+	}
+
+	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$checks  = array();
+	$all_ok  = true;
+
+	foreach ( $items as $i => $item ) {
+		if ( ! is_array( $item ) || empty( $item['post_id'] ) ) {
+			$checks[] = array( 'index' => $i, 'ok' => false, 'error' => 'Each item needs a post_id.' );
+			$all_ok   = false;
+			continue;
+		}
+
+		$item['dry_run'] = true;
+		$result          = wpmcp_write_content( $item );
+
+		if ( is_wp_error( $result ) ) {
+			$checks[] = array( 'index' => $i, 'postId' => (int) $item['post_id'], 'ok' => false, 'error' => $result->get_error_message() );
+			$all_ok   = false;
+			continue;
+		}
+
+		$checks[] = array(
+			'index'    => $i,
+			'postId'   => (int) $item['post_id'],
+			'ok'       => ! empty( $result['ok'] ),
+			'errors'   => $result['errors'] ?? array(),
+			'warnings' => $result['warnings'] ?? array(),
+		);
+
+		if ( empty( $result['ok'] ) ) {
+			$all_ok = false;
+		}
+	}
+
+	if ( $dry_run || ! $all_ok ) {
+		return array(
+			'ok'      => $all_ok,
+			'dryRun'  => true,
+			'items'   => $checks,
+			'message' => $all_ok
+				? 'Every item passed its dry run — nothing was saved. Call again with dry_run: false.'
+				: 'At least one item failed its dry run, so nothing was saved. The items say which and why.',
+		);
+	}
+
+	$results = array();
+	$saved   = 0;
+
+	foreach ( $items as $i => $item ) {
+		$item['dry_run'] = false;
+		$result          = wpmcp_write_content( $item );
+		$ok              = ! is_wp_error( $result ) && ! empty( $result['ok'] );
+
+		$results[] = array(
+			'index'      => $i,
+			'postId'     => (int) $item['post_id'],
+			'ok'         => $ok,
+			'error'      => is_wp_error( $result ) ? $result->get_error_message() : null,
+			'revisionId' => $ok ? ( $result['revisionId'] ?? 0 ) : null,
+			'modified'   => $ok ? ( $result['modified'] ?? null ) : null,
+			'patched'    => $ok ? ( $result['patched'] ?? null ) : null,
+		);
+
+		if ( ! $ok ) {
+			break;
+		}
+		++$saved;
+	}
+
+	$complete = count( $items ) === $saved;
+
+	wpmcp_log(
+		'wpmcp/content-batch',
+		array(
+			'summary' => sprintf( 'Batch: %d of %d posts saved.', $saved, count( $items ) ),
+		)
+	);
+
+	return array(
+		'ok'      => $complete,
+		'dryRun'  => false,
+		'saved'   => $saved,
+		'items'   => $results,
+		'message' => $complete
+			? 'All posts saved. Each has its own revision.'
+			: sprintf( 'Stopped after %d of %d: the next post failed on save although its dry run passed, most likely because it changed in between. The posts before it are saved; the ones after it were not attempted.', $saved, count( $items ) ),
+	);
 }

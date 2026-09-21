@@ -259,7 +259,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
-			'description' => 'Write to a page: block content, SEO meta, or where the page sits — alone or together. Dry run by default; pass dry_run: false to save. Returns a validation report, a block-count diff, and the new "modified" value to pass as expected_modified on the next write. \n\nContent comes as "ops" (patch operations by block path) or "tree" (replace the page). Use ops for anything short of a rebuild. To change text inside a block use patch_html with "find" and "replace", not replace — replace demands the block\'s entire markup back, and everything retyped can come back wrong. The anchor must occur exactly once; content-search returns the surrounding text verbatim, which is how to pick one that does. \n\nValidation judges the change, not the page: a problem that already existed in a block you did not touch is a warning, anything the change introduces is an error naming the block path. Markup needing unfiltered_html (scripts, iframes) cannot be written and is refused in the dry run; markup of that kind already on the page is preserved, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent. Every write leaves a revision. \n\nslug, parent and status apply only while a page has never been published — a live page keeps its address. publish is accepted only during a work session. Post type is never touched. \n\nBefore inserting a block type you have not written before, read an existing instance with content-read and mirror its shape: some libraries keep a per-instance id, generated CSS and matching classes that must agree, and a block that merely validates can still be wrong.',
+			'description' => 'Write to a page: block content, SEO meta, or where the page sits — alone or together. Dry run by default; pass dry_run: false to save. Returns a validation report, a block-count diff, and the new "modified" value to pass as expected_modified on the next write. \n\nContent comes as "ops" (patch operations by block path) or "tree" (replace the page). Use ops for anything short of a rebuild. To change text inside a block use patch_html with "find" and "replace", not replace — replace demands the block\'s entire markup back, and everything retyped can come back wrong. The anchor must occur exactly once; content-search returns the surrounding text verbatim, which is how to pick one that does. The answer shows each patched block as it now reads. \n\nValidation judges the change, not the page: a problem that already existed in a block you did not touch is a warning, anything the change introduces is an error naming the block path. Markup needing unfiltered_html (scripts, iframes) cannot be written and is refused in the dry run, except structured data: <script type="application/ld+json"> holding valid JSON is accepted and stored safely; markup of that kind already on the page is preserved, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent. Every write leaves a revision. \n\nslug, parent and status apply only while a page has never been published — a live page keeps its address. publish is accepted only during a work session. Post type is never touched. \n\nBefore inserting a block type you have not written before, read an existing instance with content-read and mirror its shape: some libraries keep a per-instance id, generated CSS and matching classes that must agree, and a block that merely validates can still be wrong.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -536,7 +536,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-fetch-live',
 		array(
 			'label'       => 'Ausgelieferte Seite abrufen',
-			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own.',
+			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own. To check a change, pass contains rather than reading the page.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -555,6 +555,15 @@ function wpmcp_register_abilities() {
 						'default'     => 0,
 						'description' => 'Byte to start the returned HTML at. Long pages come back in windows of 200000 bytes; when one is not the whole page the answer says so in "truncated" and names the "nextOffset" to ask for.',
 					),
+					'contains'     => array(
+						'type'        => 'string',
+						'description' => 'Check whether this text is on the delivered page instead of receiving the page: found, how often, whether it is in the main content rather than only header or footer, and the text around the first hits. The usual check after a write, at a fraction of the size.',
+					),
+					'body_only'    => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'Return only the main content area, without header, footer, styles and scripts.',
+					),
 				),
 				'required'   => array( 'post_id' ),
 			),
@@ -564,7 +573,9 @@ function wpmcp_register_abilities() {
 				return wpmcp_fetch_live(
 					(int) ( $input['post_id'] ?? 0 ),
 					! isset( $input['cache_buster'] ) || (bool) $input['cache_buster'],
-					(int) ( $input['offset'] ?? 0 )
+					(int) ( $input['offset'] ?? 0 ),
+					(string) ( $input['contains'] ?? '' ),
+					! empty( $input['body_only'] )
 				);
 			},
 			'meta' => $read_only,
@@ -575,7 +586,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-create',
 		array(
 			'label'       => 'Seite anlegen',
-			'description' => 'Creates a page with its title, slug, parent and status, and writes the content in the same call when "tree" and "meta" come with it. Use this to build a page rather than duplicating one and overwriting everything: a duplicate inherits the parent it was copied from and a slug derived from the old title, both of which then have to be corrected by hand. Duplicating is still right when an existing page is the template — content-duplicate keeps its taxonomies and meta. Always a draft, whatever status is asked for; publishing stays with a human. Dry run by default. If the page is created but the content is rejected, the answer says so and gives the id: write to that id, do not create it again.',
+			'description' => 'Creates a page with its title, slug, parent and status, and writes the content in the same call when "tree" and "meta" come with it. Use this to build a page rather than duplicating one and overwriting everything: a duplicate inherits the parent it was copied from and a slug derived from the old title, both of which then have to be corrected by hand. Duplicating is still right when an existing page is the template — content-duplicate keeps its taxonomies and meta. A draft unless status publish is given during a work session, and then only once the content is written. Dry run by default, and the dry run validates the tree and meta exactly as the real call will. If the page is created but the content is rejected, the answer says so and gives the id: write to that id, do not create it again.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -729,6 +740,35 @@ function wpmcp_register_abilities() {
 			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_update( is_array( $input ) ? $input : array() );
+			},
+		)
+	);
+
+	wp_register_ability(
+		'wpmcp/content-batch',
+		array(
+			'label'       => 'Mehrere Seiten schreiben',
+			'description' => 'Applies changes to up to 20 posts in one call: items is a list of what content-write takes, one per post, each with its own expected_modified. Every item is dry-run first and nothing is saved unless all pass; dry run by default. There is no transaction across posts, so if one fails on save after passing — it changed in between — the run stops there and says which posts were saved. Each post gets its own revision. Put all changes to one post into a single item.',
+			'category'    => WPMCP_ABILITY_CATEGORY,
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'items'   => array(
+						'type'        => array( 'array', 'string' ),
+						'description' => 'One entry per post: { post_id, ops or tree or meta, expected_modified }.',
+					),
+					'dry_run' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Check every item without saving. Defaults to true.',
+					),
+				),
+				'required'   => array( 'items' ),
+			),
+			'output_schema' => array( 'type' => 'object' ),
+			'permission_callback' => 'wpmcp_can',
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_batch_write( is_array( $input ) ? $input : array() );
 			},
 		)
 	);

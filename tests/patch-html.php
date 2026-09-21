@@ -161,6 +161,17 @@ check(
 	is_wp_error( $out ) ? $out->get_error_message() : ''
 );
 
+echo "\n\033[1mDie Antwort zeigt, wie der Block jetzt lautet\033[0m\n";
+
+$ops    = array( array( 'op' => 'patch_html', 'path' => '0', 'find' => '07131 123456', 'replace' => '+49 7131 123456' ) );
+$result = wpmcp_apply_ops( parse_blocks( $page ), $ops );
+$conf   = wpmcp_patch_confirmations( $result['blocks'], $ops );
+
+check( 1 === count( $conf ), 'eine Bestaetigung je patch_html' );
+check( '0' === ( $conf[0]['path'] ?? null ), 'mit dem Pfad' );
+check( false !== strpos( $conf[0]['now'] ?? '', '+49 7131 123456' ), 'und dem neuen Text an seiner Stelle', $conf[0]['now'] ?? '' );
+check( array() === wpmcp_patch_confirmations( $result['blocks'], array( array( 'op' => 'set_attrs', 'path' => '0' ) ) ), 'andere Operationen bekommen keine' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mpatch_html in Ordnung.\033[0m\n";

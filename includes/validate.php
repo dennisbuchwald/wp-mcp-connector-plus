@@ -109,6 +109,20 @@ function wpmcp_summarise_issues( array $messages, $examples = 3 ) {
 }
 
 /**
+ * Does this markup hold an image tag without a usable source?
+ *
+ * @param string $html Block markup.
+ * @return bool
+ */
+function wpmcp_image_without_source( $html ) {
+	if ( ! preg_match( '#<img\b[^>]*>#i', $html, $m ) ) {
+		return false;
+	}
+
+	return ! preg_match( '#\ssrc\s*=\s*(["\'])\s*[^"\'\s]+#i', $m[0] );
+}
+
+/**
  * Strip the leading block path from a message, so the same problem in a
  * different position counts as the same problem. Paths shift whenever a
  * block is inserted or removed.
@@ -263,6 +277,15 @@ function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$e
 		if ( wpmcp_has_orphaned_structured_data( (string) ( $block['innerHTML'] ?? '' ) ) ) {
 			$warnings[] = sprintf(
 				'%s: contains JSON-LD structured data that is not wrapped in a script tag, so it renders as visible text. This is what a stripped <script> leaves behind. Wrap it in <script type="application/ld+json"> in the editor.',
+				$path
+			);
+		}
+
+		// An image block with an <img> but no source renders a broken image,
+		// and looks nothing like the placeholder a human expects to find.
+		if ( 'core/image' === $name && wpmcp_image_without_source( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+			$warnings[] = sprintf(
+				'%s: "core/image" has an <img> without a source, which renders as a broken image. For a placeholder that opens the upload dialog in the editor, send core/image with no "html" and no url at all.',
 				$path
 			);
 		}

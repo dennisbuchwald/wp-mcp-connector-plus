@@ -110,10 +110,12 @@ function wpmcp_page_cache_suspected() {
  *
  * @param int  $post_id      Post ID.
  * @param bool $cache_buster Append a unique query parameter.
- * @param int  $offset       Byte to start the returned markup at.
+ * @param int    $offset       Byte to start the returned markup at.
+ * @param string $contains     Only check whether this text is on the page.
+ * @param bool   $body_only    Return the main content area alone.
  * @return array|\WP_Error
  */
-function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0 ) {
+function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contains = '', $body_only = false ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -156,8 +158,8 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0 ) {
 		}
 	}
 
-	$full  = strlen( $body );
-	$slice = wpmcp_slice_text( $body, 200000, $offset );
+	$full = strlen( $body );
+	$head = wpmcp_head_summary( $body );
 
 	wpmcp_log(
 		'wpmcp/content-fetch-live',
@@ -167,16 +169,109 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0 ) {
 		)
 	);
 
-	return array_merge(
-		array(
-			'postId'       => $post->ID,
-			'url'          => $url,
-			'httpStatus'   => $status,
-			'cacheHeaders' => $cache_headers,
-			'head'         => wpmcp_head_summary( $body ),
-			'source'       => 'the public URL, as a visitor receives it',
-		),
-		$slice
+	$base = array(
+		'postId'       => $post->ID,
+		'url'          => $url,
+		'httpStatus'   => $status,
+		'cacheHeaders' => $cache_headers,
+		'head'         => $head,
+		'source'       => 'the public URL, as a visitor receives it',
+	);
+
+	// Most checks after a write are one question — is my change on the
+	// page? — and the answer to it used to arrive as 200 KB of HTML that
+	// had to be written to disk and searched.
+	$contains = (string) $contains;
+	if ( '' !== $contains ) {
+		$hit  = wpmcp_find_in_page( $body, $contains );
+		$main = wpmcp_find_in_page( wpmcp_main_content( $body ), $contains );
+
+		return array_merge(
+			$base,
+			array(
+				'contains'      => $contains,
+				'found'         => $hit['found'],
+				'count'         => $hit['count'],
+				'inMainContent' => $main['found'],
+				'snippets'      => $hit['snippets'],
+				'bytes'         => $full,
+			)
+		);
+	}
+
+	$scope = $body_only ? wpmcp_main_content( $body ) : $body;
+
+	if ( $body_only ) {
+		$base['scope'] = 'main content only: header, footer, styles and scripts removed';
+	}
+
+	return array_merge( $base, wpmcp_slice_text( $scope, 200000, $offset ) );
+}
+
+/**
+ * The main content of a page, without what surrounds it.
+ *
+ * The first <main>, else the first <article>, else the body — and within
+ * it no styles and no scripts other than structured data. Those are most
+ * of a page's weight and none of what a text change needs checking.
+ *
+ * @param string $html Delivered HTML.
+ * @return string
+ */
+function wpmcp_main_content( $html ) {
+	$patterns = array(
+		'#<main\b[^>]*>(.*)</main\s*>#is',
+		'#<article\b[^>]*>(.*)</article\s*>#is',
+		'#<body\b[^>]*>(.*)</body\s*>#is',
+	);
+
+	foreach ( $patterns as $pattern ) {
+		if ( preg_match( $pattern, $html, $m ) ) {
+			$html = $m[1];
+			break;
+		}
+	}
+
+	$html = preg_replace( '#<style\b[^>]*>.*?</style\s*>#is', '', $html );
+	$html = preg_replace( '#<script\b(?![^>]*application/ld\+json)[^>]*>.*?</script\s*>#is', '', (string) $html );
+
+	return (string) $html;
+}
+
+/**
+ * Where a string occurs in a page, with the text around it.
+ *
+ * @param string $html   Page or part of it.
+ * @param string $needle Text to find, case-insensitive.
+ * @param int    $limit  How many snippets to return.
+ * @return array{found: bool, count: int, snippets: string[]}
+ */
+function wpmcp_find_in_page( $html, $needle, $limit = 5 ) {
+	$html     = (string) $html;
+	$needle   = (string) $needle;
+	$snippets = array();
+	$count    = 0;
+
+	if ( '' === $needle ) {
+		return array( 'found' => false, 'count' => 0, 'snippets' => array() );
+	}
+
+	$offset = 0;
+	$length = strlen( $needle );
+
+	while ( false !== ( $pos = stripos( $html, $needle, $offset ) ) ) {
+		++$count;
+		if ( count( $snippets ) < $limit ) {
+			$start      = max( 0, $pos - 100 );
+			$snippets[] = trim( preg_replace( '/\s+/', ' ', substr( $html, $start, $length + 200 ) ) );
+		}
+		$offset = $pos + $length;
+	}
+
+	return array(
+		'found'    => $count > 0,
+		'count'    => $count,
+		'snippets' => $snippets,
 	);
 }
 

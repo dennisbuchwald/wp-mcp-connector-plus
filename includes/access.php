@@ -499,6 +499,7 @@ function wpmcp_ability_names() {
 
 	$write = array(
 		'wpmcp/content-write',
+		'wpmcp/content-batch',
 		'wpmcp/content-create',
 		'wpmcp/content-duplicate',
 		'wpmcp/content-restore',

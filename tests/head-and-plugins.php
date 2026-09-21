@@ -68,6 +68,27 @@ check( 'Wartungsmodus' === $holding['title'], 'eine Wartungsseite liefert ihren 
 $tricky = '<html><head><title>Echt</title></head><body><meta name="description" content="Aus dem Text"></body></html>';
 check( ! isset( wpmcp_head_summary( $tricky )['description'] ), 'ein Meta-Tag im Body zaehlt nicht' );
 
+echo "\n\033[1mNur pruefen, ob die Aenderung auf der Seite ist\033[0m\n";
+
+// The usual check after a write came back as 200 KB of HTML every time.
+$page = '<html><head><style>.a{}</style></head><body><header><a href="/website-fuer-handwerker/">Menue</a></header>'
+	. '<main><h1>Titel</h1><p>Mehr unter <a href="/website-fuer-handwerker/">Handwerker</a>.</p>'
+	. '<script>tracking()</script><script type="application/ld+json">{"@type":"FAQPage"}</script></main>'
+	. '<footer>Fuss</footer></body></html>';
+
+$hit = wpmcp_find_in_page( $page, 'website-fuer-handwerker' );
+check( true === $hit['found'] && 2 === $hit['count'], 'findet beide Stellen', wp_json_encode( $hit ) );
+check( ! empty( $hit['snippets'][0] ) && false !== strpos( $hit['snippets'][0], 'Menue' ), 'mit dem Text drumherum' );
+check( false === wpmcp_find_in_page( $page, 'gibt es nicht' )['found'], 'und sagt ehrlich, wenn nichts da ist' );
+check( true === wpmcp_find_in_page( $page, 'TITEL' )['found'], 'ohne auf Gross- und Kleinschreibung zu achten' );
+
+$main = wpmcp_main_content( $page );
+check( false !== strpos( $main, '<h1>Titel</h1>' ), 'der Hauptinhalt bleibt' );
+check( false === strpos( $main, 'Fuss' ) && false === strpos( $main, 'Menue' ), 'Kopf und Fuss fallen weg' );
+check( false === strpos( $main, 'tracking()' ), 'Scripts ebenfalls' );
+check( false !== strpos( $main, 'FAQPage' ), 'strukturierte Daten nicht', 'die will man nach einem Schema-Write sehen' );
+check( 1 === wpmcp_find_in_page( $main, 'website-fuer-handwerker' )['count'], 'so unterscheidet sich Treffer im Inhalt von Treffer im Menue' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mKopf-Auswertung in Ordnung.\033[0m\n";

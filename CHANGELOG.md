@@ -7,6 +7,39 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.18.0] - 2026-09-21
+
+Aus zwei Praxisberichten von Agenten: weniger Nachpruefen, weniger Einzelaufrufe, strukturierte Daten schreibbar.
+
+### Hinzugefuegt
+
+- **`content-batch`**: dieselbe Aenderung auf bis zu 20 Beitraegen in einem Aufruf, statt zwanzig einzelner `content-write`. Jeder Posten laeuft zuerst im Probelauf; gespeichert wird nur, wenn alle bestehen. Probelauf ist Standard.
+  - WordPress kennt keine Transaktion ueber mehrere Beitraege. Scheitert ein Posten beim Speichern, obwohl sein Probelauf bestand (die Seite wurde in der Zwischenzeit geaendert), stoppt der Lauf und sagt ehrlich, welche Beitraege gespeichert sind und welche nicht.
+  - Jeder Beitrag bekommt seine eigene Revision, dort liegt sein Undo.
+  - Derselbe Beitrag zweimal wird abgelehnt: der zweite Save faende die Seite schon veraendert.
+- **`content-fetch-live` mit `contains`**: beantwortet "ist meine Aenderung auf der Seite?" mit gefunden, Anzahl, ob im Hauptinhalt oder nur in Kopf/Fuss, und dem Text um die ersten Treffer. Vorher kamen dafuer 200 KB HTML zurueck, die auf Platte geschrieben und durchsucht werden mussten.
+- **`body_only`** an derselben Stelle: nur der Hauptinhalt, ohne Kopf, Fuss, Styles und Scripts (strukturierte Daten bleiben drin).
+- **Strukturierte Daten (JSON-LD) sind schreibbar.** Jeder SEO-Artikel traegt sie, und bisher liessen sie sich nicht anlegen, weil sie in einem Script-Tag stehen. Browser fuehren JSON-LD aber nicht aus. Die einzige Gefahr ist ein `</script>` in den Daten, das den Tag frueh schliesst; deshalb wird jedes `<` in den Daten als `\u003C` gespeichert (JSON-Parser lesen es als dasselbe Zeichen). Sicheres JSON-LD bleibt Byte fuer Byte gleich.
+  - Weiter abgelehnt: ein anderer `type`, ein zusaetzliches Attribut am Tag, Inhalt, der kein gueltiges JSON ist.
+- **`patch_html` bestaetigt sich selbst**: die Antwort zeigt unter `patched` jeden geaenderten Block an der Stelle des neuen Texts. Der Kontrollaufruf danach entfaellt.
+- **Warnung fuer `core/image` mit `<img>` ohne Quelle**: das rendert als kaputtes Bild. Der richtige Platzhalter ist `core/image` ganz ohne Markup und URL.
+
+### Geaendert
+
+- **Der Probelauf von `content-create` prueft den Baum und die Meta.** Bisher bestaetigte er nur Titel, Slug und Status; ein Baum mit 75 Bloecken bekam "ok", ohne angesehen worden zu sein, und der echte Aufruf legte die Seite dann an. Jetzt laeuft dieselbe Validierung wie beim Schreiben, mit Fehlern, Warnungen und Blockzahl.
+- **Synced Patterns leeren den Cache der Seiten, die sie einbetten.** Das Pattern selbst hat keinen Cache, den ein Besucher sieht; die Seiten darum herum zeigten weiter die alte Fassung. Die geleerten Seiten stehen unter `cache.alsoPurged`.
+- **uniqueId-Warnung deutlicher**: keine ID erfinden. Eine vorhandene Instanz lesen, ihre Form kopieren und die ID an allen drei Stellen gleichzeitig aendern (Attribut, Klasse, CSS).
+
+### Behoben
+
+- **Meta als Map aus Texten wurde abgelehnt**, wenn sie als Objekt ankam: `{"rank_math_title": "..."}` sah fuer die Payload-Pruefung aus wie eine per Komma zerlegte Liste. Zerlegte Reste sind aber immer eine nummerierte Liste, nie eine Map mit Namen. Gefunden beim Test des neuen Probelaufs.
+
+### Bewusst nicht gebaut
+
+- **uniqueId automatisch erzeugen.** Die ID haengt an generiertem CSS und an einer Klasse im Markup, die der Konnektor nicht kennt. Eine erfundene ID passt zu keinem der beiden, und die Seite saehe im Editor sauber aus und im Frontend kaputt.
+
+---
+
 ## [0.17.0] - 2026-09-15
 
 Die beiden offenen Entscheidungen aus 0.16.0, getroffen: Veroeffentlichen und Bild-Upload - beides nur waehrend einer Arbeitssitzung.

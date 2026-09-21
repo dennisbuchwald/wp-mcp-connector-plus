@@ -41,7 +41,9 @@ function check( $ok, $name, $detail = '' ) {
 
 echo "\n\033[1mWirkung des Speicher-Filters\033[0m\n";
 
-$schema = '<!-- wp:core/html --><script type="application/ld+json">{"@type":"FAQPage"}</script><!-- /wp:core/html -->';
+// A script that executes. JSON-LD is no longer the example here: since
+// 0.18.0 valid structured data is writable, see tests/jsonld.php.
+$schema = '<!-- wp:core/html --><script>window.dataLayer.push({"@type":"FAQPage"})</script><!-- /wp:core/html -->';
 $clean  = '<!-- wp:core/paragraph --><p>Text</p><!-- /wp:core/paragraph -->';
 
 // Nothing to filter at all.

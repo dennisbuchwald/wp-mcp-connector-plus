@@ -97,7 +97,7 @@ function wpmcp_validate_attrs( $block_name, array $attrs, $path ) {
 	foreach ( array( 'uniqueId', 'uniqueID' ) as $id_attr ) {
 		if ( isset( $defs[ $id_attr ] ) && empty( $attrs[ $id_attr ] ) ) {
 			$warnings[] = sprintf(
-				'%s: "%s" declares "%s" and none was given. The editor will generate one when the page is opened, marking it as changed without anyone editing it, and any CSS keyed to that id is lost. Copy the shape of an existing instance of this block, including the id, the matching class in the markup and the generated css attribute.',
+				'%s: "%s" declares "%s" and none was given. The editor will generate one when the page is opened, marking it as changed without anyone editing it, and any CSS keyed to that id is lost. Do not invent one: an id made up on its own matches neither the generated CSS nor the class in the markup. Read an existing instance with content-read, copy its shape, and change the id to a new value in all three places at once: the attribute, the class and the css.',
 				$path,
 				$block_name,
 				$id_attr
