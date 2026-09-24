@@ -206,6 +206,16 @@ function expect_contains( $html, $needle, $name ) {
 	++$fail;
 }
 
+function expect_not_contains( $html, $needle, $name ) {
+	global $fail;
+	if ( false === strpos( $html, $needle ) ) {
+		echo "  \033[32m✓\033[0m {$name}\n";
+		return;
+	}
+	echo "  \033[31m✗\033[0m {$name}\n      unerwartet gefunden: {$needle}\n";
+	++$fail;
+}
+
 echo "\n\033[1mAdmin-Seite rendern\033[0m\n";
 
 $html = render_case(
@@ -289,7 +299,7 @@ $GLOBALS['stub']['agent_user']  = new WP_User();
 
 $html = render_case( 'Formular abgeschickt', function () {} );
 expect_contains( $html, 'claude mcp add', 'gibt den fertigen Befehl aus' );
-expect_contains( $html, 'strict-mcp-config', 'gibt den isolierten Start aus' );
+expect_not_contains( $html, 'strict-mcp-config', 'kein isolierter Start, damit andere MCPs verfügbar bleiben' );
 expect_contains( $html, 'mcpServers', 'gibt die JSON-Konfiguration aus' );
 expect_contains( $html, 'shown only once', 'warnt, dass das Passwort einmalig ist' );
 

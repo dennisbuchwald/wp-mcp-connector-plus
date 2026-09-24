@@ -171,7 +171,7 @@ function wpmcp_render_connection_result( array $c ) {
 	);
 
 	$write_file = "mkdir -p ~/.claude && cat > {$file} <<'JSON'\n{$config}\nJSON\nchmod 600 {$file}";
-	$add_alias  = "echo \"alias {$alias}='claude --mcp-config {$file} --strict-mcp-config'\" >> ~/.zshrc && source ~/.zshrc";
+	$add_alias  = "echo \"alias {$alias}='claude --mcp-config {$file}'\" >> ~/.zshrc && source ~/.zshrc";
 	$simple     = sprintf(
 		'claude mcp add --transport http %s %s --header "Authorization: %s"',
 		$slug,
@@ -186,7 +186,7 @@ function wpmcp_render_connection_result( array $c ) {
 
 	<h3><?php esc_html_e( 'Claude Code — recommended setup', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
-		<?php esc_html_e( 'Connects this one site and nothing else: no other MCP servers in the session, more context left for the work, and the credentials stay out of your repositories. Run each block in a terminal.', 'wp-mcp-connector-plus' ); ?>
+		<?php esc_html_e( 'Connects this site alongside your other MCP servers (SEO tools, calendars, etc.). Credentials stay out of your repositories. Run each block in a terminal.', 'wp-mcp-connector-plus' ); ?>
 	</p>
 
 	<p><strong><?php esc_html_e( '1. Save the connection', 'wp-mcp-connector-plus' ); ?></strong></p>
