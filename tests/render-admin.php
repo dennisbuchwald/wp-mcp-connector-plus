@@ -298,9 +298,9 @@ $GLOBALS['stub']['registered']  = 8;
 $GLOBALS['stub']['agent_user']  = new WP_User();
 
 $html = render_case( 'Formular abgeschickt', function () {} );
-expect_contains( $html, 'claude mcp add', 'gibt den fertigen Befehl aus' );
-expect_not_contains( $html, 'strict-mcp-config', 'kein isolierter Start, damit andere MCPs verfügbar bleiben' );
-expect_contains( $html, 'mcpServers', 'gibt die JSON-Konfiguration aus' );
+expect_contains( $html, 'claude mcp add --transport http -s user', 'empfiehlt claude mcp add als primaeren Weg' );
+expect_not_contains( $html, 'strict-mcp-config', 'kein isolierter Start, damit andere MCPs verfuegbar bleiben' );
+expect_contains( $html, 'mcpServers', 'gibt die JSON-Konfiguration als Alternative aus' );
 expect_contains( $html, 'shown only once', 'warnt, dass das Passwort einmalig ist' );
 
 echo "\n";

@@ -170,14 +170,15 @@ function wpmcp_render_connection_result( array $c ) {
 		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
 	);
 
-	$write_file = "mkdir -p ~/.claude && cat > {$file} <<'JSON'\n{$config}\nJSON\nchmod 600 {$file}";
-	$add_alias  = "echo \"alias {$alias}='claude --mcp-config {$file}'\" >> ~/.zshrc && source ~/.zshrc";
-	$simple     = sprintf(
-		'claude mcp add --transport http %s %s --header "Authorization: %s"',
+	$add_cmd = sprintf(
+		'claude mcp add --transport http -s user %s %s --header "Authorization: %s"',
 		$slug,
 		$c['endpoint'],
 		$c['header']
 	);
+
+	$write_file = "mkdir -p ~/.claude && cat > {$file} <<'JSON'\n{$config}\nJSON\nchmod 600 {$file}";
+	$add_alias  = "echo \"alias {$alias}='claude --mcp-config {$file}'\" >> ~/.zshrc && source ~/.zshrc";
 	?>
 	<h2><?php esc_html_e( 'Your connection', 'wp-mcp-connector-plus' ); ?></h2>
 	<div class="notice notice-warning inline">
@@ -186,21 +187,16 @@ function wpmcp_render_connection_result( array $c ) {
 
 	<h3><?php esc_html_e( 'Claude Code — recommended setup', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
-		<?php esc_html_e( 'Connects this site alongside your other MCP servers (SEO tools, calendars, etc.). Credentials stay out of your repositories. Run each block in a terminal.', 'wp-mcp-connector-plus' ); ?>
+		<?php esc_html_e( 'Registers this site as a permanent MCP server. It loads alongside your other servers (SEO tools, calendars, etc.) in every Claude Code session. Run this once in a terminal.', 'wp-mcp-connector-plus' ); ?>
 	</p>
 
-	<p><strong><?php esc_html_e( '1. Save the connection', 'wp-mcp-connector-plus' ); ?></strong></p>
-	<textarea readonly rows="14" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $write_file ); ?></textarea>
+	<p><strong><?php esc_html_e( '1. Register the server', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<textarea readonly rows="4" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $add_cmd ); ?></textarea>
 
-	<p><strong><?php esc_html_e( '2. Create a shortcut', 'wp-mcp-connector-plus' ); ?></strong></p>
-	<p class="description"><?php esc_html_e( 'For bash, replace ~/.zshrc with ~/.bashrc.', 'wp-mcp-connector-plus' ); ?></p>
-	<textarea readonly rows="3" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $add_alias ); ?></textarea>
-
-	<p><strong><?php esc_html_e( '3. Start working', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<p><strong><?php esc_html_e( '2. Start working', 'wp-mcp-connector-plus' ); ?></strong></p>
 	<textarea readonly rows="2" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $alias ); ?></textarea>
+		onclick="this.select()">claude</textarea>
 	<p class="description">
 		<?php
 		printf(
@@ -211,18 +207,20 @@ function wpmcp_render_connection_result( array $c ) {
 		?>
 	</p>
 
-	<p><strong><?php esc_html_e( '4. Try it', 'wp-mcp-connector-plus' ); ?></strong></p>
+	<p><strong><?php esc_html_e( '3. Try it', 'wp-mcp-connector-plus' ); ?></strong></p>
 	<p class="description"><?php esc_html_e( 'Read-only, nothing can change:', 'wp-mcp-connector-plus' ); ?></p>
 	<textarea readonly rows="2" style="width:100%;font-family:monospace" onclick="this.select()"><?php
 		esc_html_e( 'Describe this website: which pages exist, and how is the front page built?', 'wp-mcp-connector-plus' );
 	?></textarea>
 
-	<h3><?php esc_html_e( 'Alternative: add it to your usual servers', 'wp-mcp-connector-plus' ); ?></h3>
+	<h3><?php esc_html_e( 'Alternative: isolated config file', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
-		<?php esc_html_e( 'Simpler, but the session then also carries every other MCP server you have configured.', 'wp-mcp-connector-plus' ); ?>
+		<?php esc_html_e( 'Keeps credentials in a separate file and starts a session with only this site connected. Other MCP servers will not be available.', 'wp-mcp-connector-plus' ); ?>
 	</p>
-	<textarea readonly rows="4" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $simple ); ?></textarea>
+	<textarea readonly rows="14" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $write_file ); ?></textarea>
+	<textarea readonly rows="3" style="width:100%;font-family:monospace"
+		onclick="this.select()"><?php echo esc_textarea( $add_alias ); ?></textarea>
 
 	<h3><?php esc_html_e( 'Other clients', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
