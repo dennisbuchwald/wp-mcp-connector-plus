@@ -4,7 +4,7 @@
  * and a notice in the block editor while that is recent.
  *
  * The other direction (a person in the editor, the agent about to save)
- * is wpmcp_post_lock_error() in content.php. This is the way back: a
+ * is wpmcp_post_lock_error() in content-access.php. This is the way back: a
  * person who opens a page the agent changed an hour ago should not find
  * out from a diff that it was not them.
  *
