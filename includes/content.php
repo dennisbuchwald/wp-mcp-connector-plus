@@ -645,41 +645,27 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 }
 
 /**
- * Write a block tree to a post — full replacement or patch operations.
+ * Everything a write checks before it saves, for a post or a post to be.
  *
- * @param array $args { post_id, tree?, ops?, dry_run }.
- * @return array|\WP_Error
+ * The validation pipeline in one place: decode, build the blocks from a
+ * tree or operations, validate them, the markup guard, meta and
+ * placement. content-write runs it on the stored post. content-create
+ * runs it on a stand-in (ID 0, empty content) before inserting anything,
+ * dry run and real call alike, so the two cannot drift apart again: the
+ * create dry run used to be a hand-made copy of this, and the real create
+ * checked nothing until the page already existed.
+ *
+ * @param \WP_Post|object $post    Post, or a stand-in with ID 0.
+ * @param array           $args    tree / ops / meta / slug / parent / status.
+ * @param bool            $dry_run For the response only.
+ * @return array|\WP_Error {
+ *     @type array    $response The response as far as it is known before saving.
+ *     @type string[] $errors   Everything that stops the save.
+ *     ... and what the save needs: validation, impact, meta_diff, placement,
+ *     diff, after_count and the has_* flags.
+ * }
  */
-function wpmcp_write_content( array $args ) {
-	$post_id = (int) ( $args['post_id'] ?? 0 );
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
-
-	$post = wpmcp_get_writable_post( $post_id );
-	if ( is_wp_error( $post ) ) {
-		return $post;
-	}
-
-	$target = wpmcp_assert_writable_target( $post );
-	if ( is_wp_error( $target ) ) {
-		return $target;
-	}
-
-	// Optimistic locking. The agent reads, thinks, then writes; in between
-	// a human may have saved the same page. Without this the human's work
-	// disappears silently.
-	$expected_modified = isset( $args['expected_modified'] ) ? trim( (string) $args['expected_modified'] ) : '';
-	if ( '' !== $expected_modified && $expected_modified !== $post->post_modified_gmt ) {
-		return new \WP_Error(
-			'wpmcp_stale',
-			sprintf(
-				'Post %d changed after you read it (read: %s, now: %s). Someone edited it in the meantime. Read it again and redo the change on the current version.',
-				$post->ID,
-				$expected_modified,
-				$post->post_modified_gmt
-			)
-		);
-	}
-
+function wpmcp_plan_write( $post, array $args, $dry_run ) {
 	$before_blocks = parse_blocks( $post->post_content );
 	$before_count  = wpmcp_count_blocks( $before_blocks );
 
@@ -740,10 +726,17 @@ function wpmcp_write_content( array $args ) {
 		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors );
 		if ( ! empty( $errors ) ) {
 			return array(
-				'ok'       => false,
-				'dryRun'   => $dry_run,
-				'errors'   => $errors,
-				'warnings' => array(),
+				'response'      => array(
+					'ok'       => false,
+					'dryRun'   => $dry_run,
+					'errors'   => $errors,
+					'warnings' => array(),
+				),
+				'errors'        => $errors,
+				'has_tree'      => true,
+				'has_ops'       => false,
+				'has_meta'      => $has_meta,
+				'has_placement' => $has_placement,
 			);
 		}
 	} else {
@@ -775,7 +768,7 @@ function wpmcp_write_content( array $args ) {
 
 	$warnings = $validation['warnings'];
 
-	if ( 'wp_block' === $post->post_type ) {
+	if ( 'wp_block' === $post->post_type && $post->ID ) {
 		$uses = wpmcp_pattern_usage_count( $post->ID );
 		if ( $uses > 0 ) {
 			$warnings[] = sprintf(
@@ -800,7 +793,9 @@ function wpmcp_write_content( array $args ) {
 	$errors = $validation['errors'];
 
 	if ( $impact['alters'] ) {
-		if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
+		// The filter has always been handed the post being written, and
+		// nothing for content that does not exist yet.
+		if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post->ID ? $post : null ) ) {
 			$errors[] = wpmcp_filtered_markup_error( $impact );
 		} elseif ( $impact['introduces'] ) {
 			$warnings[] = sprintf(
@@ -847,6 +842,70 @@ function wpmcp_write_content( array $args ) {
 		);
 	}
 
+	return array(
+		'response'      => $response,
+		'errors'        => $errors,
+		'has_tree'      => $has_tree,
+		'has_ops'       => $has_ops,
+		'has_meta'      => $has_meta,
+		'has_placement' => $has_placement,
+		'validation'    => $validation,
+		'impact'        => $impact,
+		'meta_diff'     => $meta_diff,
+		'placement'     => $placement,
+		'diff'          => $diff,
+		'after_count'   => $after_count,
+	);
+}
+
+/**
+ * Write a block tree to a post — full replacement or patch operations.
+ *
+ * @param array $args { post_id, tree?, ops?, dry_run }.
+ * @return array|\WP_Error
+ */
+function wpmcp_write_content( array $args ) {
+	$post_id = (int) ( $args['post_id'] ?? 0 );
+	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+
+	$post = wpmcp_get_writable_post( $post_id );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+
+	$target = wpmcp_assert_writable_target( $post );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
+	// Optimistic locking. The agent reads, thinks, then writes; in between
+	// a human may have saved the same page. Without this the human's work
+	// disappears silently.
+	$expected_modified = isset( $args['expected_modified'] ) ? trim( (string) $args['expected_modified'] ) : '';
+	if ( '' !== $expected_modified && $expected_modified !== $post->post_modified_gmt ) {
+		return new \WP_Error(
+			'wpmcp_stale',
+			sprintf(
+				'Post %d changed after you read it (read: %s, now: %s). Someone edited it in the meantime. Read it again and redo the change on the current version.',
+				$post->ID,
+				$expected_modified,
+				$post->post_modified_gmt
+			)
+		);
+	}
+
+	$plan = wpmcp_plan_write( $post, $args, $dry_run );
+	if ( is_wp_error( $plan ) ) {
+		return $plan;
+	}
+
+	$response      = $plan['response'];
+	$errors        = $plan['errors'];
+	$has_tree      = $plan['has_tree'];
+	$has_ops       = $plan['has_ops'];
+	$has_meta      = $plan['has_meta'];
+	$has_placement = $plan['has_placement'];
+
 	$operation = wpmcp_write_operation( $has_tree, $has_ops, $has_placement );
 
 	if ( ! empty( $errors ) ) {
@@ -872,11 +931,18 @@ function wpmcp_write_content( array $args ) {
 				'post_id'   => $post->ID,
 				'operation' => $operation,
 				'dry_run'   => true,
-				'summary'   => sprintf( 'Dry run OK (%+d blocks).', $diff['delta'] ),
+				'summary'   => sprintf( 'Dry run OK (%+d blocks).', $plan['diff']['delta'] ),
 			)
 		);
 		return $response;
 	}
+
+	$validation  = $plan['validation'];
+	$impact      = $plan['impact'];
+	$meta_diff   = $plan['meta_diff'];
+	$placement   = $plan['placement'];
+	$diff        = $plan['diff'];
+	$after_count = $plan['after_count'];
 
 	$revision_id = 0;
 
@@ -3347,8 +3413,16 @@ function wpmcp_site_info() {
  * twenty-two duplicates and then correcting twenty-two slugs and parents
  * in wp-admin — a whole afternoon of work the connector had created.
  *
- * Always a draft, whatever is asked for: publishing stays human, and
- * that is the one line no argument moves.
+ * A page with content is created whole or not at all. The tree and the
+ * meta go through the same pipeline content-write uses (wpmcp_plan_write)
+ * before anything is inserted, in the dry run and the real call alike.
+ * Until 0.19 the real call inserted first and checked after, and every
+ * refused tree left an empty draft behind, plus one more for each retry.
+ * Should the save still fail once the page exists, the page is deleted
+ * again and the answer says so.
+ *
+ * Created as a draft. "publish" is honoured only inside a work session,
+ * and only as the last step, once the content is in.
  *
  * @param array $args { title, post_type, slug, parent, status, tree, meta, dry_run }.
  * @return array|\WP_Error
@@ -3399,62 +3473,75 @@ function wpmcp_create_content( array $args ) {
 
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 
-	if ( $dry_run ) {
-		$report = array(
-			'ok'       => true,
-			'dryRun'   => true,
-			'title'    => $title,
-			'type'     => $post_type,
-			'slug'     => '' !== $slug ? $slug : sanitize_title( $title ),
-			'parent'   => $parent,
-			'status'   => $status,
-			'errors'   => array(),
-			'warnings' => array(),
+	// The page that does not exist yet, for the checks that ask about one.
+	$stand_in = (object) array(
+		'ID'                => 0,
+		'post_type'         => $post_type,
+		'post_status'       => 'draft',
+		'post_name'         => $slug,
+		'post_parent'       => $parent,
+		'post_content'      => '',
+		'post_password'     => '',
+		'post_modified_gmt' => '',
+	);
+
+	$target = wpmcp_assert_writable_target( $stand_in );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
+	// Content in the same call, so one page is one round trip.
+	$content = array();
+	foreach ( array( 'tree', 'meta' ) as $key ) {
+		if ( ! empty( $args[ $key ] ) ) {
+			$content[ $key ] = $args[ $key ];
+		}
+	}
+
+	$report = array(
+		'ok'       => true,
+		'dryRun'   => $dry_run,
+		'title'    => $title,
+		'type'     => $post_type,
+		'slug'     => '' !== $slug ? $slug : sanitize_title( $title ),
+		'parent'   => $parent,
+		'status'   => $status,
+		'errors'   => array(),
+		'warnings' => array(),
+	);
+
+	if ( ! empty( $content ) ) {
+		$plan = wpmcp_plan_write( $stand_in, $content, $dry_run );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+
+		$report['errors']   = $plan['errors'];
+		$report['warnings'] = $plan['response']['warnings'] ?? array();
+		if ( isset( $content['tree'] ) && isset( $plan['after_count'] ) ) {
+			$report['blocks'] = $plan['after_count'];
+		}
+		$report['ok'] = empty( $report['errors'] );
+	}
+
+	if ( ! $report['ok'] ) {
+		$report['message'] = $dry_run
+			? 'The dry run found problems — nothing was created. Fix them and call again.'
+			: 'The content was refused, so nothing was created. Fix it and call content-create again.';
+
+		wpmcp_log(
+			'wpmcp/content-create',
+			array(
+				'operation' => $dry_run ? 'create' : 'rejected',
+				'dry_run'   => $dry_run,
+				'summary'   => sprintf( 'Rejected "%s" (%s): %d error(s). Nothing created.', $title, $post_type, count( $report['errors'] ) ),
+			)
 		);
+		return $report;
+	}
 
-		// The dry run checks what the real call will write, not only the
-		// envelope around it. A seventy-five block tree is exactly when an
-		// "ok" is worth nothing unless the tree was looked at.
-		if ( ! empty( $args['tree'] ) ) {
-			$tree = wpmcp_decode_structure( $args['tree'], 'tree' );
-			if ( is_wp_error( $tree ) ) {
-				return $tree;
-			}
-
-			$tree_errors = array();
-			$blocks      = wpmcp_tree_to_blocks( $tree, '', $tree_errors );
-
-			if ( ! empty( $tree_errors ) ) {
-				$report['errors'] = $tree_errors;
-			} else {
-				$validation         = wpmcp_validate_blocks( $blocks, array() );
-				$report['errors']   = $validation['errors'];
-				$report['warnings'] = $validation['warnings'];
-				$report['blocks']   = wpmcp_count_blocks( $blocks );
-
-				if ( empty( $validation['errors'] ) ) {
-					$impact = wpmcp_kses_impact( '', wpmcp_normalize_jsonld( $validation['serialized'] ) );
-					if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( null ) ) {
-						$report['errors'][] = wpmcp_filtered_markup_error( $impact );
-					}
-				}
-			}
-		}
-
-		if ( ! empty( $args['meta'] ) ) {
-			$meta = wpmcp_decode_structure( $args['meta'], 'meta' );
-			if ( is_wp_error( $meta ) ) {
-				return $meta;
-			}
-			$meta_check       = wpmcp_meta_diff( (object) array( 'ID' => 0, 'post_type' => $post_type ), $meta );
-			$report['errors'] = array_merge( $report['errors'], $meta_check['errors'] );
-		}
-
-		$report['ok']      = empty( $report['errors'] );
-		$report['message'] = $report['ok']
-			? 'Dry run only — nothing was created. The tree and meta were checked exactly as the real call will write them. Call again with dry_run: false.'
-			: 'The dry run found problems — nothing was created. Fix them and call again.';
-
+	if ( $dry_run ) {
+		$report['message'] = 'Dry run only — nothing was created. The tree and meta were checked exactly as the real call will write them. Call again with dry_run: false.';
 		return $report;
 	}
 
@@ -3494,20 +3581,16 @@ function wpmcp_create_content( array $args ) {
 		'message' => 'Created.',
 	);
 
-	wpmcp_log(
-		'wpmcp/content-create',
-		array(
-			'post_id'   => (int) $post_id,
-			'operation' => 'create',
-			'summary'   => sprintf( 'Created "%s" (%s, parent %d).', $title, $post_type, $parent ),
-		)
-	);
+	if ( empty( $content ) ) {
+		wpmcp_log(
+			'wpmcp/content-create',
+			array(
+				'post_id'   => (int) $post_id,
+				'operation' => 'create',
+				'summary'   => sprintf( 'Created "%s" (%s, parent %d).', $title, $post_type, $parent ),
+			)
+		);
 
-	// Content in the same call, so one page is one round trip.
-	$has_content = ( isset( $args['tree'] ) && ! empty( $args['tree'] ) )
-		|| ( isset( $args['meta'] ) && ! empty( $args['meta'] ) );
-
-	if ( ! $has_content ) {
 		$result['modified']  = $created->post_modified_gmt;
 		$result['nextWrite'] = 'Pass this "modified" value as expected_modified when you write the content.';
 		if ( 'publish' === $status ) {
@@ -3516,30 +3599,61 @@ function wpmcp_create_content( array $args ) {
 		return $result;
 	}
 
+	// The same pipeline once more, now on the real post, and the save.
 	$written = wpmcp_write_content(
-		array(
-			'post_id' => (int) $post_id,
-			'tree'    => $args['tree'] ?? null,
-			'meta'    => $args['meta'] ?? null,
-			'dry_run' => false,
+		array_merge(
+			$content,
+			array(
+				'post_id' => (int) $post_id,
+				'dry_run' => false,
+			)
 		)
 	);
 
-	if ( is_wp_error( $written ) ) {
-		// The page exists; only the content failed. Say both, or the caller
-		// creates it a second time.
-		$result['ok']           = false;
-		$result['contentError'] = $written->get_error_message();
-		$result['message']      = 'The page was created but its content was not written. Fix the content and write to this id — do not create it again.';
-		return $result;
+	if ( is_wp_error( $written ) || empty( $written['ok'] ) ) {
+		// Checked beforehand and still refused: something only the save
+		// itself could say (a plugin's save filter, the database). The page
+		// is the connector's own from a moment ago and holds nothing, so it
+		// goes again rather than staying behind as an empty draft.
+		wp_delete_post( (int) $post_id, true );
+
+		$why = is_wp_error( $written )
+			? $written->get_error_message()
+			: implode( ' ', $written['errors'] ?? array() );
+
+		wpmcp_log(
+			'wpmcp/content-create',
+			array(
+				'operation' => 'rejected',
+				'summary'   => sprintf( 'Created "%s" (%s) as post %d and removed it again: the content was not saved.', $title, $post_type, (int) $post_id ),
+			)
+		);
+
+		return array(
+			'ok'       => false,
+			'dryRun'   => false,
+			'title'    => $title,
+			'type'     => $post_type,
+			'errors'   => '' !== trim( $why ) ? array( $why ) : array( 'The content was not saved.' ),
+			'warnings' => is_array( $written ) ? ( $written['warnings'] ?? array() ) : array(),
+			'message'  => sprintf( 'The page was created, but its content could not be saved, so the page was removed again. Nothing was created. %s', $why ),
+		);
 	}
 
-	$result['content'] = $written;
-	$result['ok']      = ! empty( $written['ok'] );
-	$result['message'] = $result['ok'] ? 'Created and written.' : 'The page was created but its content was rejected. Fix it and write to this id.';
+	wpmcp_log(
+		'wpmcp/content-create',
+		array(
+			'post_id'   => (int) $post_id,
+			'operation' => 'create',
+			'summary'   => sprintf( 'Created "%s" (%s, parent %d) with its content.', $title, $post_type, $parent ),
+		)
+	);
 
-	// Only once the content is in: rejected content keeps the page a draft.
-	if ( $result['ok'] && 'publish' === $status ) {
+	$result['content'] = $written;
+	$result['message'] = 'Created and written.';
+
+	// Only once the content is in.
+	if ( 'publish' === $status ) {
 		wpmcp_publish_created( (int) $post_id, $result );
 	}
 

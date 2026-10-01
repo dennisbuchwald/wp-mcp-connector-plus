@@ -31,6 +31,7 @@ function get_post( $id ) { return null; }
 function wpmcp_pattern_access() { return 'read'; }
 function wpmcp_extra_post_types() { return array(); }
 function wpmcp_work_session_active() { return false; }
+function wpmcp_log( ...$a ) {}
 
 require_once dirname( __DIR__ ) . '/includes/content.php';
 
