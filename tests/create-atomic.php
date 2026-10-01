@@ -65,7 +65,7 @@ function wp_slash( $v ) { return is_array( $v ) ? array_map( 'wp_slash', $v ) : 
 function wp_http_validate_url( $url ) { return true; }
 function esc_url_raw( $url ) { return (string) $url; }
 function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_object( $post ) ? $post->ID : (int) $post ); }
-function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
+function wp_get_post_revision( &$id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
 function wpmcp_pattern_access() { return $GLOBALS['patterns']; }
 function wpmcp_extra_post_types() { return array(); }
 function wpmcp_work_session_active() { return $GLOBALS['session']; }

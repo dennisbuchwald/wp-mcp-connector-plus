@@ -66,6 +66,7 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 - **`site-info` sagt nicht mehr "Publishing is never possible", wenn eine Arbeitssitzung laeuft.** Der Satz stand fest im Text, auch waehrend die Sitzung das Veroeffentlichen erlaubte; der Agent glaubt dem Satz eher als dem Feld daneben. Er wird jetzt aus dem Sitzungsstand gebaut. Ebenso in wp-admin (Zugriffsstufen und Einrichtung) und in der README.
 - **`site-info` ordnet die Werkzeuge richtig zu.** `content-create`, `content-batch` und `media-update` standen unter `read`, weil die Liste der Schreibwerkzeuge drei Namen kannte. Beide Listen kommen jetzt aus derselben Quelle wie die Registrierung.
+- **`content-restore` und jedes Speichern mit neuer Revision brachen mit einem PHP-Fehler ab.** `wp_get_post_revision()` nimmt sein Argument als Referenz, bekam aber einen Ausdruck (`(int) $revision_id`), und PHP 8 bricht dann ab, statt zu warnen. In `content-restore` stand das seit 0.4.0: Wiederherstellen ging auf keiner echten Seite. Seit `revisionId` die Revision des eigenen Speicherns nennt (siehe oben), traf es ausserdem jedes `content-write`, `content-batch` und `content-create`, das eine Revision anlegt, also fast jedes; gespeichert war dann schon, die Antwort aber ein Fehler. Die Nachbau-Tests nahmen das Argument als Wert und sahen nichts. Sie nehmen es jetzt als Referenz, wie WordPress.
 
 ### API
 

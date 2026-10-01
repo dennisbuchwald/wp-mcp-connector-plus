@@ -322,7 +322,10 @@ function wpmcp_post_lock_error( $post ) {
 function wpmcp_save_capturing_revision( $post_id, callable $save ) {
 	$captured = 0;
 	$listener = function ( $revision_id ) use ( $post_id, &$captured ) {
-		$revision = wp_get_post_revision( (int) $revision_id );
+		// wp_get_post_revision() takes its argument by reference, so it
+		// must be a variable: an expression is a fatal Error in PHP 8.
+		$revision_id = (int) $revision_id;
+		$revision    = wp_get_post_revision( $revision_id );
 		if ( $revision && (int) $revision->post_parent === (int) $post_id ) {
 			$captured = (int) $revision_id;
 		}
@@ -3394,7 +3397,8 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		return $post;
 	}
 
-	$revision = wp_get_post_revision( (int) $revision_id );
+	$revision_id = (int) $revision_id;
+	$revision    = wp_get_post_revision( $revision_id ); // By reference: a variable, never an expression.
 	if ( ! $revision ) {
 		return new \WP_Error( 'wpmcp_not_found', sprintf( 'No revision with ID %d.', (int) $revision_id ) );
 	}

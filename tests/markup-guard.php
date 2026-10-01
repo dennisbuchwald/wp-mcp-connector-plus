@@ -54,7 +54,7 @@ function get_post_meta( $id, $key = '', $single = false ) { return $single ? '' 
 function wp_slash( $v ) { return $v; }
 function wp_get_post_revisions( $id, $args = array() ) { return array(); }
 function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_object( $post ) ? $post->ID : (int) $post ); }
-function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
+function wp_get_post_revision( &$id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
 function get_userdata( $id ) { return (object) array( 'ID' => (int) $id ); }
 // User 9 is the agent (see get_current_user_id), everyone else a person.
 function wpmcp_is_ai_user( $user ) { return 9 === ( is_object( $user ) ? (int) $user->ID : (int) $user ); }

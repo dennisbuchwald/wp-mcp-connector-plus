@@ -70,7 +70,7 @@ function wp_slash( $v ) { return is_string( $v ) ? addslashes( $v ) : $v; }
 function wp_http_validate_url( $url ) { return true; }
 function esc_url_raw( $url ) { return (string) $url; }
 function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_object( $post ) ? $post->ID : (int) $post ); }
-function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
+function wp_get_post_revision( &$id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
 /** The newest stored revision, whether or not the last save made it. */
 function wp_get_post_revisions( $id, $args = array() ) {
 	return array( 50 => (object) array( 'ID' => 50, 'post_parent' => (int) $id ) );
