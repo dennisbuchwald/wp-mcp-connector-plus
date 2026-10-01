@@ -157,6 +157,18 @@ function wpmcp_access_levels() {
 }
 function wpmcp_audit_table() { return 'wp_wpmcp_log'; }
 function wpmcp_role_caps_match() { return $GLOBALS['stub']['caps_match'] ?? true; }
+function wp_is_application_passwords_available() {
+	// The way WordPress runs it: the plugin records the site's own answer
+	// on the way through the global filter.
+	wpmcp_app_passwords_available_before( $GLOBALS['stub']['app_pw_before'] ?? true );
+	return true;
+}
+function wpmcp_app_passwords_transport_safe() { return $GLOBALS['stub']['https'] ?? true; }
+function wpmcp_app_passwords_available_before( $set = null ) {
+	static $before = null;
+	if ( null !== $set ) { $before = (bool) $set; }
+	return $before;
+}
 const WPMCP_ROLE = 'wpmcp_ai_editor';
 
 class StubWpdb {
@@ -275,6 +287,19 @@ $GLOBALS['stub']['registered'] = 8;
 $html = render_case( 'Rechte laufen auseinander', function () { $GLOBALS['stub']['caps_match'] = false; } );
 expect_contains( $html, 'does not grant what the selected level promises', 'meldet nicht passende Rechte' );
 $GLOBALS['stub']['caps_match'] = true;
+
+echo "\n\033[1mAnwendungspasswoerter\033[0m\n";
+
+$html = render_case( 'HTTPS, nichts abgeschaltet', function () { $GLOBALS['stub']['https'] = true; $GLOBALS['stub']['app_pw_before'] = true; } );
+expect_contains( $html, 'leaves them as they were for every human account', 'sagt, dass Menschen nichts geaendert bekommen' );
+
+$html = render_case( 'von der Haertung abgeschaltet', function () { $GLOBALS['stub']['app_pw_before'] = false; } );
+expect_contains( $html, 'reopened them for the agent account only', 'sagt, dass nur der Agent sie bekommt' );
+
+$html = render_case( 'kein HTTPS', function () { $GLOBALS['stub']['https'] = false; } );
+expect_contains( $html, 'not served over HTTPS', 'warnt ohne HTTPS' );
+$GLOBALS['stub']['https']         = true;
+$GLOBALS['stub']['app_pw_before'] = true;
 
 echo "\n\033[1mArbeitssitzung\033[0m\n";
 

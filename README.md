@@ -146,10 +146,11 @@ in front as a stdio proxy.
 
 ### Without MCP
 
-Every ability is also reachable over REST at
-`/wp-json/wp-abilities/v1/abilities/{name}/run`, because they are
-registered with the core Abilities API. The MCP transport is swappable,
-not load-bearing.
+The abilities are registered with the core Abilities API, so an
+administrator can also run them over REST at
+`/wp-json/wp-abilities/v1/abilities/{name}/run`. The agent account itself
+cannot: it reaches `/wpmcp/v1/mcp` and nothing else, neither the rest of
+the REST API nor XML-RPC, so nothing it does bypasses the connector.
 
 ## Working with it
 
@@ -221,17 +222,22 @@ wp eval 'foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(W
 **No "Application Passwords" section on the user profile.** Hardened
 setups and security plugins often disable them globally. This plugin
 re-enables them for the agent role only, and leaves every other user
-exactly as your site configured them. If the section is still missing,
-something else is filtering it — check for a security plugin.
+exactly as your site configured them. It does so only over HTTPS (or in
+an environment declared `local`), like WordPress itself: the status table
+says so when a site runs on plain HTTP. The agent account cannot manage
+its own application passwords; create and revoke them as an administrator.
 
 **Checking authentication by hand:**
 
 ```bash
-curl -u 'agent-user:application password' https://your-site.com/wp-json/wp-abilities/v1/abilities
+curl -u 'agent-user:application password' -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
 ```
 
-If that returns a list containing `wpmcp/…` entries, the connection works
-and the problem is on the client side.
+If that returns a `serverInfo` naming WP MCP Connector Plus, the
+connection works and the problem is on the client side. Any other route
+answers the agent account with a 403 on purpose.
 
 ## The abilities
 

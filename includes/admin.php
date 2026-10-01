@@ -246,6 +246,23 @@ function wpmcp_setup_steps() {
 			: __( 'The agent role does not grant what the selected level promises. Saving the settings again repairs it.', 'wp-mcp-connector-plus' ),
 	);
 
+	// 6. Application passwords: the agent's only way in. Asking WordPress
+	// first records what the site decided before this plugin stepped in.
+	if ( function_exists( 'wp_is_application_passwords_available' ) ) {
+		wp_is_application_passwords_available();
+	}
+	$safe    = wpmcp_app_passwords_transport_safe();
+	$before  = wpmcp_app_passwords_available_before();
+	$steps[] = array(
+		'title'  => __( 'Application passwords', 'wp-mcp-connector-plus' ),
+		'state'  => $safe ? 'ok' : 'error',
+		'detail' => ! $safe
+			? __( 'This site is not served over HTTPS. An application password travels with every request, so WordPress allows them only over HTTPS or in an environment declared local. The agent cannot connect until the site runs on HTTPS.', 'wp-mcp-connector-plus' )
+			: ( false === $before
+				? __( 'Switched off for everyone by the theme or another plugin. The connector reopened them for the agent account only; every human account keeps them switched off.', 'wp-mcp-connector-plus' )
+				: __( 'Available. The connector leaves them as they were for every human account.', 'wp-mcp-connector-plus' ) ),
+	);
+
 	return $steps;
 }
 

@@ -9,6 +9,24 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Sicherheit
+
+- **Das Agent-Konto erreicht nur noch seinen MCP-Endpunkt.** Ein Anwendungspasswort gilt fuer die ganze REST-API, nicht fuer eine Route. Mit dem Zugang des Agenten ging deshalb auch `/wp/v2`: das eigene Profil, die eigenen Anwendungspasswoerter, die Medienbibliothek und jede Route, die irgendein anderes Plugin anmeldet, alles an den Pruefungen und am Protokoll des Connectors vorbei. Jetzt bekommt jede REST-Anfrage eines Kontos mit der Rolle "AI Editor" ausser an `/wpmcp/v1/mcp` eine 403 mit Erklaerung. Interne REST-Aufrufe waehrend eines Werkzeugs sind nicht betroffen, ein Administrator mit dem Marker-Recht zum Debuggen ebenfalls nicht.
+- **Kein XML-RPC fuer das Agent-Konto.** Anwendungspasswoerter gelten auch dort; die Anmeldung wird jetzt abgelehnt.
+- **Das Agent-Konto kann sich selbst nicht mehr verwalten.** WordPress erlaubt jedem Konto, das eigene Profil zu bearbeiten und eigene Anwendungspasswoerter anzulegen, ohne jedes Recht. Ein abgeflossener Zugang haette so weitere Zugaenge erzeugen oder die E-Mail-Adresse (und damit den Passwort-Reset) aendern koennen. `edit_user`, `promote_user`, `create_app_password`, `edit_app_password`, `delete_app_password(s)` und die uebrigen Konto-Rechte sind fuer das Agent-Konto jetzt immer gesperrt, an sich selbst und an anderen. Ein Administrator legt dem Agenten weiter ueber die Einrichtung ein Passwort an.
+- **Anwendungspasswoerter nur noch ueber HTTPS.** Das Plugin schaltete sie global ein, auch ohne HTTPS, und ueberging damit die Pruefung von WordPress selbst. Jetzt oeffnet es sie nur dort wieder, wo WordPress sie selbst zulassen wuerde: ueber HTTPS oder in einer als `local` erklaerten Umgebung.
+- **Der Standard-Server des mcp-adapters ist aus.** Er bietet jede Ability ueber ein allgemeines "Ability ausfuehren"-Werkzeug auf einer zweiten Route an, ausserhalb der Zugangspruefung dieses Plugins. Eine Seite, die ihn fuer ein anderes Plugin braucht, gibt im Filter `mcp_adapter_create_default_server` mit spaeterer Prioritaet wieder `true` zurueck.
+
+### Behoben
+
+- **Menschen behalten ihre Anwendungspasswoerter.** Fuer jedes menschliche Konto lieferte das Plugin `false`, auch auf Seiten, die die Funktion nie abgeschaltet hatten. Das brach die WordPress-App und Automationen (n8n und aehnliche). Jetzt bekommt jedes menschliche Konto genau das, was es ohne das Plugin haette: aus, wo die Haertung des Themes oder ein Sicherheits-Plugin sie fuer alle abgeschaltet hat, sonst das, was WordPress und die anderen Plugins fuer dieses Konto entscheiden.
+
+### Zu beachten
+
+- **Seiten ohne HTTPS verlieren die Verbindung.** Laeuft eine Seite (auch eine Entwicklungsseite) nur ueber HTTP und ist nicht als `local` erklaert, kann sich der Agent nicht mehr anmelden. Die Statustabelle unter Werkzeuge > MCP Connector zeigt das jetzt als Fehler.
+- **Neue Zeile "Application passwords" in der Statustabelle.** Sie sagt, ob die Seite Anwendungspasswoerter selbst anbietet oder ob der Connector sie nur fuer den Agenten wieder geoeffnet hat.
+- **Wer den Agenten bisher ueber `/wp/v2` oder `wp-abilities/v1` angesprochen hat, bekommt jetzt 403.** Der vorgesehene Weg war immer der MCP-Endpunkt.
+
 ### Tests und Auslieferung
 
 - **Ein Befehl fuer die ganze Testsuite: `bash tests/run-all.sh`.** Er holt den WordPress-Blockparser, wenn er fehlt, findet jede `tests/*.php` von selbst (Helfer wie `bootstrap.php` und `kses-stub.php` erkennt er daran, dass ein anderer Test sie einbindet) und laesst die Integrationspruefung gegen dbw-base-core laufen, wenn der Core da ist (`DBW_CORE_PATH` oder der Nachbarordner), sonst meldet er sie als uebersprungen. Ein neuer Test kann damit nicht mehr geschrieben und dann nie ausgefuehrt werden. Eine PHP-Warnung, ein Notice oder ein Deprecated zaehlt als Fehler, nicht nur eine fehlgeschlagene Pruefung.

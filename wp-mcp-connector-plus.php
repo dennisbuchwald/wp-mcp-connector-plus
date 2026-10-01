@@ -209,6 +209,12 @@ function wpmcp_boot_mcp() {
 		return;
 	}
 
+	// The adapter's own default server exposes every ability through a
+	// generic "execute ability" tool on a second route, outside this
+	// plugin's transport check. Nothing here needs it. A site that wants it
+	// for another plugin can return true at a later priority.
+	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
+
 	\WP\MCP\Core\McpAdapter::instance();
 
 	add_action(
