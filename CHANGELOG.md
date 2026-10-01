@@ -7,6 +7,22 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.18.2] - 2026-10-01
+
+Ein Tippfehler in der Reihenfolge, der zwei gemeldete Fehler erklaert.
+
+### Behoben
+
+- **Ein Schreibvorgang mit nur Status, Slug oder Elternseite wurde abgelehnt.** Der Waechter fragte `$has_placement` ab, die Variable wurde aber erst darunter gesetzt. Also galt sie als leer, und `content-write` mit `{"status": "publish"}` kam mit genau der Meldung zurueck, die Slug und Status als gueltige Eingabe auflistet. Der Ausweg war, den kompletten Baum nochmal mitzuschicken: eine ueberfluessige Revision und auf grossen Seiten teuer.
+- **`content-create` mit `status: publish` legte stillschweigend nur einen Entwurf an.** Dasselbe: Der Veroeffentlichungsschritt ruft intern den Schreibweg mit nur einem Status auf und lief in dieselbe Ablehnung. Die Antwort sagte zwar `ok: true`, aber `status: draft` und haengte die fremde Fehlermeldung an. Der Satz dazu hatte auch einen doppelten Punkt.
+- **`blocks-describe` ohne `names`** nennt jetzt den Parameter beim Namen und zeigt ein Beispiel, statt nur "Provide at least one block name" zu sagen.
+
+### Zu beachten
+
+- Der Speicherweg konnte einen reinen Status-Wechsel die ganze Zeit korrekt: Er fasst `post_content` nicht an, verbraucht keine Revision und holt sich das Recht `publish_*` nur fuer diesen einen Aufruf. Er wurde nur nie erreicht.
+
+---
+
 ## [0.18.1] - 2026-10-01
 
 Nur Verpackung, am Plugin selbst aendert sich nichts.

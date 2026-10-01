@@ -375,6 +375,12 @@ function wpmcp_write_content( array $args ) {
 	$has_ops  = isset( $args['ops'] ) && is_array( $args['ops'] ) && ! empty( $args['ops'] );
 	$has_meta = isset( $args['meta'] ) && is_array( $args['meta'] ) && ! empty( $args['meta'] );
 
+	// Read before the guard below, which until 0.18.2 asked for a variable
+	// that was assigned further down: every write carrying nothing but a
+	// slug, a parent or a status was refused by a message that listed
+	// those three as valid input.
+	$has_placement = array_key_exists( 'slug', $args ) || array_key_exists( 'parent', $args ) || array_key_exists( 'status', $args );
+
 	if ( $has_tree && $has_ops ) {
 		return new \WP_Error(
 			'wpmcp_bad_request',
@@ -395,8 +401,7 @@ function wpmcp_write_content( array $args ) {
 		? wpmcp_meta_diff( $post, $args['meta'] )
 		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
 
-	$has_placement = array_key_exists( 'slug', $args ) || array_key_exists( 'parent', $args ) || array_key_exists( 'status', $args );
-	$placement     = $has_placement
+	$placement = $has_placement
 		? wpmcp_placement_diff( $post, $args )
 		: array( 'fields' => array(), 'errors' => array(), 'changes' => 0 );
 
@@ -2869,7 +2874,10 @@ function wpmcp_publish_created( $post_id, array &$result ) {
 	);
 
 	if ( is_wp_error( $published ) || empty( $published['ok'] ) ) {
-		$result['message'] .= ' It was not published: ' . ( is_wp_error( $published ) ? $published->get_error_message() : 'the status change was refused' ) . '. It stays a draft.';
+		$why = is_wp_error( $published )
+			? $published->get_error_message()
+			: ( ! empty( $published['errors'] ) ? implode( ' ', $published['errors'] ) : 'the status change was refused' );
+		$result['message'] .= ' It was not published: ' . rtrim( $why, '. ' ) . '. It stays a draft.';
 		return;
 	}
 

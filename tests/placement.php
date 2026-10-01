@@ -36,6 +36,24 @@ function sanitize_title( $title ) {
 $GLOBALS['session'] = false;
 function wpmcp_work_session_active() { return $GLOBALS['session']; }
 
+// Enough WordPress for the write path to run as far as the dry run.
+function get_post_types( $args = array(), $output = 'names' ) {
+	$page = (object) array( 'name' => 'page', 'public' => true );
+	return 'names' === $output ? array( 'page' ) : array( 'page' => $page );
+}
+function post_type_exists( $type ) { return 'page' === $type; }
+function get_post_type_object( $type ) {
+	return (object) array( 'name' => $type, 'cap' => (object) array( 'publish_posts' => 'publish_pages', 'create_posts' => 'edit_pages' ) );
+}
+function current_user_can( ...$args ) { return true; }
+function wp_kses_post( $content ) { return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content ); }
+function wpmcp_pattern_access() { return 'read'; }
+function wpmcp_extra_post_types() { return array(); }
+function get_post_meta( $id, $key = '', $single = false ) { return $single ? '' : array(); }
+function wpmcp_log( $ability, $data = array() ) {}
+function wpmcp_live_edit_enabled() { return true; }
+function wpmcp_privacy_policy_page_id() { return 0; }
+
 require_once dirname( __DIR__ ) . '/includes/content.php';
 
 $fail = 0;
@@ -182,6 +200,36 @@ check( ! empty( $d['errors'] ), 'ein erfundener Status' );
 
 $d = wpmcp_placement_diff( $draft, array() );
 check( empty( $d['errors'] ) && 0 === $d['changes'], 'gar keine Angabe ist kein Fehler' );
+
+echo "\n\033[1mEin reiner Status-Wechsel kommt durch\033[0m\n";
+
+// Bis 0.18.1 fragte der Waechter eine Variable ab, die erst darunter
+// gesetzt wurde: jeder Schreibvorgang, der nur Slug, Elternseite oder
+// Status trug, wurde mit genau der Meldung abgelehnt, die diese drei
+// als gueltige Eingabe auflistet. content-create mit status publish lief
+// in denselben Fehler und legte stillschweigend nur einen Entwurf an.
+$GLOBALS['session'] = true;
+$GLOBALS['posts'][54] = page( 54, 'draft', 0, 'programm' );
+$GLOBALS['posts'][54]->post_content = '<!-- wp:paragraph --><p>Text</p><!-- /wp:paragraph -->';
+
+$only_status = wpmcp_write_content( array( 'post_id' => 54, 'status' => 'publish', 'dry_run' => true ) );
+check( ! is_wp_error( $only_status ), 'nur status wird angenommen', is_wp_error( $only_status ) ? $only_status->get_error_message() : '' );
+check( ! is_wp_error( $only_status ) && true === $only_status['ok'], 'und besteht den Probelauf' );
+check( ! is_wp_error( $only_status ) && 1 === ( $only_status['placement']['changes'] ?? 0 ), 'der Statuswechsel steht als Aenderung drin' );
+
+$only_slug = wpmcp_write_content( array( 'post_id' => 54, 'slug' => 'neu', 'dry_run' => true ) );
+check( ! is_wp_error( $only_slug ) && true === $only_slug['ok'], 'nur slug ebenfalls' );
+
+$both = wpmcp_write_content( array( 'post_id' => 54, 'slug' => 'programm', 'status' => 'publish', 'dry_run' => true ) );
+check( ! is_wp_error( $both ) && true === $both['ok'], 'slug und status zusammen ebenfalls' );
+
+$nothing = wpmcp_write_content( array( 'post_id' => 54, 'dry_run' => true ) );
+check( is_wp_error( $nothing ), 'ein Aufruf ganz ohne Inhalt bleibt ein Fehler', 'der Waechter soll ja etwas pruefen' );
+
+// Der Inhalt darf dabei nicht angefasst werden: kein neuer Stand, keine
+// Revision fuer eine Seite, die sich nicht geaendert hat.
+check( ! is_wp_error( $only_status ) && 0 === ( $only_status['diff']['delta'] ?? -1 ), 'der Blockbaum bleibt unberuehrt' );
+$GLOBALS['session'] = false;
 
 echo "\n";
 if ( 0 === $fail ) {

@@ -127,7 +127,10 @@ function wpmcp_register_abilities() {
 			'execute_callback'    => function ( $input ) {
 				$names = array_slice( array_filter( (array) ( $input['names'] ?? array() ), 'is_string' ), 0, 15 );
 				if ( empty( $names ) ) {
-					return new \WP_Error( 'wpmcp_bad_request', 'Provide at least one block name.' );
+					return new \WP_Error(
+						'wpmcp_bad_request',
+						'Provide "names": a list of block names to describe, as blocks-catalog spells them, for example ["core/heading", "acme/hero"]. It is the only required argument of this tool.'
+					);
 				}
 				$detail = ( 'full' === ( $input['detail'] ?? 'compact' ) ) ? 'full' : 'compact';
 				wpmcp_log( 'wpmcp/blocks-describe', array( 'summary' => implode( ', ', $names ) . ' (' . $detail . ')' ) );
