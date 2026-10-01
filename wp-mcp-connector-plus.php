@@ -221,11 +221,11 @@ function wpmcp_boot_mcp() {
 		return;
 	}
 
-	// The adapter's own default server exposes every ability through a
-	// generic "execute ability" tool on a second route, outside this
-	// plugin's transport check. Nothing here needs it. A site that wants it
-	// for another plugin can return true at a later priority.
-	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
+	// The adapter's own default server is left alone on purpose. Other
+	// plugins that bundle the adapter (Rank Math, for one) rely on it, and
+	// it no longer reaches this plugin's abilities: the agent account is
+	// fenced to /wpmcp/v1/mcp (wpmcp_rest_scope), and every ability checks
+	// the marker capability, which human accounts do not hold.
 
 	\WP\MCP\Core\McpAdapter::instance();
 
