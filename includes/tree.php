@@ -14,6 +14,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Whether a parsed block is one a path can point at.
+ *
+ * parse_blocks() emits whitespace-only "null blocks" between real ones.
+ * They have no path, are not counted and are not shown; a freeform block
+ * holding actual HTML is a block like any other. Every walk over a block
+ * list asks this one question, because a path worked out by one walk has
+ * to name the same block in every other.
+ *
+ * @param array $block Parsed block.
+ * @return bool
+ */
+function wpmcp_is_visible_block( array $block ) {
+	return null !== ( $block['blockName'] ?? null ) || '' !== trim( (string) ( $block['innerHTML'] ?? '' ) );
+}
+
+/**
  * Convert parsed WordPress blocks into the compact tree format.
  *
  * @param array $blocks           Result of parse_blocks().
@@ -32,16 +48,17 @@ function wpmcp_blocks_to_tree( array $blocks, array $prefix = array(), $include_
 	$i   = (int) $start;
 
 	foreach ( $blocks as $block ) {
-		// parse_blocks() emits whitespace-only "null blocks" between real ones.
+		if ( ! wpmcp_is_visible_block( $block ) ) {
+			continue;
+		}
+
 		if ( null === $block['blockName'] ) {
-			if ( '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
-				$out[] = array(
-					'path' => wpmcp_path_string( array_merge( $prefix, array( $i ) ) ),
-					'name' => null,
-					'html' => $block['innerHTML'],
-				);
-				++$i;
-			}
+			$out[] = array(
+				'path' => wpmcp_path_string( array_merge( $prefix, array( $i ) ) ),
+				'name' => null,
+				'html' => $block['innerHTML'],
+			);
+			++$i;
 			continue;
 		}
 
@@ -289,10 +306,8 @@ function wpmcp_blocks_to_outline( array $blocks, array $prefix = array(), $depth
 	$i   = 0;
 
 	foreach ( $blocks as $block ) {
-		if ( null === $block['blockName'] ) {
-			if ( '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
-				continue;
-			}
+		if ( ! wpmcp_is_visible_block( $block ) ) {
+			continue;
 		}
 
 		$path = array_merge( $prefix, array( $i ) );
@@ -461,9 +476,7 @@ function wpmcp_blocks_at_path( array $blocks, array $path ) {
 		$list = array_values(
 			array_filter(
 				$list,
-				function ( $b ) {
-					return null !== $b['blockName'] || '' !== trim( (string) ( $b['innerHTML'] ?? '' ) );
-				}
+				'wpmcp_is_visible_block'
 			)
 		);
 		if ( ! isset( $list[ $index ] ) ) {
@@ -665,7 +678,7 @@ function wpmcp_splice( array $blocks, array $path, array $replacement, $delete )
 function wpmcp_splice_list( array $list, $index, array $replacement, $delete ) {
 	$visible = array();
 	foreach ( $list as $real => $block ) {
-		if ( null !== $block['blockName'] || '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+		if ( wpmcp_is_visible_block( $block ) ) {
 			$visible[] = $real;
 		}
 	}
@@ -844,7 +857,7 @@ function wpmcp_mutate_at( array $blocks, array $path, callable $callback ) {
 	$index   = array_shift( $path );
 	$visible = array();
 	foreach ( $blocks as $real => $block ) {
-		if ( null !== $block['blockName'] || '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+		if ( wpmcp_is_visible_block( $block ) ) {
 			$visible[] = $real;
 		}
 	}
@@ -880,7 +893,7 @@ function wpmcp_mutate_at( array $blocks, array $path, callable $callback ) {
 function wpmcp_count_blocks( array $blocks ) {
 	$count = 0;
 	foreach ( $blocks as $block ) {
-		if ( null === $block['blockName'] && '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+		if ( ! wpmcp_is_visible_block( $block ) ) {
 			continue;
 		}
 		++$count;

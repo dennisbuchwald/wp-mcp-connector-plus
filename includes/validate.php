@@ -260,10 +260,12 @@ function wpmcp_walk_validate( array $blocks, $parent, array $ancestry, array &$e
 	foreach ( $blocks as $block ) {
 		$name = $block['blockName'] ?? null;
 
+		if ( ! wpmcp_is_visible_block( $block ) ) {
+			continue;
+		}
+
 		if ( null === $name ) {
-			if ( '' !== trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
-				++$index;
-			}
+			++$index;
 			continue;
 		}
 

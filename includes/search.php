@@ -374,7 +374,7 @@ function wpmcp_search_blocks( array $blocks, array $prefix, $query, $is_regex, $
 	foreach ( $blocks as $block ) {
 		$name = $block['blockName'] ?? null;
 
-		if ( null === $name && '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+		if ( ! wpmcp_is_visible_block( $block ) ) {
 			continue;
 		}
 
