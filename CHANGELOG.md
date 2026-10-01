@@ -7,6 +7,27 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.18.3] - 2026-10-01
+
+Sicherheits-Hotfix. Bitte zeitnah einspielen.
+
+### Sicherheit
+
+- **Gespeichertes XSS auf der niedrigsten Zugriffsstufe geschlossen.** Ob ein Schreibvorgang am Inhaltsfilter von WordPress (kses) vorbei gespeichert wird, entschied bisher eine Liste ganzer Elemente: script, style, iframe, form, object, embed. Alles andere, was kses entfernt, also `<img onerror>`, `<a href="javascript:...">`, `<svg onload>`, `<details ontoggle>` oder ein `style` mit `url(javascript:...)`, galt als "bestehendes Markup schuetzen" und ging ungefiltert in die Datenbank. Jetzt entscheidet kses selbst, Block fuer Block: Ein Block, der Byte fuer Byte schon gespeichert war, behaelt sein Markup (dafuer gibt es den Weg ja, JSON-LD und Video-Embeds in anderen Bloecken ueberleben weiterhin). Jeder neue oder geaenderte Block muss aus `wp_kses_post` exakt so herauskommen, wie er hineingeht, sonst wird der Schreibvorgang abgelehnt. Gueltiges JSON-LD bleibt die eine Ausnahme, wie bisher.
+- **Der erhoehte Speicherweg (Dynamic Data, `unfiltered_html` fuer einen Save) prueft genauso.** Er hatte eine eigene Liste regulaerer Ausdruecke, und `<svg/onload>`, `&#106;avascript:`, ein Tab mitten in `javascript:`, `xlink:href`, `<animate values>`, `<meta http-equiv="refresh">`, `<base href>` und `<link rel="stylesheet">` kamen daran vorbei. Jetzt gilt dieselbe kses-Pruefung wie ueberall, und sie greift schon im Probelauf, nicht erst beim echten Speichern.
+- **Gleicher Waechter auf allen Wegen.** `content-write`, `content-batch` und `content-create` (auch im Probelauf) laufen durch dieselbe Pruefung. `content-restore` ebenfalls, wobei die Revision selbst als bekannter Stand zaehlt: Sie gehoert nachweislich zu diesem Beitrag und enthaelt, was WordPress damals gespeichert hat. `content-duplicate` kopiert weiter ungefiltert, weil der Agent dort nur eine ID liefert und keinen Inhalt.
+- **Der Filter kommt verlaesslich zurueck.** Ein Helfer (`wpmcp_without_kses`) nimmt kses fuer genau einen Save heraus und setzt ihn in einem `finally` zurueck, auch wenn der Save abstuerzt. Zurueckgesetzt wird nur, was vorher wirklich da war: Ein Konto mit `unfiltered_html` bekommt keinen Filter dazu. Die Rechte-Vergabe fuer den erhoehten Save nutzt jetzt denselben Helfer wie das Veroeffentlichen in einer Arbeitssitzung.
+
+### Zu beachten
+
+- **Die Ablehnung nennt Blockpfad und Konstrukt**, z.B. `block 2 (onerror=)` oder `block 0.1 (<svg, onload=)`, und sagt, was zu tun ist: entfernen oder von einem Menschen im Editor einfuegen lassen. Der Entwickler-Filter `wpmcp_allow_filtered_markup` oeffnet die Tuer wie bisher fuer Reparaturen.
+- **Strenger als vorher, auch bei Harmlosem.** Ein geaenderter Block, den kses nur umschreiben wuerde (ein `&` statt `&amp;`, Attribute ohne Anfuehrungszeichen, `<br/>`, Leerzeichen im `style`), wird ebenfalls abgelehnt. Die Meldung zeigt dann, wie WordPress den Block speichern wuerde; so geschickt geht er durch. Bisher landete so etwas ungefiltert in der Datenbank, und genau das war die Luecke.
+- **Ein geaenderter Block mit bestehendem Embed** (z.B. ein HTML-Block mit iframe, in dem der Agent Text ergaenzt) ist jetzt ein Block des Agenten und wird abgelehnt. Solche Aenderungen macht ein Mensch im Editor.
+- **Revisionen aus der Zeit vor 0.18.3** koennen Markup enthalten, das ueber die Luecke gespeichert wurde. `content-restore` stellt sie wieder her wie jeden anderen frueheren Stand.
+- Die Test-Attrappe fuer `wp_kses_post` (`tests/kses-stub.php`) filtert jetzt wie kses: on*-Attribute auch nach `/`, javascript:/vbscript:/data: auch entity-kodiert oder mit Tabs, xlink:href, style, svg, meta, base, link. Die alte entfernte nur script und iframe und hat die Luecke deshalb nie gesehen. Neuer Test: `tests/markup-guard.php`.
+
+---
+
 ## [0.18.2] - 2026-10-01
 
 Ein Tippfehler in der Reihenfolge, der zwei gemeldete Fehler erklaert.
