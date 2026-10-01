@@ -105,11 +105,16 @@ function wpmcp_media_read( $id ) {
 /**
  * Change an attachment's alt text or title.
  *
- * @param array $args { id, alt, title, dry_run }.
+ * @param array $args { id|post_id, alt, title, dry_run }.
  * @return array|\WP_Error
  */
 function wpmcp_media_update( array $args ) {
-	$attachment = wpmcp_get_attachment( (int) ( $args['id'] ?? 0 ) );
+	$id = wpmcp_attachment_id_arg( $args );
+	if ( is_wp_error( $id ) ) {
+		return $id;
+	}
+
+	$attachment = wpmcp_get_attachment( $id );
 	if ( is_wp_error( $attachment ) ) {
 		return $attachment;
 	}
@@ -202,6 +207,28 @@ function wpmcp_media_update( array $args ) {
 	$response['message'] = 'Saved.';
 
 	return $response;
+}
+
+/**
+ * The attachment an argument list names, as "id" or as "post_id".
+ *
+ * Every content tool calls its target post_id, and an attachment is a
+ * post; agents send post_id here by habit and got "No attachment with ID
+ * 0". Both are accepted, id first. Neither is a request error that says
+ * so, rather than a lookup of ID 0.
+ *
+ * @param mixed $args Tool input.
+ * @return int|\WP_Error
+ */
+function wpmcp_attachment_id_arg( $args ) {
+	$args = is_array( $args ) ? $args : array();
+	$id   = (int) ( $args['id'] ?? ( $args['post_id'] ?? 0 ) );
+
+	if ( $id <= 0 ) {
+		return new \WP_Error( 'wpmcp_bad_request', 'Provide the attachment ID as "id" (or "post_id").' );
+	}
+
+	return $id;
 }
 
 /**

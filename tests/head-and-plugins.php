@@ -51,6 +51,16 @@ check( 'index, follow' === $head['robots'], 'robots' );
 check( 'https://example.test/handwerker/' === $head['canonical'], 'die Canonical' );
 check( 'Website für Handwerker' === $head['og:title'], 'og:title kommt ueber property=' );
 check( 1 === $head['jsonLdBlocks'], 'und die Anzahl der JSON-LD-Bloecke' );
+check( 1 === $head['jsonLdInHead'] && 0 === $head['jsonLdInBody'], 'getrennt nach Kopf und Body' );
+
+// content-write stores an FAQ schema in a core/html block, so it is
+// delivered in the body. Counted in the head only, it read as 0 on the
+// very page that carried it.
+$faq = wpmcp_head_summary( '<html><head><title>FAQ</title></head><body><script type="application/ld+json">{"@type":"FAQPage"}</script></body></html>' );
+check( 1 === $faq['jsonLdBlocks'], 'JSON-LD im Body zaehlt mit', 'vorher: 0' );
+check( 0 === $faq['jsonLdInHead'] && 1 === $faq['jsonLdInBody'], 'und steht als Body-Treffer da' );
+$nohead = wpmcp_head_summary( '<p>x</p><script type="application/ld+json">{}</script>' );
+check( 1 === $nohead['jsonLdBlocks'] && 0 === $nohead['jsonLdInHead'], 'ohne <head> wird nichts doppelt gezaehlt' );
 check( ! isset( $head['generator'] ), 'was nicht zur Arbeit gehoert, bleibt draussen' );
 
 echo "\n\033[1mWenn nichts davon da ist\033[0m\n";

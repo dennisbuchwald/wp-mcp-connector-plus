@@ -166,6 +166,16 @@ check(
 );
 $GLOBALS['can'] = true;
 
+echo "\n\033[1mpost_id statt id\033[0m\n";
+
+// Every other tool names its target post_id, and an attachment is a post.
+// Sent here, it was ignored, and the answer was "No attachment with ID 0".
+$result = wpmcp_media_update( array( 'post_id' => 1234, 'alt' => 'Logo' ) );
+check( ! is_wp_error( $result ) && 1234 === $result['id'], 'media-update nimmt post_id', is_wp_error( $result ) ? $result->get_error_message() : '' );
+check( 1234 === wpmcp_attachment_id_arg( array( 'id' => 1234, 'post_id' => 5 ) ), 'id hat Vorrang' );
+$missing = wpmcp_attachment_id_arg( array() );
+check( is_wp_error( $missing ) && 'wpmcp_bad_request' === $missing->get_error_code(), 'ohne beides: ein Anfragefehler, keine Suche nach ID 0' );
+
 echo "\n\033[1mURL-Vergleich\033[0m\n";
 
 // Matching whole URLs misses every page written under another domain.

@@ -2186,6 +2186,26 @@ function wpmcp_verify_stored( $post_id, $expected ) {
 }
 
 /**
+ * The title a duplicate gets: the one asked for, or the original's plus
+ * " (Copy)" in the site's language.
+ *
+ * It was " (Kopie)" on every site, whatever its language.
+ *
+ * @param string $original Title of the source.
+ * @param string $title    Title asked for, may be empty.
+ * @return string
+ */
+function wpmcp_copy_title( $original, $title = '' ) {
+	$title = trim( (string) $title );
+	if ( '' !== $title ) {
+		return $title;
+	}
+
+	/* translators: %s: title of the page that was duplicated */
+	return sprintf( __( '%s (Copy)', 'wp-mcp-connector-plus' ), (string) $original );
+}
+
+/**
  * Duplicate a post as a draft — the preferred way to start a new page,
  * because it inherits the structure and tone the site already uses.
  *
@@ -2215,7 +2235,7 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to create %s content.', $post->post_type ) );
 	}
 
-	$new_title = '' !== trim( (string) $title ) ? trim( (string) $title ) : $post->post_title . ' (Kopie)';
+	$new_title = wpmcp_copy_title( $post->post_title, $title );
 
 	$new_id = wpmcp_insert_post_preserving(
 		wp_slash(

@@ -383,9 +383,13 @@ function wpmcp_find_in_page( $html, $needle, $limit = 5 ) {
  * @return array
  */
 function wpmcp_head_summary( $html ) {
-	$head = $html;
-	if ( preg_match( '#<head\b[^>]*>(.*?)</head\s*>#is', $html, $m ) ) {
-		$head = $m[1];
+	$head     = $html;
+	$body     = $html;
+	$has_head = false;
+	if ( preg_match( '#<head\b[^>]*>(.*?)</head\s*>#is', $html, $m, PREG_OFFSET_CAPTURE ) ) {
+		$head     = $m[1][0];
+		$body     = substr( $html, $m[0][1] + strlen( $m[0][0] ) );
+		$has_head = true;
 	}
 
 	$summary = array();
@@ -415,8 +419,18 @@ function wpmcp_head_summary( $html ) {
 		$summary['canonical'] = wpmcp_head_text( $href[1] );
 	}
 
-	// Structured data is a yes/no question far more often than a content one.
-	$summary['jsonLdBlocks'] = preg_match_all( '#<script\b[^>]*application/ld\+json[^>]*>#i', $head );
+	// Structured data is a yes/no question far more often than a content
+	// one. Counted in the head only, an FAQ schema written into the page
+	// (a core/html block, which is where content-write puts it) read as 0
+	// on the page that carried it. Now both, and the total that answers
+	// "is it delivered?". Without a <head> element everything counts as
+	// body, so nothing is counted twice.
+	$jsonld                  = '#<script\b[^>]*application/ld\+json[^>]*>#i';
+	$in_head                 = $has_head ? preg_match_all( $jsonld, $head ) : 0;
+	$in_body                 = preg_match_all( $jsonld, $body );
+	$summary['jsonLdBlocks'] = $in_head + $in_body;
+	$summary['jsonLdInHead'] = $in_head;
+	$summary['jsonLdInBody'] = $in_body;
 
 	return $summary;
 }

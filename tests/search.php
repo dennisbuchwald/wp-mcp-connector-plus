@@ -79,7 +79,10 @@ echo "\n\033[1mSuche im Blockbaum\033[0m\n";
 
 $GLOBALS['posts'] = array();
 
-function get_posts( $args = array() ) { return $GLOBALS['posts']; }
+function get_posts( $args = array() ) { $GLOBALS['last_query'] = $args; return $GLOBALS['posts']; }
+function wpmcp_allowed_post_types() { return array( 'page', 'post' ); }
+function current_user_can( ...$a ) { return true; }
+function wpmcp_log( ...$a ) {}
 function get_permalink( $p ) { return 'https://example.test/x/'; }
 function get_the_title( $p ) { return 'Stub'; }
 
@@ -123,6 +126,39 @@ $markup = '<!-- wp:core/group --><div><!-- wp:acme/button {"url":"tel:+49"} /-->
 $hits   = wpmcp_search_in_post( new StubPost( $markup ), 'tel:+49', false, 10 );
 check( ! empty( $hits ), 'verschachtelte Bloecke werden durchsucht' );
 check( '0.0' === $hits[0]['path'], 'mit korrektem verschachteltem Pfad', $hits[0]['path'] ?? '' );
+
+echo "\n\033[1mBlaettern ueber das Limit hinaus\033[0m\n";
+
+// The limit stops at 500 hits. A site with more had no way to the rest.
+$many = '';
+for ( $n = 0; $n < 7; $n++ ) {
+	$many .= '<!-- wp:paragraph --><p>tel:' . $n . '</p><!-- /wp:paragraph -->';
+}
+$GLOBALS['posts'] = array( new StubPost( $many ) );
+
+$first = wpmcp_search_content( array( 'query' => 'tel:', 'limit' => 3 ) );
+check( 3 === count( $first['matches'] ) && true === $first['truncated'], 'erste Seite: 3 Treffer, abgeschnitten' );
+check( 3 === ( $first['nextOffset'] ?? null ), 'mit nextOffset', wp_json_encode( $first['nextOffset'] ?? null ) );
+
+$second = wpmcp_search_content( array( 'query' => 'tel:', 'limit' => 3, 'offset' => $first['nextOffset'] ) );
+check( '3' === $second['matches'][0]['path'], 'die zweite Seite beginnt beim vierten Treffer', $second['matches'][0]['path'] ?? '' );
+check( 3 === $second['offset'], 'und nennt ihren offset' );
+
+$last = wpmcp_search_content( array( 'query' => 'tel:', 'limit' => 3, 'offset' => 6 ) );
+check( 1 === count( $last['matches'] ) && false === $last['truncated'] && ! isset( $last['nextOffset'] ), 'die letzte Seite: kein nextOffset' );
+
+echo "\n\033[1mpost_type als Text\033[0m\n";
+
+// content-list and content-create take post_type as a string, so agents
+// send it here as well. It was ignored and the search ran site-wide.
+wpmcp_search_content( array( 'query' => 'tel:', 'post_type' => 'page' ) );
+check( array( 'page' ) === $GLOBALS['last_query']['post_type'], 'post_type: "page" grenzt ein', wp_json_encode( $GLOBALS['last_query']['post_type'] ) );
+wpmcp_search_content( array( 'query' => 'tel:', 'post_types' => 'post' ) );
+check( array( 'post' ) === $GLOBALS['last_query']['post_type'], 'post_types als Text ebenso' );
+wpmcp_search_content( array( 'query' => 'tel:', 'post_types' => array( 'page', 'shop_order' ) ) );
+check( array( 'page' ) === $GLOBALS['last_query']['post_type'], 'eine Liste bleibt auf den Bereich des Connectors begrenzt' );
+wpmcp_search_content( array( 'query' => 'tel:', 'post_status' => 'publish' ) );
+check( array( 'publish' ) === $GLOBALS['last_query']['post_status'], 'post_status als Text' );
 
 echo "\n";
 if ( 0 === $fail ) {

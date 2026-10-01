@@ -258,14 +258,14 @@ tools there are, because a connected client keeps the list it was given.
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
 | `wpmcp/content-create` | *Write levels only.* A new page with its title, slug, parent and status — and its content in the same call. A draft, unless published during a work session. The dry run validates the tree and meta exactly as the real call will. |
 | `wpmcp/content-batch` | *Write levels only.* The same change on up to 20 posts in one call. Every item is dry-run first; nothing is saved unless all pass. |
-| `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. |
+| `wpmcp/content-duplicate` | *Write levels only.* Copy a page as a draft, including taxonomies and meta. Writes at once (no dry run); the default title is the original plus a translated " (Copy)". |
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
-| `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. |
+| `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. A long result names its `nextOffset`; `post_type` works as a single string too. |
 | `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. `contains` answers "is my change on the page?" in a few hundred bytes; `body_only` drops header, footer, styles and scripts. |
 | `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
-| `wpmcp/media-read` | One attachment in the same shape. |
+| `wpmcp/media-read` | One attachment in the same shape. Takes `id`, or `post_id` like every other tool. |
 | `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No delete, no file replacement. |
 | `wpmcp/media-upload` | *Write levels only, works only in a work session.* A JPEG, PNG or WebP into the media library, alt text required. Outside a session it answers `wpmcp_session_required`. |
 

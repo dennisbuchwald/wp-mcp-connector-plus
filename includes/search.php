@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Search post content for a string or regular expression.
  *
- * @param array $args { query, regex, post_types, post_status, context_chars, limit }.
+ * @param array $args { query, regex, post_types|post_type, post_status, context_chars, limit, offset }.
  * @return array|\WP_Error
  */
 function wpmcp_search_content( array $args ) {
@@ -33,6 +33,7 @@ function wpmcp_search_content( array $args ) {
 	$is_regex = ! empty( $args['regex'] );
 	$context  = max( 0, min( 400, (int) ( $args['context_chars'] ?? 80 ) ) );
 	$limit    = max( 1, min( 500, (int) ( $args['limit'] ?? 200 ) ) );
+	$skip     = max( 0, (int) ( $args['offset'] ?? 0 ) );
 
 	if ( $is_regex ) {
 		$pattern = '/' . str_replace( '/', '\/', $query ) . '/u';
@@ -42,12 +43,16 @@ function wpmcp_search_content( array $args ) {
 		}
 	}
 
-	$post_types = ! empty( $args['post_types'] ) && is_array( $args['post_types'] )
-		? array_values( array_intersect( $args['post_types'], wpmcp_allowed_post_types() ) )
+	// content-list and content-create take "post_type" as one string, so an
+	// agent sends that here too. Accepted, as is a string for either list.
+	$asked_types = wpmcp_search_list( $args['post_types'] ?? ( $args['post_type'] ?? null ) );
+	$post_types  = ! empty( $asked_types )
+		? array_values( array_intersect( $asked_types, wpmcp_allowed_post_types() ) )
 		: wpmcp_allowed_post_types();
 
-	$statuses = ! empty( $args['post_status'] ) && is_array( $args['post_status'] )
-		? $args['post_status']
+	$asked_status = wpmcp_search_list( $args['post_status'] ?? null );
+	$statuses     = ! empty( $asked_status )
+		? $asked_status
 		: array( 'publish', 'draft', 'pending', 'future', 'private' );
 
 	$posts = get_posts(
@@ -63,6 +68,7 @@ function wpmcp_search_content( array $args ) {
 
 	$matches   = array();
 	$truncated = false;
+	$seen      = 0;
 
 	foreach ( $posts as $post ) {
 		if ( ! current_user_can( 'edit_post', $post->ID ) && 'publish' !== $post->post_status ) {
@@ -71,6 +77,11 @@ function wpmcp_search_content( array $args ) {
 
 		$found = wpmcp_search_in_post( $post, $query, $is_regex, $context );
 		foreach ( $found as $hit ) {
+			// Hits come in a fixed order (post ID, then block path), so an
+			// offset into them names the same hit on the next call.
+			if ( $seen++ < $skip ) {
+				continue;
+			}
 			if ( count( $matches ) >= $limit ) {
 				$truncated = true;
 				break 2;
@@ -88,14 +99,39 @@ function wpmcp_search_content( array $args ) {
 		)
 	);
 
-	return array(
+	$result = array(
 		'query'         => $query,
 		'regex'         => $is_regex,
+		'offset'        => $skip,
 		'totalMatches'  => count( $matches ),
 		'postsAffected' => count( $posts_affected ),
 		'truncated'     => $truncated,
 		'matches'       => $matches,
 	);
+
+	// The limit stops at 500, and a site-wide search can find more. Without
+	// a way past the first page the rest were simply unreachable.
+	if ( $truncated ) {
+		$result['nextOffset'] = $skip + count( $matches );
+	}
+
+	return $result;
+}
+
+/**
+ * A list argument that may arrive as a list or as one string.
+ *
+ * @param mixed $value Array, a string (comma-separated allowed), or null.
+ * @return string[]
+ */
+function wpmcp_search_list( $value ) {
+	if ( is_string( $value ) ) {
+		$value = explode( ',', $value );
+	}
+	if ( ! is_array( $value ) ) {
+		return array();
+	}
+	return array_values( array_filter( array_map( 'trim', array_filter( $value, 'is_string' ) ), 'strlen' ) );
 }
 
 /**

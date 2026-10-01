@@ -93,6 +93,12 @@ check(
 	'sonst bliebe er fuer den Rest des Requests aus'
 );
 
+echo "\n\033[1mTitel der Kopie\033[0m\n";
+
+// It was " (Kopie)" on every site, whatever language the site spoke.
+check( 'Leistungen (Copy)' === wpmcp_copy_title( 'Leistungen' ), 'ohne Titel: Original plus " (Copy)", uebersetzbar' );
+check( 'Neu' === wpmcp_copy_title( 'Leistungen', '  Neu ' ), 'ein angegebener Titel gilt' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mDuplizieren in Ordnung.\033[0m\n";

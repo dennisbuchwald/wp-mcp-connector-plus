@@ -241,6 +241,8 @@ $describe = $GLOBALS['abilities']['wpmcp/blocks-describe']['execute_callback'];
 $err      = $describe( array() );
 check( is_wp_error( $err ) && 0 === strpos( $err->get_error_message(), '[wpmcp_bad_request] ' ), 'die Meldung beginnt mit [code]', is_wp_error( $err ) ? $err->get_error_message() : 'kein Fehler' );
 check( is_wp_error( $err ) && 'wpmcp_bad_request' === $err->get_error_code(), 'der Code selbst bleibt' );
+$media = $GLOBALS['abilities']['wpmcp/media-read']['execute_callback']( array() );
+check( is_wp_error( $media ) && 0 === strpos( $media->get_error_message(), '[wpmcp_bad_request] ' ), 'media-read ohne id und post_id: Anfragefehler mit Code' );
 $twice = wpmcp_contract_result( $err );
 check( 1 === substr_count( $twice->get_error_message(), '[wpmcp_bad_request]' ), 'zweimal durch die Grenze: ein Praefix' );
 $foreign = wpmcp_contract_result( new WP_Error( 'rest_forbidden', 'Nope.' ) );

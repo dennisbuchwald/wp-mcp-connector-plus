@@ -62,6 +62,11 @@ Ab hier gibt es eine Vertragsversion: `site-info` meldet `contractVersion` (eine
 - **Jedes Werkzeug traegt alle MCP-Hinweise.** `content-create`, `content-batch`, `media-update` und `media-upload` hatten keine; MCP liest einen fehlenden `destructiveHint` als ja, also galt das Anlegen eines Entwurfs als zerstoererisch. Jetzt sind `readOnlyHint`, `destructiveHint`, `idempotentHint` und `openWorldHint` ueberall gesetzt, aus einer Tabelle (`content-fetch-live` als einziges mit `openWorldHint`), und `show_in_rest` ist ueberall gleich.
 - **Labels auf Englisch und uebersetzbar.** Die Namen der Abilities waren deutsch und fest im Code ("Seite anlegen"); jetzt englisch und ueber `__()`.
 
+- **`content-search` blaettert ueber 500 Treffer hinaus.** Neues Argument `offset`; ist eine Antwort abgeschnitten, nennt sie `nextOffset`. Bisher war alles nach dem 500. Treffer unerreichbar. Ausserdem nimmt die Suche `post_type` als einzelnen Text (wie `content-list` und `content-create`) und `post_types` bzw. `post_status` auch als Text statt Liste; bisher wurde ein `post_type` stillschweigend ignoriert und die ganze Seite durchsucht.
+- **`media-read` und `media-update` nehmen auch `post_id`.** Jedes andere Werkzeug nennt sein Ziel so, und ein Anhang ist ein Beitrag; geschickt wurde es aus Gewohnheit und endete in "No attachment with ID 0". `id` bleibt und hat Vorrang; fehlt beides, kommt `wpmcp_bad_request`.
+- **`content-fetch-live` zaehlt JSON-LD auch im Body.** `head.jsonLdBlocks` zaehlte nur den `<head>`; ein FAQ-Schema, das `content-write` in einen HTML-Block schreibt, stand damit auf genau der Seite, die es auslieferte, als 0 da. Jetzt ist `jsonLdBlocks` die Summe, dazu `jsonLdInHead` und `jsonLdInBody`. **Die Bedeutung von `jsonLdBlocks` aendert sich damit** (vorher nur Kopf, jetzt ganze Seite).
+- **`content-duplicate` sagt, dass es sofort schreibt** (es gibt keinen Probelauf; die Kopie ist immer ein Entwurf), und der Standardtitel heisst "Original (Copy)", uebersetzbar, statt immer "(Kopie)".
+
 ### Zu beachten
 
 - **Seiten ohne HTTPS verlieren die Verbindung.** Laeuft eine Seite (auch eine Entwicklungsseite) nur ueber HTTP und ist nicht als `local` erklaert, kann sich der Agent nicht mehr anmelden. Die Statustabelle unter Werkzeuge > MCP Connector zeigt das jetzt als Fehler.

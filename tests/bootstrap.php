@@ -109,6 +109,12 @@ class WP_Error {
 	}
 }
 
+if ( ! function_exists( '__' ) ) {
+	function __( $text, $domain = 'default' ) {
+		return $text;
+	}
+}
+
 function is_wp_error( $thing ) {
 	return $thing instanceof WP_Error;
 }

@@ -394,7 +394,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-duplicate',
 		array(
 			'label'       => __( 'Duplicate page', 'wp-mcp-connector-plus' ),
-			'description' => 'Duplicate a page including its blocks, taxonomies and meta. The copy is always a draft. This is the preferred way to create a new page: an existing page already carries the site\'s structure, tone and section rhythm, so adapting a copy beats assembling one from scratch. Find a good source with content-list first.',
+			'description' => 'Duplicate a page including its blocks, taxonomies and meta. Writes immediately, there is no dry run: the copy is created as a draft and its id returned. This is the preferred way to create a new page: an existing page already carries the site\'s structure, tone and section rhythm, so adapting a copy beats assembling one from scratch. Find a good source with content-list first.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -405,7 +405,7 @@ function wpmcp_register_abilities() {
 					),
 					'title'   => array(
 						'type'        => 'string',
-						'description' => 'Title for the copy. Defaults to the original plus " (Kopie)".',
+						'description' => 'Title for the copy. Defaults to the original plus " (Copy)", translated.',
 					),
 				),
 				'required'   => array( 'post_id' ),
@@ -546,12 +546,16 @@ function wpmcp_register_abilities() {
 						'description' => 'Treat the query as a regular expression (without delimiters).',
 					),
 					'post_types'    => array(
-						'type'        => 'array',
+						'type'        => array( 'array', 'string' ),
 						'items'       => array( 'type' => 'string' ),
 						'description' => 'Restrict to these post types. Defaults to all the connector may read.',
 					),
+					'post_type'     => array(
+						'type'        => 'string',
+						'description' => 'One post type, e.g. "page"; same as post_types with one entry.',
+					),
 					'post_status'   => array(
-						'type'        => 'array',
+						'type'        => array( 'array', 'string' ),
 						'items'       => array( 'type' => 'string' ),
 						'description' => 'Restrict to these statuses, e.g. ["publish"].',
 					),
@@ -563,7 +567,12 @@ function wpmcp_register_abilities() {
 					'limit'         => array(
 						'type'        => 'integer',
 						'default'     => 200,
-						'description' => 'Maximum hits to return (max 500). The response says if it was cut short.',
+						'description' => 'Maximum hits to return (max 500). When cut short, the answer has "truncated" and the "nextOffset" to continue from.',
+					),
+					'offset'        => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Hits to skip, for the next page of a long result.',
 					),
 				),
 				'required'   => array( 'query' ),
@@ -580,7 +589,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-fetch-live',
 		array(
 			'label'       => __( 'Fetch delivered page', 'wp-mcp-connector-plus' ),
-			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own. To check a change, pass contains rather than reading the page.',
+			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks (head and body) — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own. To check a change, pass contains rather than reading the page.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -733,17 +742,21 @@ function wpmcp_register_abilities() {
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
-					'id' => array(
+					'id'      => array(
 						'type'        => 'integer',
 						'description' => 'The attachment ID.',
 					),
+					'post_id' => array(
+						'type'        => 'integer',
+						'description' => 'Same as id.',
+					),
 				),
-				'required'   => array( 'id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
 			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
-				return wpmcp_media_read( (int) ( $input['id'] ?? 0 ) );
+				$id = wpmcp_attachment_id_arg( $input );
+				return is_wp_error( $id ) ? $id : wpmcp_media_read( $id );
 			},
 		)
 	);
@@ -761,6 +774,10 @@ function wpmcp_register_abilities() {
 						'type'        => 'integer',
 						'description' => 'The attachment ID.',
 					),
+					'post_id' => array(
+						'type'        => 'integer',
+						'description' => 'Same as id.',
+					),
 					'alt'     => array(
 						'type'        => 'string',
 						'description' => 'New alt text. Pass an empty string to clear it, which is right for a purely decorative image.',
@@ -775,7 +792,6 @@ function wpmcp_register_abilities() {
 						'description' => 'Report the change without saving. Defaults to true.',
 					),
 				),
-				'required'   => array( 'id' ),
 			),
 			'output_schema' => array( 'type' => 'object' ),
 			'permission_callback' => 'wpmcp_can',
