@@ -523,39 +523,29 @@ function wpmcp_apply_ops( array $blocks, array $ops ) {
 
 		switch ( $kind ) {
 			case 'insert':
-				$nodes = isset( $op['blocks'] ) ? $op['blocks'] : ( isset( $op['block'] ) ? array( $op['block'] ) : null );
-				if ( ! is_array( $nodes ) ) {
-					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (insert): "block" or "blocks" required.', $n ) );
-				}
-				$errors = array();
-				$new    = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors );
-				if ( ! empty( $errors ) ) {
-					return new \WP_Error( 'wpmcp_bad_block', implode( ' ', $errors ) );
-				}
-				$result = wpmcp_splice( $blocks, $path, $new, 0 );
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
-				$blocks              = $result;
-				$summary['inserted'] += count( $new );
-				break;
-
 			case 'replace':
-				$nodes = isset( $op['blocks'] ) ? $op['blocks'] : ( isset( $op['block'] ) ? array( $op['block'] ) : null );
+				// The same op but for one number: replace takes the block at
+				// the path out (1) where insert takes nothing (0).
+				$replace = 'replace' === $kind;
+				$nodes   = isset( $op['blocks'] ) ? $op['blocks'] : ( isset( $op['block'] ) ? array( $op['block'] ) : null );
 				if ( ! is_array( $nodes ) ) {
-					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (replace): "block" or "blocks" required.', $n ) );
+					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (%s): "block" or "blocks" required.', $n, $replace ? 'replace' : 'insert' ) );
 				}
 				$errors = array();
 				$new    = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors );
 				if ( ! empty( $errors ) ) {
 					return new \WP_Error( 'wpmcp_bad_block', implode( ' ', $errors ) );
 				}
-				$result = wpmcp_splice( $blocks, $path, $new, 1 );
+				$result = wpmcp_splice( $blocks, $path, $new, $replace ? 1 : 0 );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
-				$blocks              = $result;
-				$summary['replaced'] += 1;
+				$blocks = $result;
+				if ( $replace ) {
+					$summary['replaced'] += 1;
+				} else {
+					$summary['inserted'] += count( $new );
+				}
 				break;
 
 			case 'remove':
