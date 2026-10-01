@@ -99,6 +99,18 @@ check(
 	'sonst kommen sie beim naechsten composer install zurueck'
 );
 
+echo "\n\033[1mDeinstallation wird mitgeliefert\033[0m\n";
+
+// WordPress looks for uninstall.php in the plugin root. Missing from the
+// ZIP, deleting the plugin would leave the agent's credentials behind.
+check( is_file( $root . '/uninstall.php' ), 'uninstall.php liegt im Plugin-Wurzelordner' );
+$attr = shell_exec( 'git -C ' . escapeshellarg( $root ) . ' check-attr export-ignore -- uninstall.php 2>/dev/null' );
+check(
+	null === $attr || false === strpos( (string) $attr, ': set' ),
+	'und ist nicht von git archive ausgenommen',
+	trim( (string) $attr )
+);
+
 echo "\n\033[1mWas jede Sitzung im Kontext traegt\033[0m\n";
 
 // Tool descriptions are sent once per session and sit there for its whole
