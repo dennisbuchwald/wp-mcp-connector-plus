@@ -241,9 +241,12 @@ answers the agent account with a 403 on purpose.
 
 ## The abilities
 
-Seven are always present. The three write abilities exist only above the
-read-only access level — at that level they are not registered, so the
-agent never sees them.
+Eleven read abilities are always present. The seven write abilities exist
+only above the read-only access level; at that level they are not
+registered, so the agent never sees them. The list depends on the level
+the site owner set and on nothing else: a work session widens what the
+write tools may do (publish, upload, edit published pages), never which
+tools there are, because a connected client keeps the list it was given.
 
 | Ability | What it does |
 |---|---|
@@ -263,12 +266,20 @@ agent never sees them.
 | `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. `contains` answers "is my change on the page?" in a few hundred bytes; `body_only` drops header, footer, styles and scripts. |
 | `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
 | `wpmcp/media-read` | One attachment in the same shape. |
-| `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No upload, no delete, no file replacement. |
+| `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No delete, no file replacement. |
+| `wpmcp/media-upload` | *Write levels only, works only in a work session.* A JPEG, PNG or WebP into the media library, alt text required. Outside a session it answers `wpmcp_session_required`. |
+
+Every ability carries the MCP tool hints (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`), all four set explicitly, because MCP
+reads a missing one as the cautious default. `site-info` reports
+`contractVersion`, an integer that rises only when an existing name,
+field or meaning changes; the changelog marks each change under "API".
 
 ### Deliberately not covered
 
 The agent works on the block tree, the SEO fields and the two text fields
-of an attachment. It cannot upload or delete media, replace a file, set a
+of an attachment. It cannot delete media, replace a file, upload outside a
+work session, set a
 featured image, change categories or tags, or edit a post title after
 creation. A generated draft is therefore complete as *content* and as
 metadata, but a human still decides what gets published.
@@ -289,6 +300,64 @@ Measured against a real 47-block design system with 975 attributes:
 the whole catalogue is **11.3 KB (~2,900 tokens)**, and the heaviest
 single block detail (77 attributes) is 12.7 KB. An agent can hold the
 entire kit in context and still have room to work.
+
+## Error codes
+
+A tool that cannot do what was asked answers in one of two ways, and both
+carry a code an agent can branch on:
+
+- **An error.** The message starts with the code in brackets, exactly
+  once: `[wpmcp_stale] Post 12 changed after you read it ...`. MCP clients
+  receive only the message of a WordPress error, so the code travels in it.
+- **A refusal with a report**, for writes that were understood but did not
+  pass validation: `{ "ok": false, "code": "wpmcp_validation_failed",
+  "errors": [...], "warnings": [...] }`. `content-batch` items have the
+  same shape: `{ index, postId, ok, code, errors, warnings }`.
+
+| Code | Meaning |
+|---|---|
+| `wpmcp_anchor_not_unique` | `patch_html`: the text to find occurs zero or several times in the block. |
+| `wpmcp_bad_block` | An inserted or replacing block is not a valid block. |
+| `wpmcp_bad_op` | A patch operation is malformed or misses a required field. |
+| `wpmcp_bad_parent` | The parent does not exist, is the page itself, another post type or would form a loop. |
+| `wpmcp_bad_path` | A block path is malformed. |
+| `wpmcp_bad_payload` | `ops`, `tree`, `meta` or `items` arrived in a shape that cannot be decoded. |
+| `wpmcp_bad_regex` | `content-search`: the regular expression does not compile. |
+| `wpmcp_bad_request` | A required argument is missing or arguments contradict each other. |
+| `wpmcp_bad_status` | `content-list`: a status that cannot be listed. |
+| `wpmcp_bad_upload` | `media-upload`: `data` is not valid base64. |
+| `wpmcp_batch_incomplete` | `content-batch`: a save failed after every dry run passed; the posts before it are saved. |
+| `wpmcp_dynamic_data_blocked` | The page holds dynamic data and the site has not allowed saving it. |
+| `wpmcp_forbidden` | The account lacks the WordPress capability for this post or attachment. |
+| `wpmcp_forbidden_type` | The post type is outside the connector's scope. |
+| `wpmcp_live_edit_disabled` | The post is published and the access level keeps published pages read-only. |
+| `wpmcp_no_app_passwords` | Setup (admin): application passwords are not available on this site. |
+| `wpmcp_no_permalink` | `content-fetch-live`: the post has no public URL. |
+| `wpmcp_nonce` | Setup (admin): the form's security check failed. |
+| `wpmcp_not_found` | No post or attachment with that ID. |
+| `wpmcp_not_public` | `content-fetch-live`: the post is not public; use `content-preview`. |
+| `wpmcp_password_protected` | The post is password protected; reading it needs the right to edit it. |
+| `wpmcp_path_not_found` | A block path points at no block. |
+| `wpmcp_pattern_readonly` | The post is a synced pattern and pattern editing is off. |
+| `wpmcp_privacy_policy_page` | The privacy policy page is editable only at the published-pages level. |
+| `wpmcp_render_failed` | A block threw while rendering. |
+| `wpmcp_rest_scope` | The agent account called a REST route other than the MCP endpoint. |
+| `wpmcp_runs_code` | The element executes its content as PHP and is not writable. |
+| `wpmcp_save_failed` | WordPress did not save; nothing was changed (for `content-create`: the page was removed again). |
+| `wpmcp_session_required` | `media-upload` outside a work session; only the site owner can open one. |
+| `wpmcp_stale` | `expected_modified` no longer matches: someone else saved in between. |
+| `wpmcp_unfiltered_html_unavailable` | The site's configuration makes the dynamic-data save impossible. |
+| `wpmcp_unsafe_markup` | `content-restore`: the revision was not saved by a person and holds markup kses would filter. |
+| `wpmcp_upload_failed` | `media-upload`: WordPress could not store the file. |
+| `wpmcp_upload_needs_alt` | `media-upload`: no alt text and not marked decorative. |
+| `wpmcp_upload_refused` | `media-upload`: the file contains a PHP tag. |
+| `wpmcp_upload_too_large` | `media-upload`: the file exceeds the size limit. |
+| `wpmcp_upload_too_many_pixels` | `media-upload`: the image exceeds the pixel limit (`wpmcp_max_upload_pixels`). |
+| `wpmcp_upload_type` | `media-upload`: not a JPEG, PNG or WebP by its contents. |
+| `wpmcp_user_exists` | Setup (admin): a user with that name exists with another role. |
+| `wpmcp_validation_failed` | The write was understood and refused; `errors` says why, per block path. |
+| `wpmcp_wrong_revision` | The revision belongs to another post. |
+| `wpmcp_xmlrpc` | The agent account tried XML-RPC. |
 
 ## How a write is validated
 
@@ -427,8 +496,9 @@ types with the `wpmcp_session_post_types` filter.
 **Publishing and uploading images happen only inside a session.** Opening
 one is the human deciding that what gets built in it may go live — once,
 instead of clicking publish twenty-two times afterwards. Outside a session
-no status publishes at any access level, and the upload tool does not
-exist. Inside one, the capability is granted for a single save or upload
+no status publishes at any access level, and the upload tool refuses with
+`wpmcp_session_required` (it stays in the tool list, which never changes
+with the session). Inside one, the capability is granted for a single save or upload
 and never lands on the role. A page created with `status: publish` goes
 live only after its content is written; rejected content keeps it a draft.
 A live page is still never taken back to draft.
@@ -477,7 +547,8 @@ Regardless of level:
   the role. Publishing is possible only inside a work session the site
   owner opens, for one save at a time; outside one, new pages and
   duplicates stay drafts until a human publishes them.
-- **No deleting, no uploads, no settings access**, at any level.
+- **No deleting and no settings access** at any level, and no uploads
+  outside a work session.
 - **Dry run is the default.** Writing requires `dry_run: false`.
 - **Every write creates a revision** — rollback is one click.
 

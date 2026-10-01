@@ -12,8 +12,9 @@
  * are worked out on every check rather than stored on the role, so a
  * setting or a session that ended cannot leave anything behind.
  *
- * One line is not configurable: the agent can never publish. Every level
- * leaves that with a human.
+ * One line is not configurable: no level lets the agent publish or upload.
+ * Both need a work session, which only a human opens and which closes
+ * itself; outside one, publishing stays with a human.
  *
  * @package wp-mcp-connector-plus
  */
@@ -45,7 +46,10 @@ function wpmcp_access_levels() {
 }
 
 /**
- * The configured access level.
+ * The access level in force right now, a work session included.
+ *
+ * This is what the capabilities follow. The tool list does not: it
+ * follows wpmcp_configured_access_level(), see wpmcp_ability_names().
  *
  * @return string
  */
@@ -58,6 +62,19 @@ function wpmcp_access_level() {
 	// above still wins: a site that fixed the level in wp-config meant it.
 	if ( wpmcp_work_session_active() ) {
 		return 'full';
+	}
+
+	return wpmcp_configured_access_level();
+}
+
+/**
+ * The access level the site owner set, without a work session lifting it.
+ *
+ * @return string
+ */
+function wpmcp_configured_access_level() {
+	if ( defined( 'WPMCP_ACCESS_LEVEL' ) && array_key_exists( WPMCP_ACCESS_LEVEL, wpmcp_access_levels() ) ) {
+		return WPMCP_ACCESS_LEVEL;
 	}
 
 	$level = get_option( 'wpmcp_access_level', null );
@@ -576,7 +593,38 @@ function wpmcp_agent_capabilities( $allcaps, $caps, $args, $user ) {
 add_filter( 'user_has_cap', 'wpmcp_agent_capabilities', 10, 4 );
 
 /**
- * Abilities available at the current access level.
+ * The abilities that change something. Everything else only reads.
+ *
+ * One list, so site-info, the annotations and the registration cannot
+ * disagree about which tool is which.
+ *
+ * @return string[]
+ */
+function wpmcp_write_ability_names() {
+	return array(
+		'wpmcp/content-write',
+		'wpmcp/content-batch',
+		'wpmcp/content-create',
+		'wpmcp/content-duplicate',
+		'wpmcp/content-restore',
+		'wpmcp/media-update',
+		'wpmcp/media-upload',
+	);
+}
+
+/**
+ * Abilities offered at the configured access level.
+ *
+ * The list depends on the level the site owner set and on nothing that
+ * runs out by itself. MCP clients fetch the tool list once when they
+ * connect, and the server announces no list changes; a tool that appears
+ * when a work session opens is invisible to an agent already connected,
+ * and one that disappears when the session ends leaves the agent calling
+ * a name that no longer exists. So a session widens what the tools may do
+ * (publish, upload, published pages), never which tools there are. A tool
+ * that needs a session, media-upload, is always there at a write level
+ * and refuses outside one with wpmcp_session_required. On a read-only site
+ * a session adds no tools at all: that is a level change, not a window.
  *
  * @return string[]
  */
@@ -595,25 +643,11 @@ function wpmcp_ability_names() {
 		'wpmcp/media-read',
 	);
 
-	if ( ! wpmcp_can_write() ) {
+	if ( 'read' === wpmcp_configured_access_level() ) {
 		return $read;
 	}
 
-	$write = array(
-		'wpmcp/content-write',
-		'wpmcp/content-batch',
-		'wpmcp/content-create',
-		'wpmcp/content-duplicate',
-		'wpmcp/content-restore',
-		'wpmcp/media-update',
-	);
-
-	// Only while a work session is open: outside one the tool does not exist.
-	if ( wpmcp_work_session_active() ) {
-		$write[] = 'wpmcp/media-upload';
-	}
-
-	return array_merge( $read, $write );
+	return array_merge( $read, wpmcp_write_ability_names() );
 }
 
 /**

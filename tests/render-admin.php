@@ -267,7 +267,9 @@ $GLOBALS['stub']['passwords']  = 1;
 $GLOBALS['stub']['registered'] = 16;
 
 $html = render_case( 'Stufe: Entwuerfe', function () { $GLOBALS['stub']['level'] = 'draft'; } );
-expect_contains( $html, 'Publishing is never possible', 'nennt die harte Grenze' );
+expect_contains( $html, 'No level lets the agent publish or upload images.', 'nennt die harte Grenze' );
+expect_contains( $html, 'only during a work session you open', 'und den einzigen Weg darum herum' );
+expect_not_contains( $html, 'Publishing is never possible', 'kein "Publishing is never possible" mehr' );
 expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
 expect_contains( $html, 'Dynamic data', 'zeigt die Dynamic-Data-Einstellung' );
 expect_contains( $html, 'Additional post types', 'zeigt die Post-Type-Auswahl' );

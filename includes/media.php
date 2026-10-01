@@ -492,8 +492,8 @@ function wpmcp_inspect_upload( $filename, $data ) {
 function wpmcp_media_upload( array $args ) {
 	if ( ! function_exists( 'wpmcp_work_session_active' ) || ! wpmcp_work_session_active() ) {
 		return new \WP_Error(
-			'wpmcp_upload_needs_session',
-			'Uploading is only possible while the site owner has a work session open under Tools > MCP Connector.'
+			'wpmcp_session_required',
+			'Uploading needs a work session, and none is open. Only the site owner can open one, under Tools > MCP Connector; ask them, then call media-upload again. The tool stays in your list either way, so no reconnect is needed.'
 		);
 	}
 

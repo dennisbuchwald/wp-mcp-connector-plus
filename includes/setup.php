@@ -132,7 +132,7 @@ function wpmcp_render_setup_panel( $result ) {
 						<?php
 						echo $existing
 							? esc_html__( 'This user already exists. A new application password will be added to it.', 'wp-mcp-connector-plus' )
-							: esc_html__( 'Will be created with the AI Editor role: may edit content, may not publish, delete, upload or change settings.', 'wp-mcp-connector-plus' );
+							: esc_html__( 'Will be created with the AI Editor role: may edit content, may never delete or change settings, and may publish or upload images only during a work session you open.', 'wp-mcp-connector-plus' );
 						?>
 					</p>
 				</td>

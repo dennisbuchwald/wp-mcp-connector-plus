@@ -80,7 +80,35 @@ check( is_wp_error( $dup ) && false !== strpos( $dup->get_error_message(), 'twic
 $r = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 999, 'ops' => array( array( 'op' => 'remove', 'path' => '0' ) ) ) ), 'dry_run' => false ) );
 check( ! is_wp_error( $r ) && false === $r['ok'], 'ein scheiternder Posten stoppt den Lauf' );
 check( ! is_wp_error( $r ) && true === $r['dryRun'], 'bevor irgendetwas gespeichert wird', 'auch wenn dry_run: false verlangt war' );
-check( ! is_wp_error( $r ) && ! empty( $r['items'][0]['error'] ), 'und der Posten sagt warum' );
+check( ! is_wp_error( $r ) && ! empty( $r['items'][0]['errors'] ), 'und der Posten sagt warum' );
+check( ! is_wp_error( $r ) && 0 === strpos( (string) ( $r['items'][0]['errors'][0] ?? '' ), '[wpmcp_' ), 'mit dem Code vorn in der Meldung', wp_json_encode( $r['items'][0] ?? null ) );
+check( ! is_wp_error( $r ) && 0 === strpos( (string) ( $r['items'][0]['code'] ?? '' ), 'wpmcp_' ), 'und als eigenes Feld' );
+
+echo "\n\033[1mBatch: ein Posten hat in beiden Phasen dieselbe Form\033[0m\n";
+
+// The save phase reported "error" as a string, null when the save came
+// back refused ({ok:false, errors}) rather than as a WP_Error, and dropped
+// the warnings. An agent learnt nothing about why the run stopped.
+$shape = array( 'index', 'postId', 'ok', 'code', 'errors', 'warnings' );
+
+$item = wpmcp_batch_item( 2, 5, array( 'ok' => false, 'errors' => array( 'Block 1.0: kaputt.' ), 'warnings' => array( 'Muster.' ) ), true );
+check( $shape === array_keys( $item ), 'abgelehnter Save: index, postId, ok, code, errors, warnings', implode( ', ', array_keys( $item ) ) );
+check( array( 'Block 1.0: kaputt.' ) === $item['errors'], 'mit den Gruenden', 'vorher: error = null' );
+check( array( 'Muster.' ) === $item['warnings'], 'und den Warnungen' );
+check( 'wpmcp_validation_failed' === $item['code'], 'Code wpmcp_validation_failed' );
+
+$item = wpmcp_batch_item( 0, 5, new WP_Error( 'wpmcp_stale', 'Post 5 changed.' ), true );
+check( $shape === array_keys( $item ), 'Fehler beim Save: dieselbe Form' );
+check( array( '[wpmcp_stale] Post 5 changed.' ) === $item['errors'] && 'wpmcp_stale' === $item['code'], 'Code im Feld und in der Meldung' );
+
+$item = wpmcp_batch_item( 0, 5, new WP_Error( 'wpmcp_stale', 'Post 5 changed.' ) );
+check( $shape === array_keys( $item ), 'Probelauf: dieselbe Form' );
+
+$item = wpmcp_batch_item( 1, 6, array( 'ok' => true, 'errors' => array(), 'warnings' => array( 'w' ), 'revisionId' => 9, 'modified' => '2026-10-01 10:00:00' ), true );
+check( true === $item['ok'] && ! isset( $item['code'] ), 'gespeichert: ok ohne Code' );
+check( 9 === $item['revisionId'] && '2026-10-01 10:00:00' === $item['modified'], 'mit revisionId und modified' );
+check( array( 'w' ) === $item['warnings'], 'Warnungen auch beim Erfolg' );
+check( ! array_key_exists( 'error', $item ), 'kein altes Feld "error" mehr' );
 
 $r = wpmcp_batch_write( array( 'items' => wp_json_encode( array( array( 'post_id' => 999 ) ) ) ) );
 check( ! is_wp_error( $r ) && isset( $r['items'] ), 'items kommt auch als JSON-Text an' );

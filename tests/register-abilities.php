@@ -77,7 +77,7 @@ function register_activation_hook( ...$a ) { return true; }
 function register_deactivation_hook( ...$a ) { return true; }
 function is_admin() { return false; }
 function wp_doing_cron() { return false; }
-function __( $t, $d = null ) { return $t; }
+function __( $t, $d = null ) { $GLOBALS['translated'][] = $t; return $t; }
 function esc_html__( $t, $d = null ) { return $t; }
 function esc_html( $t ) { return $t; }
 function remove_role( $r ) { return true; }
@@ -113,6 +113,20 @@ function get_post_types( $args = array(), $output = 'names' ) {
 }
 function get_post_type_object( $t ) { $all = get_post_types( array(), 'objects' ); return $all[ $t ] ?? null; }
 function apply_filters_deprecated() {}
+class WP_Error {
+	private $code;
+	private $message;
+	private $data;
+	public function __construct( $code = '', $message = '', $data = '' ) {
+		$this->code    = $code;
+		$this->message = $message;
+		$this->data    = $data;
+	}
+	public function get_error_code() { return $this->code; }
+	public function get_error_message() { return $this->message; }
+	public function get_error_data() { return $this->data; }
+}
+function is_wp_error( $t ) { return $t instanceof WP_Error; }
 
 // --- Load the plugin ----------------------------------------------------
 
@@ -191,6 +205,89 @@ foreach ( $GLOBALS['abilities'] as $name => $args ) {
 	check( empty( $problems ), "vollständig: {$name}", implode( ', ', $problems ) );
 }
 
+echo "\n\033[1mAnnotationen und Labels\033[0m\n";
+
+// MCP reads a missing destructiveHint as true and a missing openWorldHint
+// as true. Four abilities had no meta at all, so content-create (adds a
+// draft, nothing else) was announced as destructive.
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+$GLOBALS['abilities']                     = array();
+$GLOBALS['translated']                    = array();
+wpmcp_register_abilities();
+
+$writes = wpmcp_write_ability_names();
+foreach ( $GLOBALS['abilities'] as $name => $args ) {
+	$a       = $args['meta']['annotations'] ?? array();
+	$missing = array();
+	foreach ( array( 'readonly', 'destructive', 'idempotent', 'openWorldHint' ) as $hint ) {
+		if ( ! isset( $a[ $hint ] ) || ! is_bool( $a[ $hint ] ) ) {
+			$missing[] = $hint;
+		}
+	}
+	check( empty( $missing ) && true === ( $args['meta']['show_in_rest'] ?? null ), "{$name}: alle Hinweise gesetzt, show_in_rest", 'fehlt: ' . implode( ', ', $missing ) );
+	check( ( ! in_array( $name, $writes, true ) ) === ( $a['readonly'] ?? null ), "{$name}: readonly passt zu Lesen/Schreiben" );
+	check( in_array( $args['label'], $GLOBALS['translated'], true ), "{$name}: Label '{$args['label']}' laeuft durch __()" );
+}
+check( false === $GLOBALS['abilities']['wpmcp/content-create']['meta']['annotations']['destructive'], 'content-create ist nicht destruktiv' );
+check( true === $GLOBALS['abilities']['wpmcp/content-write']['meta']['annotations']['destructive'], 'content-write schon' );
+check( true === $GLOBALS['abilities']['wpmcp/content-fetch-live']['meta']['annotations']['openWorldHint'], 'content-fetch-live verlaesst die Datenbank (openWorldHint)' );
+check( false === $GLOBALS['abilities']['wpmcp/content-read']['meta']['annotations']['openWorldHint'], 'content-read nicht' );
+
+echo "\n\033[1mFehlercodes an der Grenze\033[0m\n";
+
+// The adapter passes a WP_Error to the client as its message only. The
+// code has to be in the message, once.
+$describe = $GLOBALS['abilities']['wpmcp/blocks-describe']['execute_callback'];
+$err      = $describe( array() );
+check( is_wp_error( $err ) && 0 === strpos( $err->get_error_message(), '[wpmcp_bad_request] ' ), 'die Meldung beginnt mit [code]', is_wp_error( $err ) ? $err->get_error_message() : 'kein Fehler' );
+check( is_wp_error( $err ) && 'wpmcp_bad_request' === $err->get_error_code(), 'der Code selbst bleibt' );
+$twice = wpmcp_contract_result( $err );
+check( 1 === substr_count( $twice->get_error_message(), '[wpmcp_bad_request]' ), 'zweimal durch die Grenze: ein Praefix' );
+$foreign = wpmcp_contract_result( new WP_Error( 'rest_forbidden', 'Nope.' ) );
+check( 'Nope.' === $foreign->get_error_message(), 'fremde Codes bleiben unangetastet' );
+
+$refused = wpmcp_contract_result( array( 'ok' => false, 'errors' => array( 'x' ) ) );
+check( 'wpmcp_validation_failed' === ( $refused['code'] ?? null ), 'eine Ablehnung mit ok:false bekommt einen Code' );
+check( array( 'ok', 'code', 'errors' ) === array_keys( $refused ), 'gleich hinter ok' );
+$own = wpmcp_contract_result( array( 'ok' => false, 'code' => 'wpmcp_batch_incomplete' ) );
+check( 'wpmcp_batch_incomplete' === $own['code'], 'ein eigener Code bleibt' );
+check( ! isset( wpmcp_contract_result( array( 'ok' => true ) )['code'] ), 'ein Erfolg bekommt keinen' );
+
+echo "\n\033[1msite-info sagt, was gilt\033[0m\n";
+
+function get_bloginfo( $s ) { return 'Test'; }
+function wp_get_theme() {
+	return new class() {
+		public function get( $k ) { return 'x'; }
+	};
+}
+function get_plugins() { return array(); }
+class WP_Block_Type_Registry {
+	public static function get_instance() { return new self(); }
+	public function get_all_registered() { return array(); }
+}
+function is_multisite() { return false; }
+$GLOBALS['wp_version'] = '6.9';
+
+$info = wpmcp_site_info();
+check( 1 === ( $info['contractVersion'] ?? null ), 'contractVersion ist 1 (eine Zahl)' );
+check( in_array( 'content-create', $info['capabilities']['write'], true ) && in_array( 'media-update', $info['capabilities']['write'], true ), 'content-create und media-update stehen unter write', 'standen unter read' );
+check( ! array_intersect( array( 'content-batch', 'content-create', 'media-update', 'media-upload' ), $info['capabilities']['read'] ), 'und kein Schreibwerkzeug unter read' );
+check( false === strpos( $info['capabilities']['explains'], 'never possible' ), 'ohne Sitzung: kein "Publishing is never possible"' );
+check( false !== strpos( $info['capabilities']['explains'], 'work session' ), 'sondern der Hinweis auf die Arbeitssitzung' );
+
+$GLOBALS['options']['wpmcp_work_session_until'] = time() + 600;
+$info = wpmcp_site_info();
+check( false !== strpos( $info['capabilities']['explains'], 'work until the work session ends' ), 'in einer Sitzung: Veroeffentlichen geht', $info['capabilities']['explains'] );
+check( true === $info['capabilities']['workSession']['active'], 'und workSession sagt dasselbe' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'read';
+$info = wpmcp_site_info();
+check( array() === $info['capabilities']['write'], 'Lesestufe mit Sitzung: keine Schreibwerkzeuge' );
+check( false !== strpos( $info['capabilities']['explains'], 'Read only' ), 'und es heisst die eingestellte Stufe', $info['capabilities']['explains'] );
+unset( $GLOBALS['options']['wpmcp_work_session_until'] );
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+
 // --- The promise the access levels make ---------------------------------
 echo "\n\033[1mZugriffsstufen\033[0m\n";
 
@@ -253,8 +350,20 @@ foreach ( array( 'read', 'draft', 'full' ) as $level ) {
 	check( $expected_names === $names, "Stufe '{$level}': registriert ist genau, was die Stufe anbietet" );
 }
 
-check( ! in_array( 'wpmcp/media-upload', registered_at( 'full' ), true ), 'der Upload ohne Sitzung auch auf der Vollstufe nicht' );
-check( in_array( 'wpmcp/media-upload', registered_at( 'draft', true ), true ), 'in einer Sitzung schon' );
+// The tool list is fixed when a client connects and the server announces
+// no changes. A tool that came and went with the session clock was
+// invisible to an agent connected before the session, and a dead name to
+// one connected during it. So the list follows the level the owner set,
+// and nothing that runs out by itself.
+foreach ( array( 'read', 'draft', 'full' ) as $level ) {
+	$without = registered_at( $level );
+	$with    = registered_at( $level, true );
+	sort( $without );
+	sort( $with );
+	check( $without === $with, "Stufe '{$level}': eine Arbeitssitzung aendert die Werkzeugliste nicht", 'mit Sitzung: ' . implode( ', ', array_diff( $with, $without ) ) );
+}
+check( in_array( 'wpmcp/media-upload', registered_at( 'draft' ), true ), 'der Upload ist auf einer Schreibstufe immer da (und lehnt ohne Sitzung selbst ab)' );
+check( ! in_array( 'wpmcp/media-upload', registered_at( 'read', true ), true ), 'auf der Lesestufe auch in einer Sitzung nicht' );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
 $GLOBALS['abilities']                     = array();

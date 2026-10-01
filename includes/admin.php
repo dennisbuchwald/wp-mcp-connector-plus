@@ -381,8 +381,8 @@ function wpmcp_render_admin_page() {
 							</p>
 						<?php endforeach; ?>
 						<p class="description">
-							<strong><?php esc_html_e( 'Publishing is never possible, at any level.', 'wp-mcp-connector-plus' ); ?></strong>
-							<?php esc_html_e( 'Neither is deleting, uploading files or changing settings. Tools the level does not allow are not registered at all, so the agent never sees them. Every write creates a revision.', 'wp-mcp-connector-plus' ); ?>
+							<strong><?php esc_html_e( 'No level lets the agent publish or upload images.', 'wp-mcp-connector-plus' ); ?></strong>
+							<?php esc_html_e( 'Both are possible only during a work session you open (see above). Deleting and changing settings are never possible. Tools the level does not allow are not registered at all, so the agent never sees them; a work session does not add tools, so on "Read only" it opens nothing. Every write creates a revision.', 'wp-mcp-connector-plus' ); ?>
 							<?php if ( defined( 'WPMCP_ACCESS_LEVEL' ) ) : ?>
 								<br><strong><?php esc_html_e( 'Currently fixed by a constant in wp-config.php.', 'wp-mcp-connector-plus' ); ?></strong>
 							<?php endif; ?>

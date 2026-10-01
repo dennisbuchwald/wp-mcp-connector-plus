@@ -120,7 +120,7 @@ $GLOBALS['dbw_filters']['wpmcp_max_upload_pixels'] = array();
 echo "\n\033[1mNur in einer Arbeitssitzung\033[0m\n";
 
 $out = wpmcp_media_upload( array( 'filename' => 'bild.png', 'data' => $png, 'alt' => 'Boot' ) );
-check( is_wp_error( $out ) && 'wpmcp_upload_needs_session' === $out->get_error_code(), 'ohne Sitzung kein Upload' );
+check( is_wp_error( $out ) && 'wpmcp_session_required' === $out->get_error_code(), 'ohne Sitzung kein Upload (wpmcp_session_required)' );
 
 $GLOBALS['session'] = true;
 

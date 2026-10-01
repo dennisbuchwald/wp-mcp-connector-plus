@@ -3279,6 +3279,85 @@ function wpmcp_short_ability_name( $name ) {
 }
 
 /**
+ * A WP_Error as one line that still carries its code: "[code] message".
+ *
+ * The MCP adapter hands a WP_Error to the client as its message alone, so
+ * the code, the one part an agent can branch on reliably, never arrived.
+ * Prefixed exactly once: an error passed through two layers keeps one
+ * prefix. Only the connector's own codes (wpmcp_*) are prefixed; a code
+ * from WordPress or another plugin means nothing documented here.
+ *
+ * @param \WP_Error $error Error.
+ * @return string
+ */
+function wpmcp_error_text( $error ) {
+	$code    = (string) $error->get_error_code();
+	$message = (string) $error->get_error_message();
+
+	if ( 0 !== strpos( $code, 'wpmcp_' ) ) {
+		return $message;
+	}
+
+	$prefix = '[' . $code . '] ';
+	return 0 === strpos( $message, $prefix ) ? $message : $prefix . $message;
+}
+
+/**
+ * Bring an ability's answer into the shape the contract promises.
+ *
+ * Called once, at the boundary every ability passes (see
+ * wpmcp_register_ability), so no tool can forget it:
+ *
+ * - A WP_Error with a wpmcp_* code gets its message prefixed with the
+ *   code, see wpmcp_error_text().
+ * - An answer with "ok": false gets a top-level "code" if it has none,
+ *   wpmcp_validation_failed: the request was understood and refused for
+ *   the reasons in "errors". That way both kinds of failure carry a code,
+ *   and an agent never has to tell them apart by reading prose.
+ *
+ * @param mixed $result Whatever the execute callback returned.
+ * @return mixed
+ */
+function wpmcp_contract_result( $result ) {
+	if ( is_wp_error( $result ) ) {
+		$text = wpmcp_error_text( $result );
+		if ( $text === $result->get_error_message() ) {
+			return $result;
+		}
+		return new \WP_Error( $result->get_error_code(), $text, $result->get_error_data() );
+	}
+
+	if ( is_array( $result ) && array_key_exists( 'ok', $result ) && false === $result['ok'] && empty( $result['code'] ) ) {
+		// Right after "ok", where a reader looks.
+		$shaped = array();
+		foreach ( $result as $key => $value ) {
+			$shaped[ $key ] = $value;
+			if ( 'ok' === $key ) {
+				$shaped['code'] = 'wpmcp_validation_failed';
+			}
+		}
+		return $shaped;
+	}
+
+	return $result;
+}
+
+/**
+ * Version of the tool contract: names, arguments, answer shapes, error codes.
+ *
+ * An integer, separate from the plugin version, because a client cares
+ * about one thing: whether what it learnt about these tools still holds.
+ * Raised only when an existing name, field or meaning changes in a way a
+ * client has to adapt to; a new tool, argument or field does not raise it.
+ * The changelog marks every raise under "API".
+ *
+ * @return int
+ */
+function wpmcp_contract_version() {
+	return 1;
+}
+
+/**
  * Site fingerprint: versions, modules, post types and design tokens.
  * Meant as the first call of any session, so nothing has to be assumed.
  *
@@ -3306,6 +3385,7 @@ function wpmcp_site_info() {
 		'wpVersion'       => $wp_version,
 		'phpVersion'      => PHP_VERSION,
 		'connectorVersion'=> WPMCP_VERSION,
+		'contractVersion' => wpmcp_contract_version(),
 		'theme'           => array(
 			'name'    => $theme->get( 'Name' ),
 			'version' => $theme->get( 'Version' ),
@@ -3328,13 +3408,21 @@ function wpmcp_site_info() {
 	 * reconnect cycle and a wrong conclusion.
 	 */
 	$available = wpmcp_ability_names();
-	$writing   = array( 'wpmcp/content-write', 'wpmcp/content-duplicate', 'wpmcp/content-restore' );
+	$writing   = wpmcp_write_ability_names();
 
 	$read_tools  = array_values( array_diff( $available, $writing ) );
 	$write_tools = array_values( array_intersect( $available, $writing ) );
 
-	$levels = wpmcp_access_levels();
-	$level  = wpmcp_access_level();
+	$levels  = wpmcp_access_levels();
+	$level   = wpmcp_access_level();
+	$session = wpmcp_work_session_active();
+
+	// Built from the session state: "publishing is never possible" was
+	// printed here while a session had made it possible, and an agent
+	// believes the sentence it reads over the field next to it.
+	$publishing = $session
+		? 'Publishing (status publish) and media-upload work until the work session ends.'
+		: 'Publishing and media-upload need a work session, which only the site owner can open; until then new pages stay drafts.';
 
 	$info['capabilities'] = array(
 		'accessLevel' => $level,
@@ -3342,15 +3430,17 @@ function wpmcp_site_info() {
 		'write'       => array_map( 'wpmcp_short_ability_name', $write_tools ),
 		'explains'    => empty( $write_tools )
 			? sprintf(
-				'This site is set to "%s". No write tools are registered — writing is not disabled, it is absent. Nothing you send can change content until the site owner raises the access level.',
-				$levels[ $level ]['label']
+				'This site is set to "%s". No write tools are registered — writing is not disabled, it is absent. Nothing you send can change content until the site owner raises the access level%s.',
+				$levels[ wpmcp_configured_access_level() ]['label'],
+				$session ? ' (a work session does not add tools on a read-only site)' : ''
 			)
 			: sprintf(
-				'This site is set to "%s". %s',
+				'This site is set to "%s". %s %s',
 				$levels[ $level ]['label'],
 				wpmcp_live_edit_enabled()
-					? 'Drafts and published pages may be edited. Publishing is never possible.'
-					: 'Drafts and new pages may be edited; published pages are read-only. Publishing is never possible.'
+					? 'Drafts and published pages may be edited.'
+					: 'Drafts and new pages may be edited; published pages are read-only.',
+				$publishing
 			),
 	);
 
@@ -3376,15 +3466,15 @@ function wpmcp_site_info() {
 
 		$info['capabilities']['dynamicData'] = $dynamic;
 
-		$info['capabilities']['workSession'] = wpmcp_work_session_active()
+		$info['capabilities']['workSession'] = $session
 			? array(
 				'active'   => true,
 				'until'    => gmdate( 'c', wpmcp_work_session_expires() ),
-				'explains' => 'A work session is open: status publish and media-upload are available until it ends. If media-upload is missing from your tools, reconnect — the tool list is fixed when you connect.',
+				'explains' => 'A work session is open: status publish and media-upload work until it ends.',
 			)
 			: array(
 				'active'   => false,
-				'explains' => 'Publishing and uploading media are only possible while the site owner has a work session open.',
+				'explains' => 'Publishing and media-upload only work while the site owner has a work session open. Outside one, status publish fails validation and media-upload is refused with wpmcp_session_required; the tool list stays the same either way.',
 			);
 	}
 
@@ -3618,7 +3708,7 @@ function wpmcp_create_content( array $args ) {
 		wp_delete_post( (int) $post_id, true );
 
 		$why = is_wp_error( $written )
-			? $written->get_error_message()
+			? wpmcp_error_text( $written )
 			: implode( ' ', $written['errors'] ?? array() );
 
 		wpmcp_log(
@@ -3631,6 +3721,7 @@ function wpmcp_create_content( array $args ) {
 
 		return array(
 			'ok'       => false,
+			'code'     => is_wp_error( $written ) ? $written->get_error_code() : 'wpmcp_save_failed',
 			'dryRun'   => false,
 			'title'    => $title,
 			'type'     => $post_type,
@@ -3689,6 +3780,57 @@ function wpmcp_publish_created( $post_id, array &$result ) {
 }
 
 /**
+ * One entry of a content-batch answer, the same shape in both phases.
+ *
+ * The dry-run phase reported "errors" as a list and the save phase an
+ * "error" string that stayed null when the save came back refused rather
+ * than failed, and neither carried warnings. An agent had to know which
+ * phase it was reading to find out why an item failed. Now every item is
+ * { index, postId, ok, code (only when not ok), errors[], warnings[] },
+ * and a saved item adds revisionId, modified and, for text patches,
+ * patched.
+ *
+ * @param int   $index   Position in the request.
+ * @param int   $post_id Post the item names, 0 if none.
+ * @param mixed $result  What wpmcp_write_content() returned.
+ * @param bool  $saving  Whether this was the real write.
+ * @return array
+ */
+function wpmcp_batch_item( $index, $post_id, $result, $saving = false ) {
+	$item = array(
+		'index'  => (int) $index,
+		'postId' => $post_id ? (int) $post_id : null,
+	);
+
+	if ( is_wp_error( $result ) ) {
+		return $item + array(
+			'ok'       => false,
+			'code'     => $result->get_error_code(),
+			'errors'   => array( wpmcp_error_text( $result ) ),
+			'warnings' => array(),
+		);
+	}
+
+	$ok    = ! empty( $result['ok'] );
+	$item += array( 'ok' => $ok );
+	if ( ! $ok ) {
+		$item['code'] = ! empty( $result['code'] ) ? $result['code'] : 'wpmcp_validation_failed';
+	}
+	$item['errors']   = array_values( (array) ( $result['errors'] ?? array() ) );
+	$item['warnings'] = array_values( (array) ( $result['warnings'] ?? array() ) );
+
+	if ( $saving && $ok ) {
+		$item['revisionId'] = $result['revisionId'] ?? 0;
+		$item['modified']   = $result['modified'] ?? null;
+		if ( ! empty( $result['patched'] ) ) {
+			$item['patched'] = $result['patched'];
+		}
+	}
+
+	return $item;
+}
+
+/**
  * Apply one change to several posts in a single call.
  *
  * Every item is dry-run first, and nothing is saved unless all of them
@@ -3733,29 +3875,16 @@ function wpmcp_batch_write( array $args ) {
 
 	foreach ( $items as $i => $item ) {
 		if ( ! is_array( $item ) || empty( $item['post_id'] ) ) {
-			$checks[] = array( 'index' => $i, 'ok' => false, 'error' => 'Each item needs a post_id.' );
+			$checks[] = wpmcp_batch_item( $i, 0, new \WP_Error( 'wpmcp_bad_request', 'Each item needs a post_id.' ) );
 			$all_ok   = false;
 			continue;
 		}
 
 		$item['dry_run'] = true;
-		$result          = wpmcp_write_content( $item );
+		$check           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item ) );
+		$checks[]        = $check;
 
-		if ( is_wp_error( $result ) ) {
-			$checks[] = array( 'index' => $i, 'postId' => (int) $item['post_id'], 'ok' => false, 'error' => $result->get_error_message() );
-			$all_ok   = false;
-			continue;
-		}
-
-		$checks[] = array(
-			'index'    => $i,
-			'postId'   => (int) $item['post_id'],
-			'ok'       => ! empty( $result['ok'] ),
-			'errors'   => $result['errors'] ?? array(),
-			'warnings' => $result['warnings'] ?? array(),
-		);
-
-		if ( empty( $result['ok'] ) ) {
+		if ( ! $check['ok'] ) {
 			$all_ok = false;
 		}
 	}
@@ -3776,20 +3905,10 @@ function wpmcp_batch_write( array $args ) {
 
 	foreach ( $items as $i => $item ) {
 		$item['dry_run'] = false;
-		$result          = wpmcp_write_content( $item );
-		$ok              = ! is_wp_error( $result ) && ! empty( $result['ok'] );
+		$entry           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item ), true );
+		$results[]       = $entry;
 
-		$results[] = array(
-			'index'      => $i,
-			'postId'     => (int) $item['post_id'],
-			'ok'         => $ok,
-			'error'      => is_wp_error( $result ) ? $result->get_error_message() : null,
-			'revisionId' => $ok ? ( $result['revisionId'] ?? 0 ) : null,
-			'modified'   => $ok ? ( $result['modified'] ?? null ) : null,
-			'patched'    => $ok ? ( $result['patched'] ?? null ) : null,
-		);
-
-		if ( ! $ok ) {
+		if ( ! $entry['ok'] ) {
 			break;
 		}
 		++$saved;
@@ -3820,8 +3939,9 @@ function wpmcp_batch_write( array $args ) {
 		)
 	);
 
-	return array(
+	$answer = array(
 		'ok'      => $complete,
+		'code'    => 'wpmcp_batch_incomplete',
 		'dryRun'  => false,
 		'saved'   => $saved,
 		'items'   => $results,
@@ -3829,4 +3949,9 @@ function wpmcp_batch_write( array $args ) {
 			? 'All posts saved. Each has its own revision.'
 			: sprintf( 'Stopped after %d of %d: the next post failed on save although its dry run passed, most likely because it changed in between. The posts before it are saved; the ones after it were not attempted.', $saved, count( $items ) ),
 	);
+	if ( $complete ) {
+		unset( $answer['code'] );
+	}
+
+	return $answer;
 }

@@ -119,13 +119,15 @@ echo "\n\033[1mWas jede Sitzung im Kontext traegt\033[0m\n";
 // "no repetition". This budget is here so twelve more releases of
 // appending do not quietly double it again.
 $src = file_get_contents( $root . '/includes/abilities.php' );
-preg_match_all( "/(?:wpmcp|wp)_register_ability\(\s*'([^']+)'/", $src, $names );
+preg_match_all( "/(?:wpmcp|wp)_register_ability\(\s*'([^']+)'/", $src, $names, PREG_OFFSET_CAPTURE );
 
 $total   = 0;
 $largest = array( 'name' => '', 'len' => 0 );
 
-foreach ( $names[1] as $name ) {
-	$chunk = substr( $src, strpos( $src, "'" . $name . "'" ), 6000 );
+// From the registration call itself: the name also appears earlier, in
+// the annotation table, where there is no description to measure.
+foreach ( $names[1] as list( $name, $at ) ) {
+	$chunk = substr( $src, $at, 6000 );
 	if ( ! preg_match( "/'description' => '((?:[^'\\\\]|\\\\.)*)'/", $chunk, $d ) ) {
 		continue;
 	}
@@ -137,6 +139,10 @@ foreach ( $names[1] as $name ) {
 }
 
 check(
+	count( $names[1] ) >= 18,
+	sprintf( '%d Registrierungen gemessen', count( $names[1] ) )
+);
+check(
 	$total > 0 && $total < 11000,
 	sprintf( 'alle Beschreibungen zusammen: %s Zeichen (~%d Tokens)', number_format( $total ), (int) ( $total / 4 ) ),
 	'ueber 11000 Zeichen - pruefen, was sich doppelt'
@@ -146,6 +152,33 @@ check(
 	sprintf( 'die laengste ist %s mit %d Zeichen (~%d Tokens)', $largest['name'], $largest['len'], (int) ( $largest['len'] / 4 ) ),
 	'eine Beschreibung ueber 2000 Zeichen erklaert etwas zweimal'
 );
+
+echo "\n\033[1mJeder Fehlercode ist dokumentiert\033[0m\n";
+
+// The codes are the part of an answer an agent can branch on, so they are
+// contract. One that exists only in the code is one nobody can rely on.
+$codes = array();
+foreach ( glob( $root . '/includes/*.php' ) as $file ) {
+	$php = file_get_contents( $file );
+	preg_match_all( "/WP_Error\(\s*'(wpmcp_[a-z_]+)'/", $php, $m );
+	$codes = array_merge( $codes, $m[1] );
+	preg_match_all( "/'code'\s*=>[^;\n]*'(wpmcp_[a-z_]+)'/", $php, $m );
+	$codes = array_merge( $codes, $m[1] );
+	preg_match_all( "/'code'\s*=>\s*'(wpmcp_[a-z_]+)'/", $php, $m );
+	$codes = array_merge( $codes, $m[1] );
+	preg_match_all( "/\\\$shaped\['code'\]\s*=\s*'(wpmcp_[a-z_]+)'/", $php, $m );
+	$codes = array_merge( $codes, $m[1] );
+}
+$codes  = array_unique( $codes );
+$readme = file_get_contents( $root . '/README.md' );
+$undoc  = array_filter(
+	$codes,
+	function ( $c ) use ( $readme ) {
+		return false === strpos( $readme, '| `' . $c . '` |' );
+	}
+);
+check( count( $codes ) > 30, sprintf( '%d Fehlercodes im Code gefunden', count( $codes ) ) );
+check( empty( $undoc ), 'jeder steht in der README-Tabelle "Error codes"', 'fehlt: ' . implode( ', ', $undoc ) );
 
 echo "\n";
 if ( 0 === $fail ) {
