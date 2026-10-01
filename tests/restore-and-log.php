@@ -71,6 +71,7 @@ function delete_post_meta( $id, $key ) {
 function wp_slash( $v ) { return is_string( $v ) ? addslashes( $v ) : $v; }
 function wp_http_validate_url( $url ) { return true; }
 function esc_url_raw( $url ) { return (string) $url; }
+function get_the_title( $post ) { return 'Seite'; }
 function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_object( $post ) ? $post->ID : (int) $post ); }
 function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
 /** The newest stored revision, whether or not the last save made it. */
@@ -414,12 +415,24 @@ $r = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 47, 'ops' =
 check( ! is_wp_error( $r ) && ! empty( $r['ok'] ), 'ein Batch mit einem Muster wird gespeichert', message_of( $r ) );
 check( 4 === $GLOBALS['dbw_do_blocks_calls'], 'und jede Seite beim Speichern neu geprueft', $GLOBALS['dbw_do_blocks_calls'] . ' Renderlaeufe' );
 
+echo "\n\033[1mZeiten und Speicher beim Debuggen\033[0m\n";
+
+post( 49, $para );
+$r = wpmcp_write_content( array( 'post_id' => 49, 'ops' => $op, 'dry_run' => false ) );
+check( ! is_wp_error( $r ) && ! isset( $r['debug'] ), 'ohne WP_DEBUG keine Messwerte in der Antwort' );
+
+$GLOBALS['dbw_filters']['wpmcp_debug_timings'][] = '__return_true';
+post( 49, $para );
+$r = wpmcp_write_content( array( 'post_id' => 49, 'ops' => $op, 'dry_run' => false ) );
+check( ! is_wp_error( $r ) && isset( $r['debug']['timings']['plan'], $r['debug']['timings']['save'] ), 'mit: Millisekunden je Abschnitt (plan, save)', wp_json_encode( $r['debug'] ?? null ) );
+check( ! is_wp_error( $r ) && is_int( $r['debug']['peakMemory'] ?? null ) && $r['debug']['peakMemory'] > 0, 'und der hoechste Speicherverbrauch in Bytes' );
+$r = wpmcp_write_content( array( 'post_id' => 49, 'ops' => $op ) );
+check( ! is_wp_error( $r ) && isset( $r['debug']['timings']['plan'] ) && ! isset( $r['debug']['timings']['save'] ), 'auch im Probelauf, ohne save' );
+array_pop( $GLOBALS['dbw_filters']['wpmcp_debug_timings'] );
+
 echo "\n\033[1mRevisionsliste ohne Parser\033[0m\n";
 
 // blockCount per revision used to parse each one, up to 50 per call.
-if ( ! function_exists( 'get_the_title' ) ) {
-	function get_the_title( $post ) { return 'Seite'; }
-}
 if ( ! function_exists( 'wp_is_post_autosave' ) ) {
 	function wp_is_post_autosave( $post ) { return false; }
 }

@@ -972,6 +972,68 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 }
 
 /**
+ * Are timings and memory added to write and preview responses?
+ *
+ * On with WP_DEBUG, so a slow write on a development site can be taken
+ * apart without a profiler: which phase took the time, and how much
+ * memory the request peaked at. Filter wpmcp_debug_timings to switch it
+ * on elsewhere or off.
+ *
+ * @return bool
+ */
+function wpmcp_debug_timings_enabled() {
+	return (bool) apply_filters( 'wpmcp_debug_timings', defined( 'WP_DEBUG' ) && WP_DEBUG );
+}
+
+/**
+ * Start measuring, or null when measuring is off.
+ *
+ * @return array|null
+ */
+function wpmcp_debug_timer() {
+	if ( ! wpmcp_debug_timings_enabled() ) {
+		return null;
+	}
+	return array(
+		'last'   => microtime( true ),
+		'phases' => array(),
+	);
+}
+
+/**
+ * Close a phase: milliseconds since the previous mark.
+ *
+ * @param array|null $timer Timer (by reference).
+ * @param string     $phase Name of the phase that just ended.
+ */
+function wpmcp_debug_mark( &$timer, $phase ) {
+	if ( null === $timer ) {
+		return;
+	}
+	$now                       = microtime( true );
+	$timer['phases'][ $phase ] = round( ( $now - $timer['last'] ) * 1000, 1 );
+	$timer['last']             = $now;
+}
+
+/**
+ * Add the measurements to a response, when measuring is on.
+ *
+ * @param array      $response Response.
+ * @param array|null $timer    Timer.
+ * @return array
+ */
+function wpmcp_debug_attach( array $response, $timer ) {
+	if ( null === $timer ) {
+		return $response;
+	}
+	$response['debug'] = array(
+		'timings'    => $timer['phases'],
+		'peakMemory' => memory_get_peak_usage( true ),
+	);
+	return $response;
+}
+
+/**
  * Write a block tree to a post — full replacement or patch operations.
  *
  * The two optional parameters are for content-batch only, never for
@@ -986,6 +1048,7 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
  * @return array|\WP_Error
  */
 function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) {
+	$timer   = wpmcp_debug_timer();
 	$post_id = (int) ( $args['post_id'] ?? 0 );
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 
@@ -1034,6 +1097,7 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 	if ( is_wp_error( $plan ) ) {
 		return $plan;
 	}
+	wpmcp_debug_mark( $timer, 'plan' );
 
 	$plan_out = array(
 		'plan'     => $plan,
@@ -1065,7 +1129,7 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 				'summary'   => sprintf( 'Rejected (%s): %d validation error(s).', $operation, count( $errors ) ),
 			)
 		);
-		return $response;
+		return wpmcp_debug_attach( $response, $timer );
 	}
 
 	if ( $dry_run ) {
@@ -1079,7 +1143,7 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 				'summary'   => sprintf( 'Dry run OK (%+d blocks).', $plan['diff']['delta'] ),
 			)
 		);
-		return $response;
+		return wpmcp_debug_attach( $response, $timer );
 	}
 
 	$validation  = $plan['validation'];
@@ -1181,11 +1245,14 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 		$meta_line                   = wpmcp_meta_log_line( $meta_diff['fields'] );
 	}
 
+	wpmcp_debug_mark( $timer, 'save' );
+
 	$response['message']    = 'Saved.';
 	$response['revisionId'] = $revision_id;
 	$response['preview']    = wpmcp_preview_url( $post->ID );
 
 	$fresh = wpmcp_after_save( $post, $response );
+	wpmcp_debug_mark( $timer, 'afterSave' );
 
 	// A slug or parent change moves the page. Say where it went, rather
 	// than leaving the caller to work the URL out from the pieces.
@@ -1229,7 +1296,7 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 		)
 	);
 
-	return $response;
+	return wpmcp_debug_attach( $response, $timer );
 }
 
 /**
@@ -2481,7 +2548,7 @@ function wpmcp_preview_content( $post_id, $include_html = true, $offset = 0 ) {
 		if ( is_wp_error( $rendered ) ) {
 			$result['renderError'] = $rendered->get_error_message();
 		} else {
-			foreach ( array( 'html', 'headings', 'bytes', 'offset', 'truncated', 'nextOffset', 'note' ) as $key ) {
+			foreach ( array( 'html', 'headings', 'bytes', 'offset', 'truncated', 'nextOffset', 'note', 'debug' ) as $key ) {
 				if ( isset( $rendered[ $key ] ) ) {
 					$result[ $key ] = $rendered[ $key ];
 				}
@@ -2513,6 +2580,8 @@ function wpmcp_preview_content( $post_id, $include_html = true, $offset = 0 ) {
  * @return array|\WP_Error
  */
 function wpmcp_render_post_html( $post, $offset = 0 ) {
+	$timer = wpmcp_debug_timer();
+
 	// One render: the check's result is the preview. Rendering again for
 	// the answer doubled the cost of every preview, and a block that
 	// echoes would have printed into the response outside any buffer.
@@ -2522,6 +2591,7 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
 	}
 
 	$html = do_shortcode( $smoke['html'] );
+	wpmcp_debug_mark( $timer, 'render' );
 
 	$headings = array();
 	if ( preg_match_all( '/<h([1-6])[^>]*>(.*?)<\/h\1>/is', $html, $matches, PREG_SET_ORDER ) ) {
@@ -2535,12 +2605,15 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
 
 	$slice = wpmcp_slice_text( $html, WPMCP_WINDOW_BYTES, $offset );
 
-	return array_merge(
-		array(
-			'headings' => $headings,
-			'notices'  => $smoke['notices'] ?? array(),
+	return wpmcp_debug_attach(
+		array_merge(
+			array(
+				'headings' => $headings,
+				'notices'  => $smoke['notices'] ?? array(),
+			),
+			$slice
 		),
-		$slice
+		$timer
 	);
 }
 

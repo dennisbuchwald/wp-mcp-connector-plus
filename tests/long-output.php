@@ -103,6 +103,12 @@ check( ! is_wp_error( $out ) && false !== strpos( $out['html'], '<p>Text</p>' ),
 check( ! is_wp_error( $out ) && 'Titel' === ( $out['headings'][0]['text'] ?? null ), 'mit Ueberschriften' );
 check( 1 === $GLOBALS['dbw_do_blocks_calls'], 'und rendert die Seite genau einmal', $GLOBALS['dbw_do_blocks_calls'] . ' Mal do_blocks' );
 
+check( ! is_wp_error( $out ) && ! isset( $out['debug'] ), 'ohne WP_DEBUG keine Messwerte' );
+$GLOBALS['dbw_filters']['wpmcp_debug_timings'][] = '__return_true';
+$out = wpmcp_render_post_html( $page );
+array_pop( $GLOBALS['dbw_filters']['wpmcp_debug_timings'] );
+check( ! is_wp_error( $out ) && isset( $out['debug']['timings']['render'] ) && ( $out['debug']['peakMemory'] ?? 0 ) > 0, 'mit: Renderzeit und Speicher, fuer content-preview', wp_json_encode( $out['debug'] ?? null ) );
+
 $smoke = wpmcp_render_smoke_test( '<p>x</p>' );
 check( '<p>x</p>' === ( $smoke['html'] ?? null ), 'der Render-Test gibt sein Ergebnis zurueck, statt es wegzuwerfen' );
 
