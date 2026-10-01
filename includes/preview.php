@@ -87,18 +87,34 @@ function wpmcp_maybe_allow_preview() {
 	}
 
 	// Token valid: let the main query return this draft.
+	//
+	// WordPress fetches a single post by its ID whatever its status, and
+	// only after posts_results drops one a logged-out visitor may not see.
+	// So the draft is usually in $posts already, still as a draft, and is
+	// about to be thrown out. Until 0.19 the filter only stepped in when
+	// $posts was empty, which it never was: every preview link showed a
+	// 404 to the people it was made for. The status is set in memory
+	// either way, so WordPress's own check lets it through and templates
+	// render it as they render a published page.
 	add_filter(
 		'posts_results',
 		function ( $posts, $query ) use ( $post_id ) {
-			if ( ! $query->is_main_query() || ! empty( $posts ) ) {
+			if ( ! $query->is_main_query() ) {
 				return $posts;
 			}
-			$post = get_post( $post_id );
-			if ( $post && in_array( $post->post_status, array( 'draft', 'pending', 'future', 'publish' ), true ) ) {
-				$post->post_status = 'publish'; // In-memory only, so templates render normally.
-				return array( $post );
+
+			$candidates = empty( $posts ) ? array_filter( array( get_post( $post_id ) ) ) : $posts;
+			if ( 1 !== count( $candidates ) ) {
+				return $posts;
 			}
-			return $posts;
+
+			$post = reset( $candidates );
+			if ( (int) $post->ID !== $post_id || ! in_array( $post->post_status, array( 'draft', 'pending', 'future', 'publish' ), true ) ) {
+				return $posts;
+			}
+
+			$post->post_status = 'publish'; // In-memory only.
+			return array( $post );
 		},
 		10,
 		2
