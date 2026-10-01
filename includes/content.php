@@ -3,9 +3,10 @@
  * Reading, writing, duplicating and previewing content.
  *
  * Guard rails that live here rather than in policy documents:
- * - writes never touch slug, status or post type (URLs stay put)
+ * - slug, parent and status change only when a write asks for it
+ *   (wpmcp_placement_diff), the post type never
  * - every real write goes through the validation pipeline first
- * - every real write leaves a revision, so rollback is one click
+ * - every content write leaves a revision, so rollback is one click
  *
  * @package wp-mcp-connector-plus
  */
@@ -2273,15 +2274,6 @@ function wpmcp_readable_meta_keys() {
 }
 
 /**
- * The allowlisted meta of a post, plus the fields WordPress itself keeps.
- *
- * Read-only. Writing these is a separate decision: a slug change moves a
- * URL, and this plugin promises never to do that.
- *
- * @param \WP_Post $post Post.
- * @return array
- */
-/**
  * Active plugins that change what content work means here.
  *
  * Not an inventory. Which SEO plugin runs decides which meta keys exist,
@@ -2841,6 +2833,15 @@ function wpmcp_apply_meta( $post, array $fields ) {
 	return $written;
 }
 
+/**
+ * The allowlisted meta of a post, plus the fields WordPress itself keeps.
+ *
+ * Reading only. Writing goes through wpmcp_meta_diff() and
+ * wpmcp_apply_meta(), with its own allowlist.
+ *
+ * @param \WP_Post $post Post.
+ * @return array
+ */
 function wpmcp_read_meta( $post ) {
 	$fields = array();
 

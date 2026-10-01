@@ -136,10 +136,6 @@ function wpmcp_load_abilities() {
 add_action( 'wp_abilities_api_init', 'wpmcp_load_abilities' );
 
 /**
- * The mcp-adapter release this plugin was built and tested against.
- * It is still 0.x and has had breaking changes between minor versions.
- */
-/**
  * mcp-adapter releases this plugin has been checked against. Used only for
  * the diagnostic message — compatibility itself is decided by the API
  * shape below, not by a version string.
@@ -257,12 +253,13 @@ if ( is_admin() ) {
 	require_once WPMCP_DIR . 'includes/admin.php';
 }
 
-// Activation: role, capabilities, audit table.
+// Activation: role, capabilities, audit table. An update reaches the same
+// state through wpmcp_maybe_upgrade() (includes/access.php).
 register_activation_hook( __FILE__, 'wpmcp_activate' );
 
 function wpmcp_activate() {
 	wpmcp_register_role();
-	wpmcp_create_audit_table();
+	wpmcp_upgrade();
 }
 
 // Deactivation ends a session and reduces the role to read; the audit

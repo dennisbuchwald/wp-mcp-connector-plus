@@ -369,6 +369,7 @@ echo "\n\033[1mDeaktivieren\033[0m\n";
 $GLOBALS['wpdb'] = new class() {
 	public $prefix = 'wp_';
 	public function insert( ...$a ) { return 1; }
+	public function suppress_errors( $s = true ) { return false; }
 };
 function current_time( ...$a ) { return '2026-10-01 12:00:00'; }
 function get_current_user_id() { return 1; }

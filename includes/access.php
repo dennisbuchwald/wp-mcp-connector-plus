@@ -740,13 +740,14 @@ add_action( 'add_option_wpmcp_access_level', 'wpmcp_sync_role_capabilities' );
  * Tidy the stored role on admin and REST requests.
  *
  * Not a line of defence any more (wpmcp_agent_capabilities decides per
- * check), but an update never runs the activation hook, so this is where a
- * role stored by an older version is brought back to the read set. Comparing
- * is cheap (roles live in one cached option) and it only writes when
- * something actually drifted.
+ * check). It brings a role a role editor changed back to the read set,
+ * and recreates it when it was deleted: without the role, the agent
+ * account has no marker capability and every tool refuses it with a
+ * permission error that points nowhere. Comparing is cheap (roles live in
+ * one cached option) and it only writes when something actually drifted.
  */
 function wpmcp_reconcile_role() {
-	if ( ! wpmcp_role_caps_match() && get_role( WPMCP_ROLE ) ) {
+	if ( ! wpmcp_role_caps_match() ) {
 		wpmcp_sync_role_capabilities();
 	}
 }
@@ -754,6 +755,44 @@ add_action( 'admin_init', 'wpmcp_reconcile_role' );
 add_action( 'admin_init', 'wpmcp_close_expired_work_session' );
 add_action( 'rest_api_init', 'wpmcp_reconcile_role' );
 add_action( 'rest_api_init', 'wpmcp_close_expired_work_session' );
+
+/**
+ * Schema and setup version. Raise it whenever an update has to redo what
+ * activation does: a changed audit table, a changed role.
+ */
+const WPMCP_DB_VERSION = 2;
+
+/**
+ * Do what activation does, once per version, on an updated site.
+ *
+ * WordPress runs the activation hook on activation only. An update, by
+ * upload or by the updater, never runs it, so the audit table and the
+ * role were only ever right on sites that installed the current version
+ * fresh. This compares one autoloaded option on every request and does
+ * the work once when it differs. On multisite each site catches up on its
+ * own first request, through the same check.
+ */
+function wpmcp_maybe_upgrade() {
+	if ( WPMCP_DB_VERSION === (int) get_option( 'wpmcp_db_version', 0 ) ) {
+		return;
+	}
+	wpmcp_upgrade();
+}
+add_action( 'plugins_loaded', 'wpmcp_maybe_upgrade' );
+
+/**
+ * Bring the table and the role to what this version expects.
+ *
+ * dbDelta creates a missing table and adds missing columns and keys; the
+ * role sync recreates a missing role and resets a drifted one. Both are
+ * safe to run twice, which is what happens when two requests arrive
+ * during the same first second.
+ */
+function wpmcp_upgrade() {
+	wpmcp_create_audit_table();
+	wpmcp_sync_role_capabilities();
+	update_option( 'wpmcp_db_version', WPMCP_DB_VERSION, true );
+}
 
 /**
  * Deactivation: leave nothing open behind.

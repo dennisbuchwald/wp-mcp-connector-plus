@@ -57,18 +57,29 @@ function wpmcp_create_audit_table() {
 function wpmcp_log( $ability, array $data = array() ) {
 	global $wpdb;
 
-	$wpdb->insert(
-		wpmcp_audit_table(),
-		array(
-			'created_at'  => current_time( 'mysql', true ),
-			'user_id'     => get_current_user_id(),
-			'ability'     => substr( (string) $ability, 0, 64 ),
-			'post_id'     => (int) ( $data['post_id'] ?? 0 ),
-			'operation'   => substr( (string) ( $data['operation'] ?? '' ), 0, 32 ),
-			'dry_run'     => empty( $data['dry_run'] ) ? 0 : 1,
-			'summary'     => (string) ( $data['summary'] ?? '' ),
-			'revision_id' => (int) ( $data['revision_id'] ?? 0 ),
-		),
-		array( '%s', '%d', '%s', '%d', '%s', '%d', '%s', '%d' )
-	);
+	// A failing insert (table missing, disk full) must not print. With
+	// WP_DEBUG_DISPLAY on, wpdb echoes the error as HTML, and inside a
+	// REST request that lands in the middle of the JSON answer: the tool
+	// call fails over a log line. The previous setting is restored, since
+	// other code in the request may rely on seeing its own errors.
+	$suppressed = $wpdb->suppress_errors( true );
+
+	try {
+		$wpdb->insert(
+			wpmcp_audit_table(),
+			array(
+				'created_at'  => current_time( 'mysql', true ),
+				'user_id'     => get_current_user_id(),
+				'ability'     => substr( (string) $ability, 0, 64 ),
+				'post_id'     => (int) ( $data['post_id'] ?? 0 ),
+				'operation'   => substr( (string) ( $data['operation'] ?? '' ), 0, 32 ),
+				'dry_run'     => empty( $data['dry_run'] ) ? 0 : 1,
+				'summary'     => (string) ( $data['summary'] ?? '' ),
+				'revision_id' => (int) ( $data['revision_id'] ?? 0 ),
+			),
+			array( '%s', '%d', '%s', '%d', '%s', '%d', '%s', '%d' )
+		);
+	} finally {
+		$wpdb->suppress_errors( $suppressed );
+	}
 }
