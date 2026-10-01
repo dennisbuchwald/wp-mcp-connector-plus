@@ -110,38 +110,35 @@ function wpmcp_register_ability( $name, array $args ) {
 }
 
 /**
- * Register the abilities the access level offers.
+ * What each ability is: label, description, input schema and what it runs.
+ *
+ * One entry per tool, in the order they are registered. What every tool
+ * has in common (category, output schema, permission callback) is added
+ * by wpmcp_register_abilities(), and annotations and the answer contract
+ * by wpmcp_register_ability(), so an entry holds only what differs. The
+ * table is built only once wp_register_ability exists, since the labels
+ * are translated on the way.
+ *
+ * @return array<string, array{label: string, description: string, input_schema: array, execute_callback: callable}>
  */
-function wpmcp_register_abilities() {
-	if ( ! function_exists( 'wp_register_ability' ) ) {
-		return;
-	}
-
-	wpmcp_register_ability(
-		'wpmcp/site-info',
-		array(
+function wpmcp_ability_definitions() {
+	return array(
+		'wpmcp/site-info' => array(
 			'label'       => __( 'Site info', 'wp-mcp-connector-plus' ),
 			'description' => 'Fingerprint of this website: WordPress/theme/core versions, client name, active feature modules, editable post types, and the design tokens (colour slugs, font sizes, spacing) the design system allows. Call this first in any session — versions and available blocks differ per customer site, so never assume them.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => new stdClass(),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function () {
 				wpmcp_log( 'wpmcp/site-info' );
 				return wpmcp_site_info();
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/blocks-catalog',
-		array(
+		'wpmcp/blocks-catalog' => array(
 			'label'       => __( 'Block catalog', 'wp-mcp-connector-plus' ),
 			'description' => 'The building kit of this site: every available block with its role (container / child / standalone), what it is for, what may go inside it, and its main variants — plus the editorial playbook (page dramaturgy, block choice, tone, house rules) that no schema can carry. Read the playbook before building anything. This is the overview; use blocks-describe for the full attribute schema of the few blocks you actually intend to use.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -153,8 +150,6 @@ function wpmcp_register_abilities() {
 					),
 				),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				$scope = ( isset( $input['scope'] ) && 'all' === $input['scope'] ) ? 'all' : 'site';
 				wpmcp_log( 'wpmcp/blocks-catalog', array( 'summary' => 'scope=' . $scope ) );
@@ -170,15 +165,11 @@ function wpmcp_register_abilities() {
 
 				return $result;
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/blocks-describe',
-		array(
+		'wpmcp/blocks-describe' => array(
 			'label'       => __( 'Block details', 'wp-mcp-connector-plus' ),
 			'description' => 'Describes block TYPES, not the content of any page — schemas and rules, never the markup of a particular instance; for that read the page with content-read, which returns innerHTML verbatim. Every attribute with its type, default and allowed values, grouped into content/layout/behavior/legacy, plus nesting rules. Defaults to "compact", which is what you want: it leaves out the prose description of each attribute, and on a design system with dozens of attributes per block that prose is most of the answer. Pass detail: "full" for the descriptions and a worked example, and then for the one block you are unsure about rather than for ten. Ask for the handful of blocks you are about to use — never for all of them. Attributes marked legacy exist only so old pages keep working; do not use them in new content.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -196,8 +187,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'names' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				$names = array_slice( array_filter( (array) ( $input['names'] ?? array() ), 'is_string' ), 0, 15 );
 				if ( empty( $names ) ) {
@@ -213,15 +202,11 @@ function wpmcp_register_abilities() {
 					'detail' => $detail,
 				);
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-list',
-		array(
+		'wpmcp/content-list' => array(
 			'label'       => __( 'List content', 'wp-mcp-connector-plus' ),
 			'description' => 'Reads from the database. Lists pages, posts and custom post types with status, URL and block count. Use uses_block to find real examples of a block in use on this very site — reading two or three existing pages teaches the site\'s tone and section rhythm faster than any guideline.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -253,21 +238,15 @@ function wpmcp_register_abilities() {
 					),
 				),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				wpmcp_log( 'wpmcp/content-list' );
 				return wpmcp_list_content( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-read',
-		array(
+		'wpmcp/content-read' => array(
 			'label'       => __( 'Read page as block tree', 'wp-mcp-connector-plus' ),
 			'description' => 'Reads from the database. Read a page as a block tree. Start with mode "outline" (block names, nesting and a short label per block — cheap, gives you the page architecture), then "subtree" for the sections you care about, and only use "full" when you really need the whole page. In subtree mode pass "paths" to fetch several sections in one call rather than one request per section. Every block carries a "path" like "2.0.1"; those paths are what you address in content-write. Attributes left at their default are omitted, so what you see is what was actually decided — check blocks-describe for what those defaults are. The returned "modified" value should be handed to content-write, which then refuses to overwrite someone else\'s edit.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -303,8 +282,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				$paths  = isset( $input['paths'] ) && is_array( $input['paths'] ) ? $input['paths'] : array();
 				$result = wpmcp_read_content(
@@ -326,15 +303,11 @@ function wpmcp_register_abilities() {
 				}
 				return $result;
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-write',
-		array(
+		'wpmcp/content-write' => array(
 			'label'       => __( 'Write block tree', 'wp-mcp-connector-plus' ),
 			'description' => 'Write to a page: block content, SEO meta, or where the page sits — alone or together. Dry run by default; pass dry_run: false to save. Returns a validation report, a block-count diff, and the new "modified" value to pass as expected_modified on the next write. \n\nContent comes as "ops" (patch operations by block path) or "tree" (replace the page). Use ops for anything short of a rebuild. To change text inside a block use patch_html with "find" and "replace", not replace — replace demands the block\'s entire markup back, and everything retyped can come back wrong. The anchor must occur exactly once; content-search returns the surrounding text verbatim, which is how to pick one that does. The answer shows each patched block as it now reads. \n\nValidation judges the change, not the page: a problem that already existed in a block you did not touch is a warning, anything the change introduces is an error naming the block path. Markup WordPress strips from an agent account (scripts, iframes, event handlers such as onerror, javascript: URLs) cannot be written and is refused in the dry run, naming the block path, except structured data: <script type="application/ld+json"> holding valid JSON is accepted and stored safely; markup of that kind already on the page is preserved, so editing one block never breaks structured data in another. After a real write the stored content is compared against what was sent. Every write leaves a revision. \n\nslug, parent and status apply only while a page has never been published — a live page keeps its address. publish is accepted only during a work session. Post type is never touched. \n\nBefore inserting a block type you have not written before, read an existing instance with content-read and mirror its shape: some libraries keep a per-instance id, generated CSS and matching classes that must agree, and a block that merely validates can still be wrong.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -385,20 +358,14 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_write_content( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-duplicate',
-		array(
+		'wpmcp/content-duplicate' => array(
 			'label'       => __( 'Duplicate page', 'wp-mcp-connector-plus' ),
 			'description' => 'Duplicate a page including its blocks, taxonomies and meta. Writes immediately, there is no dry run: the copy is created as a draft and its id returned. This is the preferred way to create a new page: an existing page already carries the site\'s structure, tone and section rhythm, so adapting a copy beats assembling one from scratch. Find a good source with content-list first.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -413,23 +380,17 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_duplicate_post(
 					(int) ( $input['post_id'] ?? 0 ),
 					(string) ( $input['title'] ?? '' )
 				);
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-preview',
-		array(
+		'wpmcp/content-preview' => array(
 			'label'       => __( 'Preview', 'wp-mcp-connector-plus' ),
 			'description' => 'Renders the stored content server-side — this is the database put through the block renderer, NOT the page a visitor receives; with a page cache in front the two differ, and content-fetch-live is the one that settles it. Returns the rendered HTML, its heading outline, and a signed preview URL that works without a login for 15 minutes. Use it to check your own work after writing, and equally to inspect any existing page — the block tree says what is configured, this says what a visitor gets, including whether every block renders without error.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -450,8 +411,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_preview_content(
 					(int) ( $input['post_id'] ?? 0 ),
@@ -459,14 +418,11 @@ function wpmcp_register_abilities() {
 					(int) ( $input['offset'] ?? 0 )
 				);
 			},
-		)
-	);
-	wpmcp_register_ability(
-		'wpmcp/content-revisions',
-		array(
+		),
+
+		'wpmcp/content-revisions' => array(
 			'label'       => __( 'Revisions', 'wp-mcp-connector-plus' ),
 			'description' => 'The saved history of a page: revision ids, when each was made, by whom, and how many blocks it held. Use it to find the state to go back to when a change turned out wrong — content-restore takes an id from here.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -482,8 +438,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				wpmcp_log( 'wpmcp/content-revisions', array( 'post_id' => (int) ( $input['post_id'] ?? 0 ) ) );
 				return wpmcp_list_revisions(
@@ -491,15 +445,11 @@ function wpmcp_register_abilities() {
 					(int) ( $input['limit'] ?? 15 )
 				);
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-restore',
-		array(
+		'wpmcp/content-restore' => array(
 			'label'       => __( 'Restore revision', 'wp-mcp-connector-plus' ),
 			'description' => 'Undo: put a page back to one of its own revisions, listed by content-revisions. Dry run by default, and the current state becomes a revision of its own first, so restoring is itself reversible. This is also the only way to bring back markup that content-write cannot produce — a restored state is one the page already held, not something the agent authored.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -519,8 +469,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id', 'revision_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_restore_revision(
 					(int) ( $input['post_id'] ?? 0 ),
@@ -528,14 +476,11 @@ function wpmcp_register_abilities() {
 					! isset( $input['dry_run'] ) || (bool) $input['dry_run']
 				);
 			},
-		)
-	);
-	wpmcp_register_ability(
-		'wpmcp/content-search',
-		array(
+		),
+
+		'wpmcp/content-search' => array(
 			'label'       => __( 'Search content', 'wp-mcp-connector-plus' ),
 			'description' => 'Reads from the database. Finds a string or regular expression across the whole site in one call, and returns for every occurrence: the post, the block path, the block type, its per-instance id, whether the hit sits in the markup or in an attribute, and the raw text around it. Use this before changing anything that appears in several places — the context shows what the markup actually is at each site, so a change never has to be extrapolated from the cases you happened to look at. Searches what content-list would list: statuses publish, draft, pending, future and private, each only where you may read it. "scanned" says how many posts were read. Prefer plain text: it is matched in the database first. A regular expression (at most 200 bytes) reads every post in scope and stops at a limit; then the answer has scanLimitReached and a hint, and post_type or post_status narrow it.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -580,20 +525,14 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'query' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_search_content( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-fetch-live',
-		array(
+		'wpmcp/content-fetch-live' => array(
 			'label'       => __( 'Fetch delivered page', 'wp-mcp-connector-plus' ),
 			'description' => 'Reads the public URL over HTTP, with a cache buster — what a visitor actually receives, not what is stored. This is the only honest check after a write: with a page cache in front, the database can be correct while the delivered page is still the old one. The response includes any cache headers, so a stale answer is recognisable, and a "head" summary with the title, meta description, canonical, robots and Open Graph tags plus a count of JSON-LD blocks (head and body) — which is the only way to confirm that an SEO field you wrote actually reaches the page, since content-preview renders the body alone. Note that a maintenance-mode plugin answers this request too, and its holding page has a head of its own. To check a change, pass contains rather than reading the page.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -623,8 +562,6 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'post_id' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_fetch_live(
 					(int) ( $input['post_id'] ?? 0 ),
@@ -634,15 +571,11 @@ function wpmcp_register_abilities() {
 					! empty( $input['body_only'] )
 				);
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-create',
-		array(
+		'wpmcp/content-create' => array(
 			'label'       => __( 'Create page', 'wp-mcp-connector-plus' ),
 			'description' => 'Creates a page with its title, slug, parent and status, and writes the content in the same call when "tree" and "meta" come with it. Use this to build a page rather than duplicating one and overwriting everything: a duplicate inherits the parent it was copied from and a slug derived from the old title, both of which then have to be corrected by hand. Duplicating is still right when an existing page is the template — content-duplicate keeps its taxonomies and meta. A draft unless status publish is given during a work session, and then only once the content is written. Dry run by default, and the dry run validates the tree and meta exactly as the real call will. The page is created with its content or not at all: content that is refused leaves nothing behind, so fix it and call content-create again.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -686,20 +619,14 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'title' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_create_content( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/media-list',
-		array(
+		'wpmcp/media-list' => array(
 			'label'       => __( 'Browse media library', 'wp-mcp-connector-plus' ),
 			'description' => 'Lists attachments with their alt text, title and — the reason the tool exists — every post that embeds them. Alt text usually lives on the attachment, not on the block that displays the image, so a page can look like it has no alt text while the theme fills one in from here, or the other way round. Pass missing_alt: true to see only attachments with none. "usedIn" counts both markup references and featured images, so an image used only as a featured image does not look unused.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -728,20 +655,14 @@ function wpmcp_register_abilities() {
 					),
 				),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_list( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/media-read',
-		array(
+		'wpmcp/media-read' => array(
 			'label'       => __( 'Read media item', 'wp-mcp-connector-plus' ),
 			'description' => 'One attachment with its alt text, title, caption, URL, MIME type and the posts that embed it. Use it to check a single image before or after changing it.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -755,21 +676,15 @@ function wpmcp_register_abilities() {
 					),
 				),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				$id = wpmcp_attachment_id_arg( $input );
 				return is_wp_error( $id ) ? $id : wpmcp_media_read( $id );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/media-update',
-		array(
+		'wpmcp/media-update' => array(
 			'label'       => __( 'Label media item', 'wp-mcp-connector-plus' ),
 			'description' => 'Sets the alt text or title of an attachment. Nothing else: no upload, no delete, no replacing the file, and no other field. Dry run by default; pass dry_run: false to save. Alt text describes what the image shows to someone who cannot see it — it is not a place for keywords, and a decorative image is better with an empty alt than with an invented one. Attachment fields have no revisions, so the previous values are reported and logged.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -796,20 +711,14 @@ function wpmcp_register_abilities() {
 					),
 				),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_update( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	wpmcp_register_ability(
-		'wpmcp/content-batch',
-		array(
+		'wpmcp/content-batch' => array(
 			'label'       => __( 'Write several pages', 'wp-mcp-connector-plus' ),
 			'description' => 'Applies changes to up to 20 posts in one call: items is a list of what content-write takes, one per post, each with its own expected_modified. Every item is dry-run first and nothing is saved unless all pass; dry run by default. There is no transaction across posts, so if one fails on save after passing — it changed in between — the run stops there and says which posts were saved. Each post gets its own revision. Put all changes to one post into a single item. Every item answers { postId, ok, code, errors, warnings }.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -825,21 +734,15 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'items' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_batch_write( is_array( $input ) ? $input : array() );
 			},
-		)
-	);
+		),
 
-	// Always there at a write level; refuses outside a work session.
-	wpmcp_register_ability(
-		'wpmcp/media-upload',
-		array(
+		// Always there at a write level; refuses outside a work session.
+		'wpmcp/media-upload' => array(
 			'label'       => __( 'Upload image', 'wp-mcp-connector-plus' ),
 			'description' => 'Uploads an image into the media library and returns its id and url for the image block. Works only during a work session the site owner opened; outside one it answers wpmcp_session_required. Send the file base64-encoded as "data". JPEG, PNG and WebP only, judged by the bytes, not the name; SVG is refused. Alt text is required: describe what the image shows, or pass decorative: true for an image with no meaning of its own. Dry run by default.',
-			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -872,11 +775,33 @@ function wpmcp_register_abilities() {
 				),
 				'required'   => array( 'filename', 'data' ),
 			),
-			'output_schema' => array( 'type' => 'object' ),
-			'permission_callback' => 'wpmcp_can',
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_upload( is_array( $input ) ? $input : array() );
 			},
-		)
+		),
 	);
+}
+
+/**
+ * Register the abilities the access level offers.
+ */
+function wpmcp_register_abilities() {
+	if ( ! function_exists( 'wp_register_ability' ) ) {
+		return;
+	}
+
+	foreach ( wpmcp_ability_definitions() as $name => $definition ) {
+		wpmcp_register_ability(
+			$name,
+			array(
+				'label'               => $definition['label'],
+				'description'         => $definition['description'],
+				'category'            => WPMCP_ABILITY_CATEGORY,
+				'input_schema'        => $definition['input_schema'],
+				'output_schema'       => array( 'type' => 'object' ),
+				'permission_callback' => 'wpmcp_can',
+				'execute_callback'    => $definition['execute_callback'],
+			)
+		);
+	}
 }
