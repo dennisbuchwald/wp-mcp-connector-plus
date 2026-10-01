@@ -615,7 +615,7 @@ function wpmcp_list_content( array $args ) {
 			'url'      => get_permalink( $post ),
 			'parent'   => $post->post_parent,
 			'modified' => $post->post_modified_gmt,
-			'blocks'   => wpmcp_count_blocks( parse_blocks( $post->post_content ) ),
+			'blocks'   => wpmcp_count_blocks_in_markup( $post->post_content ),
 		);
 	}
 
@@ -3181,7 +3181,7 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
 			'date'       => $revision->post_modified_gmt,
 			'author'     => $author ? $author->display_name : null,
 			'autosave'   => wp_is_post_autosave( $revision ) ? true : false,
-			'blockCount' => wpmcp_count_blocks( parse_blocks( $revision->post_content ) ),
+			'blockCount' => wpmcp_count_blocks_in_markup( $revision->post_content ),
 		);
 	}
 
@@ -3190,7 +3190,7 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
 		'title'     => get_the_title( $post ),
 		'current'   => array(
 			'modified'   => $post->post_modified_gmt,
-			'blockCount' => wpmcp_count_blocks( parse_blocks( $post->post_content ) ),
+			'blockCount' => wpmcp_count_blocks_in_markup( $post->post_content ),
 		),
 		'revisions' => $items,
 	);

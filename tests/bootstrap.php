@@ -37,6 +37,8 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 }
 
 function parse_blocks( $content ) {
+	// Counted, so a test can tell whether a code path parses at all.
+	$GLOBALS['dbw_parse_blocks_calls'] = ( $GLOBALS['dbw_parse_blocks_calls'] ?? 0 ) + 1;
 	$parser = new WP_Block_Parser();
 	return $parser->parse( $content );
 }

@@ -892,6 +892,27 @@ function wpmcp_count_blocks( array $blocks ) {
 }
 
 /**
+ * Count blocks in stored markup without parsing it.
+ *
+ * For lists of pages and revisions, where the number is one column among
+ * several and parsing every row (up to 100 full parses per call) cost far
+ * more than the number is worth. Every block, nested ones included, opens
+ * with "<!-- wp:" exactly once, self-closing or not; closing comments read
+ * "<!-- /wp:" and do not contain that string. The serializer escapes "<"
+ * inside attributes, so an attribute value cannot fake an opener either.
+ *
+ * The one difference from wpmcp_count_blocks(): classic HTML outside any
+ * block comment is not counted, so a page that was never converted to
+ * blocks reads 0 here. For block content both give the same number.
+ *
+ * @param string $content Post content.
+ * @return int
+ */
+function wpmcp_count_blocks_in_markup( $content ) {
+	return substr_count( (string) $content, '<!-- wp:' );
+}
+
+/**
  * Flat list of block names used in a tree (for validation and reporting).
  *
  * @param array $blocks Parsed blocks.

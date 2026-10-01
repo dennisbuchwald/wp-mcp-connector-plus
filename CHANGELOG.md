@@ -85,6 +85,7 @@ Ab hier gibt es eine Vertragsversion: `site-info` meldet `contractVersion` (eine
 
 - **`content-fetch-live` antwortet in Fenstern von 60000 Bytes statt 200000**, wie `content-preview`. 200 KB am Stueck waren mehr, als ein Agent sinnvoll auf einmal liest, und dieselbe Seite kam je nach Werkzeug anders geschnitten zurueck. Beide Werkzeuge nutzen jetzt dieselbe Zahl (`WPMCP_WINDOW_BYTES`). `nextOffset` fuehrt wie bisher zum Rest.
 - **Die Cache-Leerung meldet `object: "post cache cleared"` statt `"flushed"`.** Geleert werden nur die Eintraege des einen Beitrags (`clean_post_cache`), nicht der ganze Objekt-Cache; "flushed" klang nach dem Gegenteil.
+- **`content-list` und `content-revisions` zaehlen Bloecke ohne Parser.** Fuer die Spalte `blocks` bzw. `blockCount` wurde jede Seite der Liste (bis 100) und jede Revision (bis 50) vollstaendig geparst. Jetzt zaehlt eine Stringsuche die oeffnenden Blockkommentare (`<!-- wp:`), verschachtelte und selbstschliessende Bloecke mit, schliessende nicht. Fuer Blockinhalt ist die Zahl dieselbe; klassischer HTML-Inhalt ausserhalb von Blockkommentaren zaehlt jetzt 0 statt 1. `content-read` zaehlt weiter ueber den geparsten Baum.
 
 ### Zu beachten
 

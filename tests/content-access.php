@@ -329,6 +329,25 @@ check(
 $last = wpmcp_list_content( array( 'uses_block' => 'dbw-base/hero', 'per_page' => 5, 'page' => 3 ) );
 check( 5 === count( $last['items'] ), 'auch die letzte Seite ist voll' );
 
+echo "\n\033[1mBlockzahl ohne Parser\033[0m\n";
+
+// The list counted blocks by parsing every page on it: up to 100 full
+// parses for one number per row. Counting the opening comments gives the
+// same number for block content, nested blocks included.
+$nested = '<!-- wp:group --><div><!-- wp:paragraph --><p>a</p><!-- /wp:paragraph --><!-- wp:image {"id":5} /--></div><!-- /wp:group -->';
+check( 3 === wpmcp_count_blocks_in_markup( $nested ), 'zaehlt verschachtelte und selbstschliessende Bloecke, keine schliessenden Kommentare', (string) wpmcp_count_blocks_in_markup( $nested ) );
+check( wpmcp_count_blocks( parse_blocks( $nested ) ) === wpmcp_count_blocks_in_markup( $nested ), 'gleiche Zahl wie ueber den Parser' );
+check( 0 === wpmcp_count_blocks_in_markup( '<p>klassischer Inhalt</p>' ), 'klassischer Inhalt ohne Blockkommentare zaehlt 0' );
+check( 0 === wpmcp_count_blocks_in_markup( '' ), 'leerer Inhalt zaehlt 0' );
+
+$GLOBALS['posts'] = array();
+$GLOBALS['pdo']->exec( 'DELETE FROM wp_posts' );
+post( 200, 'publish', array( 'post_content' => $nested ) );
+$GLOBALS['dbw_parse_blocks_calls'] = 0;
+$out = wpmcp_list_content( array() );
+check( 3 === ( $out['items'][0]['blocks'] ?? null ), 'content-list meldet 3 Bloecke', wp_json_encode( $out['items'][0]['blocks'] ?? null ) );
+check( 0 === $GLOBALS['dbw_parse_blocks_calls'], 'ohne eine Seite zu parsen', $GLOBALS['dbw_parse_blocks_calls'] . ' Aufrufe von parse_blocks' );
+
 $GLOBALS['caps'] = array();
 $out = wpmcp_get_writable_post( 10 );
 

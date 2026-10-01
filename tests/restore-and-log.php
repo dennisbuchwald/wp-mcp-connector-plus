@@ -75,7 +75,7 @@ function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_objec
 function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
 /** The newest stored revision, whether or not the last save made it. */
 function wp_get_post_revisions( $id, $args = array() ) {
-	return array( 50 => (object) array( 'ID' => 50, 'post_parent' => (int) $id ) );
+	return $GLOBALS['revision_list'] ?? array( 50 => (object) array( 'ID' => 50, 'post_parent' => (int) $id ) );
 }
 function get_userdata( $id ) {
 	return in_array( (int) $id, $GLOBALS['users'], true ) ? (object) array( 'ID' => (int) $id ) : false;
@@ -339,6 +339,27 @@ $r  = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 41, 'ops' 
 $entry = end( $GLOBALS['logged'] );
 check( ! is_wp_error( $r ) && ! empty( $r['ok'] ), 'zwei Posten gespeichert', message_of( $r ) );
 check( 'wpmcp/content-batch' === ( $entry['ability'] ?? '' ) && false !== strpos( $entry['summary'], '41' ) && false !== strpos( $entry['summary'], '42' ), 'die Zusammenfassung nennt die Beitraege', $entry['summary'] ?? '' );
+
+echo "\n\033[1mRevisionsliste ohne Parser\033[0m\n";
+
+// blockCount per revision used to parse each one, up to 50 per call.
+if ( ! function_exists( 'get_the_title' ) ) {
+	function get_the_title( $post ) { return 'Seite'; }
+}
+if ( ! function_exists( 'wp_is_post_autosave' ) ) {
+	function wp_is_post_autosave( $post ) { return false; }
+}
+$nested = '<!-- wp:group --><div><!-- wp:paragraph --><p>a</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+post( 60, $nested );
+$GLOBALS['revision_list'] = array(
+	61 => (object) array( 'ID' => 61, 'post_parent' => 60, 'post_author' => 99, 'post_modified_gmt' => '2026-10-01 09:00:00', 'post_content' => $nested . '<!-- wp:image /-->' ),
+);
+$GLOBALS['dbw_parse_blocks_calls'] = 0;
+$r = wpmcp_list_revisions( 60 );
+unset( $GLOBALS['revision_list'] );
+check( ! is_wp_error( $r ) && 2 === ( $r['current']['blockCount'] ?? null ), 'der aktuelle Stand zaehlt 2 Bloecke, der verschachtelte mit', wp_json_encode( $r['current'] ?? null ) );
+check( ! is_wp_error( $r ) && 3 === ( $r['revisions'][0]['blockCount'] ?? null ), 'die Revision 3', wp_json_encode( $r['revisions'][0] ?? null ) );
+check( 0 === $GLOBALS['dbw_parse_blocks_calls'], 'ohne zu parsen', $GLOBALS['dbw_parse_blocks_calls'] . ' Aufrufe von parse_blocks' );
 
 echo "\n";
 if ( 0 === $fail ) {
