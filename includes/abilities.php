@@ -100,7 +100,10 @@ function wpmcp_register_ability( $name, array $args ) {
 
 	$execute                  = $args['execute_callback'];
 	$args['execute_callback'] = function ( $input = null ) use ( $execute ) {
-		return wpmcp_contract_result( call_user_func( $execute, $input ) );
+		// Called exactly as the Abilities API would have called the tool:
+		// without an argument when it passes none.
+		$result = null === $input ? call_user_func( $execute ) : call_user_func( $execute, $input );
+		return wpmcp_contract_result( $result );
 	};
 
 	return (bool) wp_register_ability( $name, $args );
