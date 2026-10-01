@@ -217,9 +217,9 @@ function wpmcp_validate_blocks( array $blocks, ?array $before = null ) {
 		if ( wpmcp_count_blocks( $reparsed ) !== wpmcp_count_blocks( $blocks ) ) {
 			$errors[] = 'Roundtrip check failed: serialising and re-parsing changes the block count. The tree was not written.';
 		} else {
-			$before = wpmcp_block_names( $blocks );
-			$after  = wpmcp_block_names( $reparsed );
-			if ( $before !== $after ) {
+			$names_sent = wpmcp_block_names( $blocks );
+			$names_back = wpmcp_block_names( $reparsed );
+			if ( $names_sent !== $names_back ) {
 				$errors[] = 'Roundtrip check failed: block order or names change when re-parsed. The tree was not written.';
 			}
 		}
