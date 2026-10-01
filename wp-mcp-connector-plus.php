@@ -47,6 +47,20 @@ if ( defined( 'WPMCP_DISABLE' ) && WPMCP_DISABLE ) {
 }
 
 /**
+ * Translations shipped in languages/.
+ *
+ * WordPress only finds a plugin's own translations by itself when they
+ * come from translate.wordpress.org into wp-content/languages/plugins.
+ * This plugin ships its German translation in the ZIP, so it says where.
+ * A file in wp-content/languages/plugins still wins, which keeps a
+ * site's own corrections in place across updates.
+ */
+function wpmcp_load_textdomain() {
+	load_plugin_textdomain( 'wp-mcp-connector-plus', false, dirname( plugin_basename( WPMCP_FILE ) ) . '/languages' );
+}
+add_action( 'init', 'wpmcp_load_textdomain' );
+
+/**
  * Requirements notice. The abilities hook simply never fires without the
  * Abilities API (WordPress 6.9), so nothing breaks — it just silently does
  * nothing, which is the worst way to fail. Check late, so an Abilities API

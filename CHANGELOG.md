@@ -41,6 +41,7 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - **Statuszeile "Last connection"**: wann der Agent zuletzt etwas aufgerufen hat und welches Werkzeug. Bei abweichender Rolle ein Knopf "Repair now", der die Rolle sofort zuruecksetzt, statt zum Deaktivieren und Reaktivieren zu raten.
 - **Kopieren-Knoepfe** fuer Befehle, Endpunkt, Passwort und Header (Zwischenablage, sonst Markieren und Kopieren), mit kurzer Bestaetigung "Copied". Passwort und Header liegen hinter "Show"; Kopieren geht, ohne sie anzuzeigen.
 - **Der Kasten zur Arbeitssitzung sagt, was sie nicht kann:** sie erweitert, was der Agent mit seinen Werkzeugen darf, fuegt aber keine hinzu. Steht die Stufe auf "Read only", steht neben den Knoepfen, dass die Stufe dafuer auf "Drafts" oder "Drafts and published pages" muss.
+- **Deutsche Uebersetzung der Oberflaeche.** Das Plugin laedt seine Uebersetzungen jetzt selbst (`load_plugin_textdomain` auf `init`) und bringt in `languages/` die Vorlage `wp-mcp-connector-plus.pot` und eine vollstaendige deutsche Uebersetzung (`de_DE`) mit: Einstellungsseite, Admin-Leiste, Hinweis im Editor, Rollenname ("KI-Redakteur"). Was der Agent liest (Werkzeugbeschreibungen, Meldungen in Antworten), bleibt englisch. `bash bin/i18n.sh` erneuert Vorlage und Uebersetzungen; ein Test meldet, wenn die Vorlage nicht mehr zum Code passt oder eine Uebersetzung fehlt.
 
 ### Behoben
 

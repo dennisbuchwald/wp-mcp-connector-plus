@@ -692,6 +692,24 @@ with `blocks-catalog`:
 wp-content/themes/your-theme/docs/ai-playbook.md
 ```
 
+## Translations
+
+The admin screens and every notice are in English in the code and
+translatable (text domain `wp-mcp-connector-plus`). A German translation
+ships in `languages/`; a site in German gets it without doing anything.
+A translation in `wp-content/languages/plugins/` takes precedence, so a
+site's own corrections survive updates.
+
+What the agent reads (tool descriptions, the messages in tool answers)
+stays English on purpose: its reader is the agent, and those texts are
+part of the contract it relies on.
+
+After changing a translatable string, `bash bin/i18n.sh` rebuilds the
+template (`languages/wp-mcp-connector-plus.pot`), merges it into every
+`.po` and compiles the `.mo` files. It needs GNU gettext
+(`brew install gettext`). `tests/shipped-files.php` fails when the
+template no longer matches the code or a translation is incomplete.
+
 ## Updates
 
 The plugin checks GitHub releases and reports updates in the WordPress

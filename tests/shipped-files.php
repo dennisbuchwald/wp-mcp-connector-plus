@@ -180,6 +180,83 @@ $undoc  = array_filter(
 check( count( $codes ) > 30, sprintf( '%d Fehlercodes im Code gefunden', count( $codes ) ) );
 check( empty( $undoc ), 'jeder steht in der README-Tabelle "Error codes"', 'fehlt: ' . implode( ', ', $undoc ) );
 
+echo "\n\033[1mUebersetzungen werden mitgeliefert\033[0m\n";
+
+/**
+ * The msgids of a .po or .pot file (singular, with the plural after a
+ * NUL, the way gettext keys them).
+ */
+function po_msgids( $file ) {
+	$po = (string) file_get_contents( $file );
+	$po = preg_replace( "/\"\n\"/", '', $po );
+	preg_match_all( '/^msgid "(.*)"\n(?:msgid_plural "(.*)"\n)?/m', $po, $m, PREG_SET_ORDER );
+	$ids = array();
+	foreach ( $m as $entry ) {
+		if ( '' !== $entry[1] ) {
+			$ids[] = stripcslashes( $entry[1] ) . ( isset( $entry[2] ) && '' !== $entry[2] ? "\0" . stripcslashes( $entry[2] ) : '' );
+		}
+	}
+	sort( $ids );
+	return $ids;
+}
+
+$pot = $root . '/languages/wp-mcp-connector-plus.pot';
+$po  = $root . '/languages/wp-mcp-connector-plus-de_DE.po';
+$mo  = $root . '/languages/wp-mcp-connector-plus-de_DE.mo';
+
+check( is_file( $pot ), 'die Vorlage languages/wp-mcp-connector-plus.pot liegt bei' );
+check( is_file( $po ) && is_file( $mo ), 'und die deutsche Uebersetzung als .po und .mo' );
+
+$attr = shell_exec( 'git -C ' . escapeshellarg( $root ) . ' check-attr export-ignore -- languages/wp-mcp-connector-plus-de_DE.mo 2>/dev/null' );
+check(
+	null === $attr || false === strpos( (string) $attr, ': set' ),
+	'languages/ ist nicht von git archive ausgenommen',
+	trim( (string) $attr )
+);
+
+$header = (string) file_get_contents( $root . '/wp-mcp-connector-plus.php', false, null, 0, 2000 );
+check( false !== strpos( $header, 'Domain Path:       /languages' ), 'der Plugin-Kopf nennt den Ordner' );
+check(
+	(bool) preg_match( "/load_plugin_textdomain\(\s*'wp-mcp-connector-plus'/", (string) file_get_contents( $root . '/wp-mcp-connector-plus.php' ) ),
+	'und das Plugin laedt ihn'
+);
+
+if ( is_file( $pot ) && is_file( $po ) ) {
+	$template = po_msgids( $pot );
+	$german   = po_msgids( $po );
+	check( count( $template ) > 100, sprintf( '%d Zeichenketten in der Vorlage', count( $template ) ) );
+	check(
+		$template === $german,
+		'die deutsche Uebersetzung kennt genau die Zeichenketten der Vorlage',
+		'nicht abgeglichen: ' . implode( ' | ', array_slice( array_merge( array_diff( $template, $german ), array_diff( $german, $template ) ), 0, 5 ) ) . "\n      bash bin/i18n.sh gleicht ab"
+	);
+	$po_text = (string) file_get_contents( $po );
+	check( ! preg_match( '/^msgstr ""\n(?!")/m', preg_replace( '/\A.*?\n\n/s', '', $po_text ) ), 'und keine ist leer' );
+	check( false === strpos( $po_text, '#, fuzzy' ), 'und keine unsicher (fuzzy)' );
+}
+
+// The template must follow the code. Checked where xgettext exists; CI
+// without gettext skips it rather than failing on a missing tool.
+$xgettext = trim( (string) shell_exec( 'command -v xgettext 2>/dev/null' ) );
+if ( '' !== $xgettext && is_file( $pot ) ) {
+	$fresh = tempnam( sys_get_temp_dir(), 'wpmcp-pot' );
+	$files = array_merge( array( 'wp-mcp-connector-plus.php', 'uninstall.php' ), array_map( function ( $f ) use ( $root ) { return substr( $f, strlen( $root ) + 1 ); }, glob( $root . '/includes/*.php' ) ) );
+	$cmd   = 'cd ' . escapeshellarg( $root ) . ' && ' . escapeshellarg( $xgettext ) . ' --language=PHP --from-code=UTF-8'
+		. ' --keyword=__ --keyword=_e --keyword=esc_html__ --keyword=esc_html_e --keyword=esc_attr__ --keyword=esc_attr_e'
+		. ' --keyword=_x:1,2c --keyword=_n:1,2 --keyword=_nx:1,2,4c --keyword=esc_html_x:1,2c --keyword=esc_attr_x:1,2c --keyword=_n_noop:1,2'
+		. ' -o ' . escapeshellarg( $fresh ) . ' ' . implode( ' ', array_map( 'escapeshellarg', $files ) ) . ' 2>&1';
+	shell_exec( $cmd );
+	$now = is_file( $fresh ) ? po_msgids( $fresh ) : array();
+	@unlink( $fresh );
+	check(
+		po_msgids( $pot ) === $now,
+		'die Vorlage passt zum Code',
+		'neu oder weg: ' . implode( ' | ', array_slice( array_merge( array_diff( $now, po_msgids( $pot ) ), array_diff( po_msgids( $pot ), $now ) ), 0, 5 ) ) . "\n      bash bin/i18n.sh erneuert sie"
+	);
+} else {
+	echo "  - xgettext fehlt, Abgleich der Vorlage mit dem Code uebersprungen\n";
+}
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mAuslieferung in Ordnung.\033[0m\n";
