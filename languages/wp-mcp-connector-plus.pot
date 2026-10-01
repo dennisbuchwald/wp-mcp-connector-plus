@@ -16,75 +16,75 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: includes/abilities.php:123
+#: includes/abilities.php:127
 msgid "Site info"
 msgstr ""
 
-#: includes/abilities.php:142
+#: includes/abilities.php:140
 msgid "Block catalog"
 msgstr ""
 
-#: includes/abilities.php:179
+#: includes/abilities.php:171
 msgid "Block details"
 msgstr ""
 
-#: includes/abilities.php:222
+#: includes/abilities.php:208
 msgid "List content"
 msgstr ""
 
-#: includes/abilities.php:268
+#: includes/abilities.php:248
 msgid "Read page as block tree"
 msgstr ""
 
-#: includes/abilities.php:335
+#: includes/abilities.php:309
 msgid "Write block tree"
 msgstr ""
 
-#: includes/abilities.php:399
+#: includes/abilities.php:367
 msgid "Duplicate page"
 msgstr ""
 
-#: includes/abilities.php:430
+#: includes/abilities.php:392
 msgid "Preview"
 msgstr ""
 
-#: includes/abilities.php:467
+#: includes/abilities.php:424
 msgid "Revisions"
 msgstr ""
 
-#: includes/abilities.php:500
+#: includes/abilities.php:451
 msgid "Restore revision"
 msgstr ""
 
-#: includes/abilities.php:536
+#: includes/abilities.php:482
 msgid "Search content"
 msgstr ""
 
-#: includes/abilities.php:594
+#: includes/abilities.php:534
 msgid "Fetch delivered page"
 msgstr ""
 
-#: includes/abilities.php:643
+#: includes/abilities.php:577
 msgid "Create page"
 msgstr ""
 
-#: includes/abilities.php:700
+#: includes/abilities.php:628
 msgid "Browse media library"
 msgstr ""
 
-#: includes/abilities.php:742
+#: includes/abilities.php:664
 msgid "Read media item"
 msgstr ""
 
-#: includes/abilities.php:770
+#: includes/abilities.php:686
 msgid "Label media item"
 msgstr ""
 
-#: includes/abilities.php:810
+#: includes/abilities.php:720
 msgid "Write several pages"
 msgstr ""
 
-#: includes/abilities.php:840
+#: includes/abilities.php:744
 msgid "Upload image"
 msgstr ""
 
@@ -615,7 +615,7 @@ msgid "Compare revisions"
 msgstr ""
 
 #. translators: %s: title of the page that was duplicated
-#: includes/content.php:2274
+#: includes/content-create.php:32
 #, php-format
 msgid "%s (Copy)"
 msgstr ""
@@ -758,7 +758,7 @@ msgstr ""
 msgid "Authorization header"
 msgstr ""
 
-#: includes/tree.php:339
+#: includes/tree.php:354
 msgid "untitled"
 msgstr ""
 
@@ -772,12 +772,12 @@ msgstr ""
 msgid "It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector."
 msgstr ""
 
-#: wp-mcp-connector-plus.php:223
+#: wp-mcp-connector-plus.php:236
 msgid "WP MCP Connector Plus:"
 msgstr ""
 
 #. translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions
-#: wp-mcp-connector-plus.php:226
+#: wp-mcp-connector-plus.php:239
 #, php-format
 msgid "The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1."
 msgstr ""

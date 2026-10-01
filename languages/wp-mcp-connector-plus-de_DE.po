@@ -14,75 +14,75 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: includes/abilities.php:123
+#: includes/abilities.php:127
 msgid "Site info"
 msgstr "Website-Info"
 
-#: includes/abilities.php:142
+#: includes/abilities.php:140
 msgid "Block catalog"
 msgstr "Block-Katalog"
 
-#: includes/abilities.php:179
+#: includes/abilities.php:171
 msgid "Block details"
 msgstr "Block-Details"
 
-#: includes/abilities.php:222
+#: includes/abilities.php:208
 msgid "List content"
 msgstr "Inhalte auflisten"
 
-#: includes/abilities.php:268
+#: includes/abilities.php:248
 msgid "Read page as block tree"
 msgstr "Seite als Blockbaum lesen"
 
-#: includes/abilities.php:335
+#: includes/abilities.php:309
 msgid "Write block tree"
 msgstr "Blockbaum schreiben"
 
-#: includes/abilities.php:399
+#: includes/abilities.php:367
 msgid "Duplicate page"
 msgstr "Seite duplizieren"
 
-#: includes/abilities.php:430
+#: includes/abilities.php:392
 msgid "Preview"
 msgstr "Vorschau"
 
-#: includes/abilities.php:467
+#: includes/abilities.php:424
 msgid "Revisions"
 msgstr "Revisionen"
 
-#: includes/abilities.php:500
+#: includes/abilities.php:451
 msgid "Restore revision"
 msgstr "Revision wiederherstellen"
 
-#: includes/abilities.php:536
+#: includes/abilities.php:482
 msgid "Search content"
 msgstr "Inhalte durchsuchen"
 
-#: includes/abilities.php:594
+#: includes/abilities.php:534
 msgid "Fetch delivered page"
 msgstr "Ausgelieferte Seite abrufen"
 
-#: includes/abilities.php:643
+#: includes/abilities.php:577
 msgid "Create page"
 msgstr "Seite anlegen"
 
-#: includes/abilities.php:700
+#: includes/abilities.php:628
 msgid "Browse media library"
 msgstr "Mediathek durchsuchen"
 
-#: includes/abilities.php:742
+#: includes/abilities.php:664
 msgid "Read media item"
 msgstr "Mediendatei lesen"
 
-#: includes/abilities.php:770
+#: includes/abilities.php:686
 msgid "Label media item"
 msgstr "Mediendatei beschriften"
 
-#: includes/abilities.php:810
+#: includes/abilities.php:720
 msgid "Write several pages"
 msgstr "Mehrere Seiten schreiben"
 
-#: includes/abilities.php:840
+#: includes/abilities.php:744
 msgid "Upload image"
 msgstr "Bild hochladen"
 
@@ -613,7 +613,7 @@ msgid "Compare revisions"
 msgstr "Revisionen vergleichen"
 
 #. translators: %s: title of the page that was duplicated
-#: includes/content.php:2274
+#: includes/content-create.php:32
 #, php-format
 msgid "%s (Copy)"
 msgstr "%s (Kopie)"
@@ -756,7 +756,7 @@ msgstr "Anwendungspasswort"
 msgid "Authorization header"
 msgstr "Authorization-Header"
 
-#: includes/tree.php:339
+#: includes/tree.php:354
 msgid "untitled"
 msgstr "ohne Titel"
 
@@ -770,12 +770,12 @@ msgstr "WP MCP Connector Plus ist inaktiv."
 msgid "It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector."
 msgstr "Er braucht die Abilities API, die mit WordPress 6.9 kommt. Diese Website läuft mit %s, deshalb wurden keine Abilities registriert. Für den Connector WordPress aktualisieren."
 
-#: wp-mcp-connector-plus.php:223
+#: wp-mcp-connector-plus.php:236
 msgid "WP MCP Connector Plus:"
 msgstr "WP MCP Connector Plus:"
 
 #. translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions
-#: wp-mcp-connector-plus.php:226
+#: wp-mcp-connector-plus.php:239
 #, php-format
 msgid "The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1."
 msgstr "Der MCP-Server wurde nicht gestartet. Ein anderes Plugin hat mcp-adapter %1$s geladen, dessen Schnittstelle dieses Plugin nicht bedienen kann (getestet mit %2$s). Die Abilities selbst bleiben über wp-abilities/v1 erreichbar."
