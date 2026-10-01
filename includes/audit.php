@@ -83,3 +83,15 @@ function wpmcp_log( $ability, array $data = array() ) {
 		$wpdb->suppress_errors( $suppressed );
 	}
 }
+
+/**
+ * How long log entries are kept, in days; 0 means forever.
+ *
+ * One place for the number, so what the Activity tab promises and what
+ * the clean-up deletes cannot drift apart.
+ *
+ * @return int
+ */
+function wpmcp_log_retention_days() {
+	return max( 0, (int) get_option( 'wpmcp_log_retention_days', 90 ) );
+}

@@ -72,7 +72,10 @@ firewall still object, unpack the ZIP into `wp-content/plugins/` over
 SFTP or the hosting panel's file manager; the folder must be named
 `wp-mcp-connector-plus`.
 
-**2. Open *Tools → MCP Connector*.** The status table tells you whether
+**2. Open *Tools → MCP Connector*.** The page has three tabs, each with a
+link of its own (`&tab=connection`, `access`, `activity`):
+*Connection* (status and setup), *Access* (work session and settings) and
+*Activity* (the log). The status table on *Connection* tells you whether
 everything needed is actually in place:
 
 | Step | What it checks |
@@ -81,6 +84,9 @@ everything needed is actually in place:
 | Abilities registered | every one of them made it into the registry |
 | MCP transport | a usable mcp-adapter, and the endpoint URL |
 | Agent user and credential | the account your agent will use |
+| Permissions in step | the agent role stores reading only; *Repair now* resets it if not |
+| Application passwords | HTTPS, and whether the site offers them itself |
+| Last connection | when the agent last called, and which tool |
 
 Green all the way down means you are ready. A red row names the problem
 rather than leaving you with a server that connects and does nothing.
@@ -90,8 +96,19 @@ not exist, generates an application password, and hands you a ready-made
 command plus a config file — no copying credentials by hand, no base64 in
 your shell history.
 
-The password is shown **once**. Lose it and you generate a new one; there
-is nothing to recover.
+The password is shown **once**: the form posts, the page redirects, and
+the result waits for exactly that one page view (60 seconds at most, for
+the administrator who asked). Reloading never shows it again and never
+creates a second one. Lose it and you generate a new one; there is
+nothing to recover. Password and header stay behind *Show*; *Copy* works
+without revealing them.
+
+While a work session runs, the admin bar shows "MCP session: 2 h 14 min"
+on every screen, front end included, with *Close session now* under it.
+
+The *Activity* tab lists every call, 25 per page, filterable by tool,
+result (saved, dry run, rejected), user and post ID, with times in the
+site's timezone and a *Compare revisions* link for every save.
 
 For development instead of a release ZIP:
 

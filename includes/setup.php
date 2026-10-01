@@ -15,11 +15,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handle the setup form. Returns the generated connection details for the
- * one render that follows, or a WP_Error, or null when nothing was posted.
+ * Handle the setup form. Returns the generated connection details, or a
+ * WP_Error, or null when nothing was posted.
  *
- * The password exists in memory for exactly this request — WordPress
- * stores only a hash, so it can never be shown again.
+ * Called from the admin-post handler (wpmcp_admin_post_setup), never while
+ * a page renders. WordPress stores only a hash of the password, so the
+ * handler keeps the result for one page view and no longer.
  *
  * @return array|\WP_Error|null
  */
@@ -94,30 +95,20 @@ function wpmcp_handle_setup_post() {
 }
 
 /**
- * Render the setup panel: either the form, or the generated connection.
+ * Render the setup form.
  *
- * @param array|\WP_Error|null $result Result of the setup handler.
+ * It posts to admin-post.php, which creates the password and redirects
+ * back here; see wpmcp_admin_post_setup().
  */
-function wpmcp_render_setup_panel( $result ) {
-	if ( is_wp_error( $result ) ) {
-		printf(
-			'<div class="notice notice-error"><p>%s</p></div>',
-			esc_html( $result->get_error_message() )
-		);
-	}
-
-	if ( is_array( $result ) ) {
-		wpmcp_render_connection_result( $result );
-		return;
-	}
-
+function wpmcp_render_setup_panel() {
 	$existing = get_users( array( 'role' => WPMCP_ROLE, 'number' => 1 ) );
 	?>
 	<h2><?php esc_html_e( 'Set up a connection', 'wp-mcp-connector-plus' ); ?></h2>
 	<p class="description">
-		<?php esc_html_e( 'Creates the agent user if needed, generates an application password, and gives you a ready-made command. The password is shown once and cannot be recovered afterwards — generate a new one instead.', 'wp-mcp-connector-plus' ); ?>
+		<?php esc_html_e( 'Creates the agent user if needed, generates an application password, and gives you a ready-made command. The password is shown once and cannot be recovered afterwards; generate a new one instead.', 'wp-mcp-connector-plus' ); ?>
 	</p>
-	<form method="post">
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<input type="hidden" name="action" value="wpmcp_setup" />
 		<?php wp_nonce_field( 'wpmcp_setup', 'wpmcp_setup_nonce' ); ?>
 		<table class="form-table" role="presentation">
 			<tr>
@@ -127,8 +118,8 @@ function wpmcp_render_setup_panel( $result ) {
 				<td>
 					<input type="text" id="wpmcp_login" name="wpmcp_login"
 						value="<?php echo esc_attr( $existing ? $existing[0]->user_login : 'ai-agent' ); ?>"
-						class="regular-text" />
-					<p class="description">
+						class="regular-text" aria-describedby="wpmcp_login_description" />
+					<p class="description" id="wpmcp_login_description">
 						<?php
 						echo $existing
 							? esc_html__( 'This user already exists. A new application password will be added to it.', 'wp-mcp-connector-plus' )
@@ -144,6 +135,41 @@ function wpmcp_render_setup_panel( $result ) {
 }
 
 /**
+ * One read-only field with a Copy button, optionally behind "Show".
+ *
+ * A field holding the password (or the header carrying it) starts hidden
+ * in a <details>: the page is often open on a shared screen or in a
+ * screen recording, and copying works without ever showing it.
+ *
+ * @param string $id     Element ID.
+ * @param string $label  Visible label.
+ * @param string $value  Field content.
+ * @param int    $rows   Height.
+ * @param bool   $secret Hide behind "Show".
+ */
+function wpmcp_render_copy_field( $id, $label, $value, $rows = 2, $secret = false ) {
+	?>
+	<div class="wpmcp-field">
+		<p><label for="<?php echo esc_attr( $id ); ?>"><strong><?php echo esc_html( $label ); ?></strong></label></p>
+		<?php if ( $secret ) : ?>
+			<details class="wpmcp-secret">
+				<summary class="button button-small"><?php esc_html_e( 'Show', 'wp-mcp-connector-plus' ); ?></summary>
+		<?php endif; ?>
+		<textarea readonly id="<?php echo esc_attr( $id ); ?>" rows="<?php echo (int) $rows; ?>" class="large-text code" spellcheck="false"><?php echo esc_textarea( $value ); ?></textarea>
+		<?php if ( $secret ) : ?>
+			</details>
+		<?php endif; ?>
+		<div class="wpmcp-field-actions">
+			<button type="button" class="button wpmcp-copy" data-copy="<?php echo esc_attr( $id ); ?>">
+				<?php esc_html_e( 'Copy', 'wp-mcp-connector-plus' ); ?>
+			</button>
+			<span class="wpmcp-copied" role="status" aria-live="polite"></span>
+		</div>
+	</div>
+	<?php
+}
+
+/**
  * Show the generated credentials as a complete quickstart, once.
  *
  * Deliberately a full recipe rather than fragments: someone who has never
@@ -153,9 +179,9 @@ function wpmcp_render_setup_panel( $result ) {
  * @param array $c Connection details.
  */
 function wpmcp_render_connection_result( array $c ) {
-	$slug   = $c['slug'];
-	$file   = '~/.claude/mcp-' . $slug . '.json';
-	$alias  = 'wp-' . $slug;
+	$slug  = $c['slug'];
+	$file  = '~/.claude/mcp-' . $slug . '.json';
+	$alias = 'wp-' . $slug;
 
 	$config = wp_json_encode(
 		array(
@@ -182,21 +208,16 @@ function wpmcp_render_connection_result( array $c ) {
 	?>
 	<h2><?php esc_html_e( 'Your connection', 'wp-mcp-connector-plus' ); ?></h2>
 	<div class="notice notice-warning inline">
-		<p><strong><?php esc_html_e( 'Copy this now — the password is shown only once and cannot be recovered.', 'wp-mcp-connector-plus' ); ?></strong></p>
+		<p><strong><?php esc_html_e( 'Copy this now: the password is shown only once and cannot be recovered. Reloading this page will not show it again.', 'wp-mcp-connector-plus' ); ?></strong></p>
 	</div>
 
-	<h3><?php esc_html_e( 'Claude Code — recommended setup', 'wp-mcp-connector-plus' ); ?></h3>
+	<h3><?php esc_html_e( 'Claude Code: recommended setup', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
 		<?php esc_html_e( 'Registers this site as a permanent MCP server. It loads alongside your other servers (SEO tools, calendars, etc.) in every Claude Code session. Run this once in a terminal.', 'wp-mcp-connector-plus' ); ?>
 	</p>
 
-	<p><strong><?php esc_html_e( '1. Register the server', 'wp-mcp-connector-plus' ); ?></strong></p>
-	<textarea readonly rows="4" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $add_cmd ); ?></textarea>
-
-	<p><strong><?php esc_html_e( '2. Start working', 'wp-mcp-connector-plus' ); ?></strong></p>
-	<textarea readonly rows="2" style="width:100%;font-family:monospace"
-		onclick="this.select()">claude</textarea>
+	<?php wpmcp_render_copy_field( 'wpmcp-cmd-add', __( '1. Register the server', 'wp-mcp-connector-plus' ), $add_cmd, 4, true ); ?>
+	<?php wpmcp_render_copy_field( 'wpmcp-cmd-start', __( '2. Start working', 'wp-mcp-connector-plus' ), 'claude', 1 ); ?>
 	<p class="description">
 		<?php
 		printf(
@@ -206,32 +227,21 @@ function wpmcp_render_connection_result( array $c ) {
 		);
 		?>
 	</p>
-
-	<p><strong><?php esc_html_e( '3. Try it', 'wp-mcp-connector-plus' ); ?></strong></p>
-	<p class="description"><?php esc_html_e( 'Read-only, nothing can change:', 'wp-mcp-connector-plus' ); ?></p>
-	<textarea readonly rows="2" style="width:100%;font-family:monospace" onclick="this.select()"><?php
-		esc_html_e( 'Describe this website: which pages exist, and how is the front page built?', 'wp-mcp-connector-plus' );
-	?></textarea>
+	<p class="description"><?php esc_html_e( 'A first prompt that only reads, nothing can change:', 'wp-mcp-connector-plus' ); ?></p>
+	<?php wpmcp_render_copy_field( 'wpmcp-cmd-try', __( '3. Try it', 'wp-mcp-connector-plus' ), __( 'Describe this website: which pages exist, and how is the front page built?', 'wp-mcp-connector-plus' ), 2 ); ?>
 
 	<h3><?php esc_html_e( 'Alternative: isolated config file', 'wp-mcp-connector-plus' ); ?></h3>
 	<p class="description">
 		<?php esc_html_e( 'Keeps credentials in a separate file and starts a session with only this site connected. Other MCP servers will not be available.', 'wp-mcp-connector-plus' ); ?>
 	</p>
-	<textarea readonly rows="14" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $write_file ); ?></textarea>
-	<textarea readonly rows="3" style="width:100%;font-family:monospace"
-		onclick="this.select()"><?php echo esc_textarea( $add_alias ); ?></textarea>
+	<?php wpmcp_render_copy_field( 'wpmcp-cmd-file', __( 'Write the config file', 'wp-mcp-connector-plus' ), $write_file, 14, true ); ?>
+	<?php wpmcp_render_copy_field( 'wpmcp-cmd-alias', __( 'Add a shell alias', 'wp-mcp-connector-plus' ), $add_alias, 3 ); ?>
 
 	<h3><?php esc_html_e( 'Other clients', 'wp-mcp-connector-plus' ); ?></h3>
-	<p class="description">
-		<?php
-		printf(
-			/* translators: 1: endpoint URL, 2: authorization header value */
-			esc_html__( 'Endpoint %1$s with header %2$s.', 'wp-mcp-connector-plus' ),
-			'<code>' . esc_html( $c['endpoint'] ) . '</code>',
-			'<code>Authorization: ' . esc_html( $c['header'] ) . '</code>'
-		);
-		?>
-	</p>
+	<p class="description"><?php esc_html_e( 'Any MCP client that speaks HTTP: the endpoint, and the header to send with every request.', 'wp-mcp-connector-plus' ); ?></p>
+	<?php wpmcp_render_copy_field( 'wpmcp-endpoint', __( 'Endpoint', 'wp-mcp-connector-plus' ), $c['endpoint'], 1 ); ?>
+	<?php wpmcp_render_copy_field( 'wpmcp-user', __( 'User', 'wp-mcp-connector-plus' ), $c['login'], 1 ); ?>
+	<?php wpmcp_render_copy_field( 'wpmcp-password', __( 'Application password', 'wp-mcp-connector-plus' ), $c['password'], 1, true ); ?>
+	<?php wpmcp_render_copy_field( 'wpmcp-header', __( 'Authorization header', 'wp-mcp-connector-plus' ), 'Authorization: ' . $c['header'], 2, true ); ?>
 	<?php
 }
