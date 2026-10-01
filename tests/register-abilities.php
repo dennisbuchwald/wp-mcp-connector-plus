@@ -215,6 +215,51 @@ check( false === wpmcp_live_edit_enabled(), 'Entwurfsstufe erlaubt kein Live-Edi
 $GLOBALS['options']['wpmcp_access_level'] = 'full';
 check( true === wpmcp_live_edit_enabled(), 'Vollstufe erlaubt Live-Edit' );
 
+echo "\n\033[1mWas nicht erlaubt ist, existiert nicht\033[0m\n";
+
+// wp-abilities/v1 runs whatever is registered, for anyone holding the
+// marker capability. Filtering only the MCP list left the write abilities
+// callable there at the read level.
+function registered_at( $level, $session = false ) {
+	$GLOBALS['options']['wpmcp_access_level'] = $level;
+	if ( $session ) {
+		$GLOBALS['options']['wpmcp_work_session_until'] = time() + 600;
+	} else {
+		unset( $GLOBALS['options']['wpmcp_work_session_until'] );
+	}
+	$GLOBALS['abilities'] = array();
+	wpmcp_register_abilities();
+	$names = array_keys( $GLOBALS['abilities'] );
+	unset( $GLOBALS['options']['wpmcp_work_session_until'] );
+	return $names;
+}
+
+$all_write = array( 'wpmcp/content-write', 'wpmcp/content-batch', 'wpmcp/content-create', 'wpmcp/content-duplicate', 'wpmcp/content-restore', 'wpmcp/media-update', 'wpmcp/media-upload' );
+
+$names = registered_at( 'read' );
+check(
+	! array_intersect( $all_write, $names ),
+	'Lesestufe: keine Schreib-Ability ist registriert',
+	'registriert: ' . implode( ', ', array_intersect( $all_write, $names ) )
+);
+check( in_array( 'wpmcp/content-read', $names, true ), 'die Lese-Abilities schon' );
+
+foreach ( array( 'read', 'draft', 'full' ) as $level ) {
+	$GLOBALS['options']['wpmcp_access_level'] = $level;
+	$expected_names = wpmcp_ability_names();
+	$names          = registered_at( $level );
+	sort( $names );
+	sort( $expected_names );
+	check( $expected_names === $names, "Stufe '{$level}': registriert ist genau, was die Stufe anbietet" );
+}
+
+check( ! in_array( 'wpmcp/media-upload', registered_at( 'full' ), true ), 'der Upload ohne Sitzung auch auf der Vollstufe nicht' );
+check( in_array( 'wpmcp/media-upload', registered_at( 'draft', true ), true ), 'in einer Sitzung schon' );
+
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+$GLOBALS['abilities']                     = array();
+wpmcp_register_abilities();
+
 echo "\n\033[1mHarte Grenzen (auf jeder Stufe)\033[0m\n";
 
 $forbidden = array( 'publish_posts', 'publish_pages', 'delete_posts', 'delete_pages', 'upload_files', 'manage_options' );

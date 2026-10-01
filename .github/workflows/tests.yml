@@ -29,10 +29,11 @@ jobs:
 
       # mbstring: the kses stub decodes numeric entities with mb_chr.
       # gd: media-upload.php builds real JPEG/WebP bytes to upload.
+      # pdo_sqlite: content-access.php runs the content-list SQL for real.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mbstring, gd
+          extensions: mbstring, gd, pdo_sqlite
           coverage: none
           ini-values: error_reporting=-1, display_errors=1
 

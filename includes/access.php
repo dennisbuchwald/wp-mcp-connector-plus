@@ -210,15 +210,18 @@ function wpmcp_never_offered_post_types() {
 /**
  * What a work session adds to the scope on its own.
  *
- * Everything the site has, minus two kinds: what never holds a block tree,
- * and what holds other people's data. A session is a window on this site's
- * own building blocks — headers, templates, field groups — so that an hour
- * of work does not begin with thirty ticks.
+ * The site's own building blocks: theme elements (headers, footers,
+ * hooks), templates, template parts and navigation menus, so that an hour
+ * of work does not begin with ticking boxes. Public post types are in
+ * scope anyway and listed for completeness.
  *
- * Orders, subscriptions and form entries are not that. They are somebody
- * else's name and address, and no length of window turns reading them into
- * a side effect of working on a page. Those stay a tick somebody makes
- * deliberately, and a tick already made still counts: it was a decision.
+ * An allowlist, not "everything minus a few". A non-public post type is
+ * private for a reason the connector cannot see, and guessing it from the
+ * name only works for the names someone thought of: orders, subscriptions
+ * and form entries are somebody else's name and address, and so is
+ * whatever the next plugin stores under a name nobody has heard of. Those
+ * stay a tick somebody makes deliberately, and a tick already made still
+ * counts: it was a decision.
  *
  * Computed without wpmcp_allowed_post_types(), which would call back into
  * the function this feeds.
@@ -227,6 +230,7 @@ function wpmcp_never_offered_post_types() {
  */
 function wpmcp_session_post_types() {
 	$never = wpmcp_never_offered_post_types();
+	$known = wpmcp_session_building_block_types();
 	$types = array();
 
 	foreach ( get_post_types( array(), 'objects' ) as $type ) {
@@ -236,10 +240,33 @@ function wpmcp_session_post_types() {
 		if ( wpmcp_post_type_holds_personal_data( $type->name ) ) {
 			continue;
 		}
+		if ( empty( $type->public ) && ! in_array( $type->name, $known, true ) ) {
+			continue;
+		}
 		$types[] = $type->name;
 	}
 
 	return $types;
+}
+
+/**
+ * Non-public post types a work session opens on its own.
+ *
+ * @return string[]
+ */
+function wpmcp_session_building_block_types() {
+	$types = array( 'gp_elements', 'wp_template', 'wp_template_part', 'wp_navigation' );
+
+	/**
+	 * Non-public post types a work session brings into scope by itself.
+	 *
+	 * For a kit's own building blocks, the kind of post type where a
+	 * change lands on many pages at once and holds nobody's personal data.
+	 * Post types matching a personal-data pattern stay out regardless.
+	 *
+	 * @param string[] $types Post type slugs.
+	 */
+	return array_values( array_filter( (array) apply_filters( 'wpmcp_session_post_types', $types ), 'is_string' ) );
 }
 
 /**
@@ -324,10 +351,10 @@ function wpmcp_dynamic_data_allowed() {
  * a thing anyone has to remember: it is a timestamp. Nothing here can be
  * left on by accident, only by choosing a longer window.
  *
- * What it does not touch: the post types, because which content is in
- * scope is not a risk window but a decision about the site — and on a shop
- * that list contains other people's orders. And publishing, which no
- * setting in this plugin has ever been able to reach.
+ * What it does not touch: post types beyond the site's own building
+ * blocks, because which content is in scope is not a risk window but a
+ * decision about the site, and on a shop that list contains other people's
+ * orders.
  *
  * @return int Unix timestamp the session ends at, 0 when none is running.
  */

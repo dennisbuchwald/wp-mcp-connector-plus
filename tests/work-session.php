@@ -34,7 +34,7 @@ function get_role( $r ) { return null; }
 function is_multisite() { return false; }
 function post_type_exists( $t ) { return true; }
 function get_post_types( $a = array(), $o = 'names' ) {
-	$all = array( 'gp_elements', 'wp_template', 'acf-field-group', 'product', 'shop_order', 'shop_order_refund', 'wc_subscription', 'revision', 'attachment' );
+	$all = array( 'gp_elements', 'wp_template', 'acf-field-group', 'crm_kontakt', 'product', 'shop_order', 'shop_order_refund', 'wc_subscription', 'revision', 'attachment' );
 	if ( 'names' === $o ) { return $all; }
 	$out = array();
 	foreach ( $all as $n ) { $out[ $n ] = (object) array( 'name' => $n, 'public' => in_array( $n, array( 'product' ), true ), 'labels' => (object) array( 'name' => $n ) ); }
@@ -144,7 +144,18 @@ $in_scope = wpmcp_extra_post_types();
 
 check( in_array( 'gp_elements', $in_scope, true ), 'sie oeffnet die Bausteine der Seite' );
 check( in_array( 'wp_template', $in_scope, true ), 'auch die Templates' );
-check( in_array( 'acf-field-group', $in_scope, true ), 'und die Feldgruppen' );
+check( in_array( 'product', $in_scope, true ), 'und was ohnehin oeffentlich ist' );
+
+// An allowlist since 0.19: a non-public post type is private for a reason
+// the connector cannot see, and a name pattern only catches the names
+// someone thought of.
+check(
+	! in_array( 'acf-field-group', $in_scope, true ),
+	'aber keine anderen nicht-oeffentlichen Typen wie die Feldgruppen',
+	'bis 0.18 oeffnete eine Sitzung alles ausser einer Namensliste'
+);
+check( ! in_array( 'crm_kontakt', $in_scope, true ), 'auch keinen, dessen Name nach nichts klingt' );
+
 
 check( ! in_array( 'shop_order', $in_scope, true ), 'aber keine Bestellungen', 'kein Zeitfenster macht fremde Adressen zum Nebeneffekt' );
 check( ! in_array( 'shop_order_refund', $in_scope, true ), 'keine Erstattungen' );

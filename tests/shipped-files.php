@@ -107,7 +107,7 @@ echo "\n\033[1mWas jede Sitzung im Kontext traegt\033[0m\n";
 // "no repetition". This budget is here so twelve more releases of
 // appending do not quietly double it again.
 $src = file_get_contents( $root . '/includes/abilities.php' );
-preg_match_all( "/wp_register_ability\(\s*'([^']+)'/", $src, $names );
+preg_match_all( "/(?:wpmcp|wp)_register_ability\(\s*'([^']+)'/", $src, $names );
 
 $total   = 0;
 $largest = array( 'name' => '', 'len' => 0 );

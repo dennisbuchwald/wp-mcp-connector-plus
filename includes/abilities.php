@@ -25,7 +25,29 @@ function wpmcp_can() {
 }
 
 /**
- * Register all abilities.
+ * Register one ability, if the access level offers it.
+ *
+ * The MCP server only lists what wpmcp_ability_names() returns, but the
+ * Abilities API is reachable on its own: wp-abilities/v1 runs anything
+ * registered for anyone holding the marker capability. Registering every
+ * ability and filtering only the MCP list left the write abilities
+ * callable at the read level. So the rule this plugin states (what is not
+ * permitted does not exist) is kept here, at the one place every ability
+ * passes.
+ *
+ * @param string $name Ability name.
+ * @param array  $args Registration arguments.
+ * @return bool Whether it was registered.
+ */
+function wpmcp_register_ability( $name, array $args ) {
+	if ( ! in_array( $name, wpmcp_ability_names(), true ) ) {
+		return false;
+	}
+	return (bool) wp_register_ability( $name, $args );
+}
+
+/**
+ * Register the abilities the access level offers.
  */
 function wpmcp_register_abilities() {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
@@ -41,7 +63,7 @@ function wpmcp_register_abilities() {
 		'show_in_rest' => true,
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/site-info',
 		array(
 			'label'       => 'Site-Info',
@@ -61,7 +83,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/blocks-catalog',
 		array(
 			'label'       => 'Block-Katalog',
@@ -99,7 +121,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/blocks-describe',
 		array(
 			'label'       => 'Block-Details',
@@ -143,7 +165,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-list',
 		array(
 			'label'       => 'Inhalte auflisten',
@@ -166,7 +188,7 @@ function wpmcp_register_abilities() {
 					),
 					'status'     => array(
 						'type'        => 'string',
-						'description' => 'Post status filter, e.g. "publish" or "draft".',
+						'description' => 'Post status filter: publish, draft, pending, future or private, several separated by commas.',
 					),
 					'per_page'   => array(
 						'type'        => 'integer',
@@ -190,7 +212,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-read',
 		array(
 			'label'       => 'Seite als Blockbaum lesen',
@@ -258,7 +280,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-write',
 		array(
 			'label'       => 'Blockbaum schreiben',
@@ -330,7 +352,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-duplicate',
 		array(
 			'label'       => 'Seite duplizieren',
@@ -369,7 +391,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-preview',
 		array(
 			'label'       => 'Vorschau',
@@ -407,7 +429,7 @@ function wpmcp_register_abilities() {
 			'meta' => $read_only,
 		)
 	);
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-revisions',
 		array(
 			'label'       => 'Revisionen',
@@ -441,7 +463,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-restore',
 		array(
 			'label'       => 'Revision wiederherstellen',
@@ -485,7 +507,7 @@ function wpmcp_register_abilities() {
 			),
 		)
 	);
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-search',
 		array(
 			'label'       => 'Inhalte durchsuchen',
@@ -535,7 +557,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-fetch-live',
 		array(
 			'label'       => 'Ausgelieferte Seite abrufen',
@@ -585,7 +607,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-create',
 		array(
 			'label'       => 'Seite anlegen',
@@ -642,7 +664,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/media-list',
 		array(
 			'label'       => 'Mediathek durchsehen',
@@ -685,7 +707,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/media-read',
 		array(
 			'label'       => 'Mediendatei lesen',
@@ -710,7 +732,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/media-update',
 		array(
 			'label'       => 'Mediendatei beschriften',
@@ -747,7 +769,7 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	wp_register_ability(
+	wpmcp_register_ability(
 		'wpmcp/content-batch',
 		array(
 			'label'       => 'Mehrere Seiten schreiben',
@@ -776,12 +798,8 @@ function wpmcp_register_abilities() {
 		)
 	);
 
-	// Registered only while a work session is open.
-	if ( ! function_exists( 'wpmcp_work_session_active' ) || ! wpmcp_work_session_active() ) {
-		return;
-	}
-
-	wp_register_ability(
+	// Offered by wpmcp_ability_names() only while a work session is open.
+	wpmcp_register_ability(
 		'wpmcp/media-upload',
 		array(
 			'label'       => 'Bild hochladen',

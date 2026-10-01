@@ -129,10 +129,31 @@ function wpmcp_get_readable_post( $post_id ) {
 			)
 		);
 	}
-	if ( ! current_user_can( 'edit_post', $post->ID ) && 'publish' !== $post->post_status ) {
+	if ( ! wpmcp_post_is_public( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( '' !== (string) ( $post->post_password ?? '' ) ) {
+			return new \WP_Error(
+				'wpmcp_password_protected',
+				sprintf( 'Post %d is password protected. Its content is not public, so reading it needs the right to edit it.', $post->ID )
+			);
+		}
 		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to read post %d.', $post->ID ) );
 	}
 	return $post;
+}
+
+/**
+ * Can anyone on the internet read this post?
+ *
+ * Published and without a password. A password-protected page is
+ * published in WordPress's sense, but its content is exactly what the
+ * site owner decided not to show everybody, so it counts as non-public
+ * here: reading it needs the right to edit it, like a draft.
+ *
+ * @param \WP_Post|object $post Post.
+ * @return bool
+ */
+function wpmcp_post_is_public( $post ) {
+	return 'publish' === $post->post_status && '' === (string) ( $post->post_password ?? '' );
 }
 
 /**
@@ -184,19 +205,168 @@ function wpmcp_get_writable_post( $post_id ) {
 }
 
 /**
+ * Statuses content-list can be asked for.
+ *
+ * Trash, auto-drafts, revisions ("inherit") and "any" are not content
+ * anybody is working on, and "any" would also bypass the per-type check
+ * below.
+ *
+ * @return string[]
+ */
+function wpmcp_listable_statuses() {
+	return array( 'publish', 'draft', 'pending', 'future', 'private' );
+}
+
+/**
+ * Which statuses of a post type the current user may see in a list.
+ *
+ * The same line wpmcp_get_readable_post() draws for one post, drawn for a
+ * whole type so that it can go into the query: what is filtered out after
+ * paging leaves pages short and totals wrong. Published content is public;
+ * anything else is readable only with the right to edit it, which for
+ * another user's post means edit_others_*.
+ *
+ * @param string $type Post type.
+ * @return array{statuses: string[], passwords: bool}
+ */
+function wpmcp_list_visibility( $type ) {
+	$object = get_post_type_object( $type );
+	$cap    = $object && isset( $object->cap ) ? $object->cap : null;
+
+	$can = function ( $name ) use ( $cap ) {
+		return $cap && isset( $cap->{$name} ) && current_user_can( $cap->{$name} );
+	};
+
+	$others = $can( 'edit_posts' ) && $can( 'edit_others_posts' );
+
+	$statuses = array( 'publish' );
+	if ( $others ) {
+		$statuses = array_merge( $statuses, array( 'draft', 'pending', 'future' ) );
+		if ( $can( 'edit_private_posts' ) ) {
+			$statuses[] = 'private';
+		}
+	}
+
+	return array(
+		'statuses'  => $statuses,
+		// A password-protected post is published, and editing someone
+		// else's published post needs both of these.
+		'passwords' => $others && $can( 'edit_published_posts' ),
+	);
+}
+
+/**
+ * The SQL that limits a list to what the current user may read.
+ *
+ * One clause per post type, because what is visible differs per type.
+ *
+ * @param array<string, array{statuses: string[], passwords: bool}> $visibility Per type.
+ * @param string                                                     $block      Block name, or ''.
+ * @return string Starts with " AND ".
+ */
+function wpmcp_list_where( array $visibility, $block = '' ) {
+	global $wpdb;
+
+	$per_type = array();
+	foreach ( $visibility as $type => $rule ) {
+		if ( empty( $rule['statuses'] ) ) {
+			continue;
+		}
+		$clause = $wpdb->prepare( "{$wpdb->posts}.post_type = %s", $type )
+			. " AND {$wpdb->posts}.post_status IN ('" . implode( "','", array_map( 'esc_sql', $rule['statuses'] ) ) . "')";
+		if ( empty( $rule['passwords'] ) ) {
+			$clause .= " AND ( {$wpdb->posts}.post_status <> 'publish' OR {$wpdb->posts}.post_password = '' )";
+		}
+		$per_type[] = '( ' . $clause . ' )';
+	}
+
+	$where = empty( $per_type ) ? ' AND 1 = 0' : ' AND ( ' . implode( ' OR ', $per_type ) . ' )';
+
+	if ( '' !== $block ) {
+		// WordPress writes core blocks without their namespace
+		// (<!-- wp:paragraph -->), everything else with it, and always a
+		// space after the name, also before "/-->". LIKE searches the
+		// whole content, so nested blocks are found as well. has_block()
+		// makes the same string test afterwards.
+		$names = array( $block );
+		if ( 0 === strpos( $block, 'core/' ) ) {
+			$names[] = substr( $block, 5 );
+		}
+		$likes = array();
+		foreach ( $names as $name ) {
+			$likes[] = $wpdb->prepare( "{$wpdb->posts}.post_content LIKE %s", '%' . $wpdb->esc_like( '<!-- wp:' . $name . ' ' ) . '%' );
+		}
+		$where .= ' AND ( ' . implode( ' OR ', $likes ) . ' )';
+	}
+
+	return $where;
+}
+
+/**
  * List content with light metadata.
  *
+ * Only what the agent may read: post types within the connector's scope,
+ * statuses it may see per type, and password-protected posts only where
+ * it could edit them. All of that goes into the query, so a page holds
+ * per_page items and total counts what can actually be listed.
+ *
  * @param array $args { post_type, status, search, uses_block, per_page, page }.
- * @return array
+ * @return array|\WP_Error
  */
 function wpmcp_list_content( array $args ) {
 	$per_page = min( 100, max( 1, (int) ( $args['per_page'] ?? 20 ) ) );
+	$page     = max( 1, (int) ( $args['page'] ?? 1 ) );
+	$allowed  = wpmcp_allowed_post_types();
+
+	$types = $allowed;
+	if ( ! empty( $args['post_type'] ) ) {
+		$asked = array_filter( array_map( 'trim', is_array( $args['post_type'] ) ? $args['post_type'] : explode( ',', (string) $args['post_type'] ) ) );
+		$types = array_values( array_intersect( $asked, $allowed ) );
+		if ( empty( $types ) ) {
+			return new \WP_Error(
+				'wpmcp_forbidden_type',
+				sprintf(
+					'Post type "%s" is not exposed to the connector. Listable here: %s.',
+					implode( ', ', $asked ),
+					implode( ', ', $allowed )
+				)
+			);
+		}
+	}
+
+	$statuses = wpmcp_listable_statuses();
+	if ( ! empty( $args['status'] ) ) {
+		$asked    = array_filter( array_map( 'trim', is_array( $args['status'] ) ? $args['status'] : explode( ',', (string) $args['status'] ) ) );
+		$statuses = array_values( array_intersect( $asked, wpmcp_listable_statuses() ) );
+		if ( count( $statuses ) !== count( $asked ) ) {
+			return new \WP_Error(
+				'wpmcp_bad_status',
+				sprintf(
+					'Status "%s" cannot be listed. Use one of: %s.',
+					implode( ', ', array_diff( $asked, wpmcp_listable_statuses() ) ),
+					implode( ', ', wpmcp_listable_statuses() )
+				)
+			);
+		}
+	}
+
+	$visibility = array();
+	foreach ( $types as $type ) {
+		$rule               = wpmcp_list_visibility( $type );
+		$rule['statuses']   = array_values( array_intersect( $rule['statuses'], $statuses ) );
+		$visibility[ $type ] = $rule;
+	}
+
+	$block = trim( (string) ( $args['uses_block'] ?? '' ) );
+	if ( '' !== $block && false === strpos( $block, '/' ) ) {
+		$block = 'core/' . $block;
+	}
 
 	$query_args = array(
-		'post_type'      => $args['post_type'] ?? wpmcp_allowed_post_types(),
-		'post_status'    => $args['status'] ?? array( 'publish', 'draft', 'pending', 'future', 'private' ),
+		'post_type'      => $types,
+		'post_status'    => $statuses,
 		'posts_per_page' => $per_page,
-		'paged'          => max( 1, (int) ( $args['page'] ?? 1 ) ),
+		'paged'          => $page,
 		'orderby'        => 'modified',
 		'order'          => 'DESC',
 	);
@@ -205,11 +375,30 @@ function wpmcp_list_content( array $args ) {
 		$query_args['s'] = (string) $args['search'];
 	}
 
-	$query = new \WP_Query( $query_args );
+	$where = wpmcp_list_where( $visibility, $block );
+	$query = new \WP_Query();
+
+	// Scoped to this one query object, so nothing else on the request is
+	// narrowed by it, and removed again whatever happens.
+	$narrow = function ( $sql, $q ) use ( $query, $where ) {
+		return $q === $query ? $sql . $where : $sql;
+	};
+	add_filter( 'posts_where', $narrow, 10, 2 );
+	try {
+		$query->query( $query_args );
+	} finally {
+		remove_filter( 'posts_where', $narrow, 10 );
+	}
+
 	$items = array();
 
 	foreach ( $query->posts as $post ) {
-		if ( ! empty( $args['uses_block'] ) && ! has_block( (string) $args['uses_block'], $post ) ) {
+		// The query already drew the line; this is the same check a single
+		// read makes, so a list can never show more than a read would.
+		if ( is_wp_error( wpmcp_get_readable_post( $post->ID ) ) ) {
+			continue;
+		}
+		if ( '' !== $block && ! has_block( $block, $post ) ) {
 			continue;
 		}
 
@@ -230,7 +419,7 @@ function wpmcp_list_content( array $args ) {
 		'items' => $items,
 		'total' => (int) $query->found_posts,
 		'pages' => (int) $query->max_num_pages,
-		'page'  => max( 1, (int) ( $args['page'] ?? 1 ) ),
+		'page'  => $page,
 	);
 }
 

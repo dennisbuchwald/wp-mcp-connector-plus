@@ -250,7 +250,7 @@ agent never sees them.
 | `wpmcp/site-info` | Versions, post types, design tokens from `theme.json`. The first call of any session, so nothing has to be guessed. |
 | `wpmcp/blocks-catalog` | The site's block kit: every block with its role (container / child / standalone), purpose, nesting rules and main variants — plus your editorial playbook if you ship one. |
 | `wpmcp/blocks-describe` | Attribute schema for named blocks, grouped into content / layout / behavior / legacy, with deprecated values flagged. Compact by default; `detail: "full"` adds the prose and an example. |
-| `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. |
+| `wpmcp/content-list` | Find pages and posts, optionally filtered by which block they use. Lists only what the agent may read: drafts with the right to edit them, password-protected pages likewise, never trash or post types outside the connector's scope. |
 | `wpmcp/content-read` | A page as a block tree: `outline` (cheap architecture view), `subtree` (one or several sections, each reporting its real path), or `full`. |
 | `wpmcp/content-write` | *Write levels only.* Patch operations by block path (`insert`, `replace`, `remove`, `set_attrs`, `patch_html`, `move`), a full tree replacement, or SEO meta fields — alone or together. Dry run by default. |
 | `wpmcp/content-create` | *Write levels only.* A new page with its title, slug, parent and status — and its content in the same call. A draft, unless published during a work session. The dry run validates the tree and meta exactly as the real call will. |
@@ -404,8 +404,9 @@ many pieces of content are affected.
 **A work session** opens everything for a set window — one, four or eight
 hours — and closes itself. While it runs, published pages are editable,
 synced patterns are writable and dynamic data is allowed; when it ends,
-the saved settings are what the site falls back to, and the role's
-capabilities are pulled back with them.
+the saved settings are what the site falls back to, and the agent's
+capabilities with them, in the same second: they are worked out from the
+timestamp on every check, never stored.
 
 It exists because the wide settings are the ones people switch on for an
 afternoon and never switch off, which leaves a site permanently on the
@@ -413,12 +414,15 @@ widest setting — exactly what having settings was meant to prevent. The
 closing is a timestamp, not something anyone has to remember.
 
 A session also brings the site's own building blocks into scope —
-headers, templates, field groups, whatever else is registered — so an hour
-of work does not begin with thirty ticks. **Except** the post types
-holding other people's data: orders, subscriptions, form entries,
-bookings. No length of window turns reading a customer's address into a
-side effect of editing a page, so those stay a tick somebody makes
-deliberately. A tick already made survives the window either way.
+theme elements (`gp_elements`), templates, template parts and navigation
+menus — so an hour of work does not begin with ticking boxes. It is an
+allowlist: any other non-public post type, and above all the ones holding
+other people's data (orders, subscriptions, form entries, bookings), is
+private for a reason the connector cannot see. No length of window turns
+reading a customer's address into a side effect of editing a page, so
+those stay a tick somebody makes deliberately. A tick already made
+survives the window either way, and a kit can name further building-block
+types with the `wpmcp_session_post_types` filter.
 
 **Publishing and uploading images happen only inside a session.** Opening
 one is the human deciding that what gets built in it may go live — once,
