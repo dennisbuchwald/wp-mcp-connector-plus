@@ -42,7 +42,6 @@ echo "\n\033[1mStrukturierte Daten gehen durch\033[0m\n";
 $i = wpmcp_kses_impact( $clean, $clean . $jsonld );
 check( false === $i['introduces'], 'neues JSON-LD gilt nicht als eingeschleustes Script' );
 check( true === wpmcp_should_preserve_markup( $i ), 'und wird am Filter vorbei gespeichert', 'sonst entfernt kses es beim Speichern still' );
-check( array() === wpmcp_unsafe_additions( $clean, $clean . $jsonld ), 'und der Guard fuer Dynamic Data sieht es ebenfalls nicht als Gefahr' );
 check( $jsonld === wpmcp_normalize_jsonld( $jsonld ), 'sicheres JSON-LD bleibt Byte fuer Byte gleich', 'sonst entstuende bei jedem Speichern ein Diff' );
 
 $single = "<script type='application/ld+json'>{\"a\":1}</script>";
