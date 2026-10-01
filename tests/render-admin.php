@@ -172,7 +172,7 @@ function wpmcp_app_passwords_available_before( $set = null ) {
 const WPMCP_ROLE = 'wpmcp_ai_editor';
 
 class StubWpdb {
-	public function get_results( $q ) { return array(); }
+	public function get_results( $q ) { return $GLOBALS['stub']['log'] ?? array(); }
 }
 $GLOBALS['wpdb'] = new StubWpdb();
 
@@ -327,6 +327,23 @@ expect_contains( $html, 'claude mcp add --transport http -s user', 'empfiehlt cl
 expect_not_contains( $html, 'strict-mcp-config', 'kein isolierter Start, damit andere MCPs verfuegbar bleiben' );
 expect_contains( $html, 'mcpServers', 'gibt die JSON-Konfiguration als Alternative aus' );
 expect_contains( $html, 'shown only once', 'warnt, dass das Passwort einmalig ist' );
+
+echo "\n\033[1mProtokoll\033[0m\n";
+
+// Since 0.19 a real write the checks refused is logged as "rejected",
+// no longer as a dry run.
+$html = render_case(
+	'mit einem abgelehnten Schreibvorgang im Protokoll',
+	function () {
+		$GLOBALS['stub']['log'] = array(
+			(object) array( 'created_at' => '2026-10-01 12:00:00', 'ability' => 'wpmcp/content-write', 'post_id' => 12, 'operation' => 'rejected', 'dry_run' => 0, 'summary' => 'Rejected (tree): 1 validation error(s).', 'revision_id' => 0 ),
+			(object) array( 'created_at' => '2026-10-01 12:01:00', 'ability' => 'wpmcp/content-write', 'post_id' => 12, 'operation' => 'tree', 'dry_run' => 1, 'summary' => 'Dry run OK (+1 blocks).', 'revision_id' => 0 ),
+		);
+	}
+);
+expect_contains( preg_replace( '/\s+/', ' ', $html ), '<td> rejected </td>', 'zeigt "rejected" als eigene Art' );
+expect_contains( $html, 'dry run', 'und einen Probelauf als Probelauf' );
+$GLOBALS['stub']['log'] = array();
 
 echo "\n";
 if ( 0 === $fail ) {

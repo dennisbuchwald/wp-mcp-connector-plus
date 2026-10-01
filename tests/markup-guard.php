@@ -55,6 +55,9 @@ function wp_slash( $v ) { return $v; }
 function wp_get_post_revisions( $id, $args = array() ) { return array(); }
 function get_permalink( $post ) { return 'https://example.test/?p=' . ( is_object( $post ) ? $post->ID : (int) $post ); }
 function wp_get_post_revision( $id ) { return $GLOBALS['revisions'][ (int) $id ] ?? null; }
+function get_userdata( $id ) { return (object) array( 'ID' => (int) $id ); }
+// User 9 is the agent (see get_current_user_id), everyone else a person.
+function wpmcp_is_ai_user( $user ) { return 9 === ( is_object( $user ) ? (int) $user->ID : (int) $user ); }
 function wpmcp_pattern_access() { return 'read'; }
 function wpmcp_extra_post_types() { return array(); }
 function wpmcp_work_session_active() { return false; }
@@ -373,9 +376,10 @@ if ( ! function_exists( 'wpmcp_without_kses' ) ) {
 
 echo "\n\033[1mWiederherstellen einer Revision\033[0m\n";
 
-// A revision is a state the post already held, so its blocks are known.
+// A revision a person saved is a state the post already held, so its
+// blocks are known. (Revisions the agent saved are not: tests/restore-and-log.php.)
 $GLOBALS['revisions'] = array(
-	501 => (object) array( 'ID' => 501, 'post_parent' => 40, 'post_content' => $para . $embed, 'post_modified_gmt' => '2026-09-01 10:00:00' ),
+	501 => (object) array( 'ID' => 501, 'post_parent' => 40, 'post_author' => 3, 'post_content' => $para . $embed, 'post_modified_gmt' => '2026-09-01 10:00:00' ),
 );
 page( 40, $para );
 kses_on();

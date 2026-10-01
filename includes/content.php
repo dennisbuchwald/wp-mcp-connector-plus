@@ -215,6 +215,142 @@ function wpmcp_get_writable_post( $post_id ) {
 }
 
 /**
+ * May the connector write this kind of target at all?
+ *
+ * The questions that depend on what a post is rather than who asks:
+ * a synced pattern needs pattern editing switched on, and an element
+ * that runs its content as PHP is never written. One function for every
+ * path that changes stored content (write, restore, create, duplicate),
+ * because the restore had grown up without them and put back revisions
+ * where a write was refused.
+ *
+ * Works on a stand-in object too (ID 0 and a post_type), for content
+ * that does not exist yet.
+ *
+ * @param \WP_Post|object $post Post, or the post about to be created.
+ * @return true|\WP_Error
+ */
+function wpmcp_assert_writable_target( $post ) {
+	// Synced patterns need their own permission, and their own warning.
+	if ( 'wp_block' === $post->post_type && 'write' !== wpmcp_pattern_access() ) {
+		return new \WP_Error(
+			'wpmcp_pattern_readonly',
+			$post->ID
+				? sprintf(
+					'Post %d is a synced pattern, and pattern editing is switched off for this site. A pattern change would apply to every page embedding it.',
+					$post->ID
+				)
+				: 'Pattern editing is switched off for this site, so no synced pattern can be written or created.'
+		);
+	}
+
+	if ( $post->ID && wpmcp_runs_code( $post ) ) {
+		return new \WP_Error(
+			'wpmcp_runs_code',
+			sprintf(
+				'Post %d runs its content as PHP ("Execute PHP" is switched on for this element). Writing it would mean writing code onto the server, so it is not writable through the connector. Edit it in the editor.',
+				$post->ID
+			)
+		);
+	}
+
+	return true;
+}
+
+/**
+ * Run a save and catch the revision it stores, if it stores one.
+ *
+ * WordPress skips the revision when nothing it tracks changed, a status
+ * or slug change for instance. Asking for the newest revision afterwards
+ * then answered with an older one, which named a state from before this
+ * save as its undo. The action fires inside the save, for exactly the
+ * revision this save created.
+ *
+ * @param int      $post_id Post being saved.
+ * @param callable $save    The save.
+ * @return array{0: mixed, 1: int} What the save returned, and the revision ID or 0.
+ */
+function wpmcp_save_capturing_revision( $post_id, callable $save ) {
+	$captured = 0;
+	$listener = function ( $revision_id ) use ( $post_id, &$captured ) {
+		$revision = wp_get_post_revision( (int) $revision_id );
+		if ( $revision && (int) $revision->post_parent === (int) $post_id ) {
+			$captured = (int) $revision_id;
+		}
+	};
+
+	add_action( '_wp_put_post_revision', $listener );
+	try {
+		$result = $save();
+	} finally {
+		remove_action( '_wp_put_post_revision', $listener );
+	}
+
+	return array( $result, $captured );
+}
+
+/**
+ * Everything a save owes its caller once the database is right.
+ *
+ * The fresh modified stamp for the next write, and the caches: the post's
+ * own, and for a synced pattern those of every page embedding it, whose
+ * cached copies still show the old version. Shared by write and restore,
+ * which used to end differently: the restore cleared nothing.
+ *
+ * @param \WP_Post $post     Post that was saved.
+ * @param array    $response Response, extended in place.
+ * @return \WP_Post|null The post as stored now.
+ */
+function wpmcp_after_save( $post, array &$response ) {
+	// The stamp for the next write on this page. Without it a sequence of
+	// writes needs a read between every pair, purely to fetch this one
+	// value, and dropping expected_modified to avoid that throws away the
+	// protection it exists for.
+	$fresh = get_post( $post->ID );
+	if ( $fresh ) {
+		$response['modified']  = $fresh->post_modified_gmt;
+		$response['nextWrite'] = 'Pass this "modified" value as expected_modified on your next write to this page.';
+	}
+
+	// The database is now right; the delivered page may not be. Say which.
+	$response['cache'] = wpmcp_purge_caches( $post->ID );
+
+	// A pattern lives inside other pages, and their cached copies still
+	// show the old version: the pattern's own cache was never where a
+	// visitor saw it.
+	if ( 'wp_block' === $post->post_type ) {
+		$embedding = wpmcp_pattern_usage_ids( $post->ID );
+		foreach ( $embedding as $embedding_id ) {
+			wpmcp_purge_caches( $embedding_id );
+		}
+		if ( ! empty( $embedding ) ) {
+			$response['cache']['alsoPurged'] = $embedding;
+		}
+	}
+	$response['verify'] = 'content-read shows what is stored. Use content-fetch-live to see what a visitor gets.';
+
+	return $fresh;
+}
+
+/**
+ * What kind of write this was, for the log.
+ *
+ * @param bool $has_tree      A whole tree was sent.
+ * @param bool $has_ops       Operations were sent.
+ * @param bool $has_placement Slug, parent or status were sent.
+ * @return string tree, ops, placement or meta.
+ */
+function wpmcp_write_operation( $has_tree, $has_ops, $has_placement ) {
+	if ( $has_tree ) {
+		return 'tree';
+	}
+	if ( $has_ops ) {
+		return 'ops';
+	}
+	return $has_placement ? 'placement' : 'meta';
+}
+
+/**
  * Statuses content-list can be asked for.
  *
  * Trash, auto-drafts, revisions ("inherit") and "any" are not content
@@ -523,25 +659,9 @@ function wpmcp_write_content( array $args ) {
 		return $post;
 	}
 
-	// Synced patterns need their own permission, and their own warning.
-	if ( 'wp_block' === $post->post_type && 'write' !== wpmcp_pattern_access() ) {
-		return new \WP_Error(
-			'wpmcp_pattern_readonly',
-			sprintf(
-				'Post %d is a synced pattern, and pattern editing is switched off for this site. A pattern change would apply to every page embedding it.',
-				$post->ID
-			)
-		);
-	}
-
-	if ( wpmcp_runs_code( $post ) ) {
-		return new \WP_Error(
-			'wpmcp_runs_code',
-			sprintf(
-				'Post %d runs its content as PHP ("Execute PHP" is switched on for this element). Writing it would mean writing code onto the server, so it is not writable through the connector. Edit it in the editor.',
-				$post->ID
-			)
-		);
+	$target = wpmcp_assert_writable_target( $post );
+	if ( is_wp_error( $target ) ) {
+		return $target;
 	}
 
 	// Optimistic locking. The agent reads, thinks, then writes; in between
@@ -727,14 +847,18 @@ function wpmcp_write_content( array $args ) {
 		);
 	}
 
+	$operation = wpmcp_write_operation( $has_tree, $has_ops, $has_placement );
+
 	if ( ! empty( $errors ) ) {
+		// A real write that was refused is not a dry run, and the log used
+		// to say it was: "what did the agent try?" had no answer there.
 		wpmcp_log(
 			'wpmcp/content-write',
 			array(
 				'post_id'   => $post->ID,
-				'operation' => $has_tree ? 'tree' : 'ops',
-				'dry_run'   => true,
-				'summary'   => sprintf( 'Rejected: %d validation error(s).', count( $errors ) ),
+				'operation' => $dry_run ? $operation : 'rejected',
+				'dry_run'   => $dry_run,
+				'summary'   => sprintf( 'Rejected (%s): %d validation error(s).', $operation, count( $errors ) ),
 			)
 		);
 		return $response;
@@ -746,7 +870,7 @@ function wpmcp_write_content( array $args ) {
 			'wpmcp/content-write',
 			array(
 				'post_id'   => $post->ID,
-				'operation' => $has_tree ? 'tree' : 'ops',
+				'operation' => $operation,
 				'dry_run'   => true,
 				'summary'   => sprintf( 'Dry run OK (%+d blocks).', $diff['delta'] ),
 			)
@@ -800,13 +924,18 @@ function wpmcp_write_content( array $args ) {
 			: null;
 
 		try {
-			if ( $elevate ) {
-				$updated = wpmcp_update_post_elevated( $postarr );
-			} elseif ( wpmcp_should_preserve_markup( $impact, $post ) ) {
-				$updated = wpmcp_update_post_preserving( $postarr );
-			} else {
-				$updated = wp_update_post( $postarr, true );
-			}
+			list( $updated, $revision_id ) = wpmcp_save_capturing_revision(
+				$post->ID,
+				function () use ( $elevate, $impact, $post, $postarr ) {
+					if ( $elevate ) {
+						return wpmcp_update_post_elevated( $postarr );
+					}
+					if ( wpmcp_should_preserve_markup( $impact, $post ) ) {
+						return wpmcp_update_post_preserving( $postarr );
+					}
+					return wp_update_post( $postarr, true );
+				}
+			);
 		} finally {
 			if ( $release ) {
 				$release();
@@ -833,79 +962,58 @@ function wpmcp_write_content( array $args ) {
 			$response['warnings'] = array_merge( $response['warnings'], $stored_warnings );
 			$response['contentAltered'] = true;
 		}
-
-		$revisions   = wp_get_post_revisions( $post->ID, array( 'numberposts' => 1 ) );
-		$revision    = ! empty( $revisions ) ? reset( $revisions ) : null;
-		$revision_id = $revision ? (int) $revision->ID : 0;
 	}
 
+	$meta_line = '';
 	if ( $has_meta && $meta_diff['changes'] > 0 ) {
-		$written = wpmcp_apply_meta( $post, $meta_diff['fields'] );
-		$response['meta']['written'] = $written;
-
-		wpmcp_log(
-			'wpmcp/content-write',
-			array(
-				'post_id'   => $post->ID,
-				'operation' => 'meta',
-				'dry_run'   => false,
-				'summary'   => wpmcp_meta_log_line( $meta_diff['fields'] ),
-			)
-		);
+		$response['meta']['written'] = wpmcp_apply_meta( $post, $meta_diff['fields'] );
+		$meta_line                   = wpmcp_meta_log_line( $meta_diff['fields'] );
 	}
 
 	$response['message']    = 'Saved.';
 	$response['revisionId'] = $revision_id;
 	$response['preview']    = wpmcp_preview_url( $post->ID );
 
-	// The stamp for the next write on this page. Without it a sequence of
-	// writes needs a read between every pair, purely to fetch this one
-	// value — and dropping expected_modified to avoid that throws away the
-	// protection it exists for.
-	$fresh = get_post( $post->ID );
-	if ( $fresh ) {
-		$response['modified']  = $fresh->post_modified_gmt;
-		$response['nextWrite'] = 'Pass this "modified" value as expected_modified on your next write to this page.';
+	$fresh = wpmcp_after_save( $post, $response );
 
-		// A slug or parent change moves the page. Say where it went, rather
-		// than leaving the caller to work the URL out from the pieces.
-		if ( $placement['changes'] > 0 ) {
-			$response['slug']   = $fresh->post_name;
-			$response['parent'] = (int) $fresh->post_parent;
-			$response['status'] = $fresh->post_status;
-			$response['url']    = get_permalink( $fresh );
-		}
+	// A slug or parent change moves the page. Say where it went, rather
+	// than leaving the caller to work the URL out from the pieces.
+	if ( $fresh && $placement['changes'] > 0 ) {
+		$response['slug']   = $fresh->post_name;
+		$response['parent'] = (int) $fresh->post_parent;
+		$response['status'] = $fresh->post_status;
+		$response['url']    = get_permalink( $fresh );
 	}
 
-	// The database is now right; the delivered page may not be. Say which.
-	$response['cache'] = wpmcp_purge_caches( $post->ID );
-
-	// A pattern lives inside other pages, and their cached copies still
-	// show the old version: the pattern's own cache was never where a
-	// visitor saw it.
-	if ( 'wp_block' === $post->post_type ) {
-		$embedding = wpmcp_pattern_usage_ids( $post->ID );
-		foreach ( $embedding as $embedding_id ) {
-			wpmcp_purge_caches( $embedding_id );
+	// One entry per write. The meta line goes into it rather than into an
+	// entry of its own: it carries the old values, which revisions do not
+	// keep, and two entries for one call read as two calls.
+	$summary = ( $has_tree || $has_ops )
+		? sprintf( 'Saved (%+d blocks, %d total).', $diff['delta'], $after_count )
+		: 'Saved.';
+	if ( $placement['changes'] > 0 ) {
+		$moved = array();
+		foreach ( $placement['fields'] as $key => $field ) {
+			if ( ! empty( $field['changed'] ) ) {
+				$moved[] = sprintf( '%s "%s" -> "%s"', $key, $field['from'], $field['to'] );
+			}
 		}
-		if ( ! empty( $embedding ) ) {
-			$response['cache']['alsoPurged'] = $embedding;
-		}
+		$summary .= ' ' . implode( ', ', $moved ) . '.';
 	}
-	$response['verify'] = 'content-read shows what is stored. Use content-fetch-live to see what a visitor gets.';
+	if ( '' !== $meta_line ) {
+		$summary .= ' ' . $meta_line . '.';
+	}
+	if ( ! empty( $response['elevated'] ) ) {
+		$summary .= ' unfiltered_html granted for this save only.';
+	}
 
 	wpmcp_log(
 		'wpmcp/content-write',
 		array(
 			'post_id'     => $post->ID,
-			'operation'   => $has_tree ? 'tree' : 'ops',
+			'operation'   => $operation,
 			'dry_run'     => false,
-			'summary'     => sprintf(
-				'Saved (%+d blocks, %d total).%s',
-				$diff['delta'],
-				$after_count,
-				empty( $response['elevated'] ) ? '' : ' unfiltered_html granted for this save only.'
-			),
+			'summary'     => $summary,
 			'revision_id' => $revision_id,
 		)
 	);
@@ -2028,6 +2136,14 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		return $post;
 	}
 
+	// The copy is of the same kind as the original, meta included: a copy
+	// of an element that runs PHP runs PHP too, and a copied pattern is a
+	// pattern written by the agent.
+	$target = wpmcp_assert_writable_target( $post );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
 	$type_object = get_post_type_object( $post->post_type );
 	if ( ! $type_object || ! current_user_can( $type_object->cap->create_posts ) ) {
 		return new \WP_Error( 'wpmcp_forbidden', sprintf( 'No permission to create %s content.', $post->post_type ) );
@@ -2916,6 +3032,24 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
 }
 
 /**
+ * Was this revision saved by a person?
+ *
+ * Only then does its markup count as the post's own history for
+ * content-restore. A revision records who saved it (WordPress stores the
+ * current user as its author). One the agent saved is the agent's own
+ * content, and one whose author cannot be found any more proves nothing
+ * either way, so both are checked like a new write.
+ *
+ * @param \WP_Post|object $revision Revision.
+ * @return bool
+ */
+function wpmcp_revision_counts_as_known( $revision ) {
+	$author = (int) ( $revision->post_author ?? 0 );
+
+	return $author > 0 && get_userdata( $author ) && ! wpmcp_is_ai_user( $author );
+}
+
+/**
  * Put a post back to the content of one of its revisions.
  *
  * The undo the agent lacked. Without it, a write that went wrong could
@@ -2923,10 +3057,15 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
  * hurt most was a write that stripped markup the agent is not allowed to
  * write back, which left it unable to fix its own mistake.
  *
- * Restoring may therefore reintroduce markup that content-write refuses:
- * it is not agent-authored content but a state this very post was already
- * in, saved by whoever saved it. The agent cannot craft it, only return
- * to it.
+ * Restoring may therefore reintroduce markup that content-write refuses,
+ * when a person saved it: it is not agent-authored content but a state
+ * this very post was already in. A revision the agent saved itself is
+ * different (see wpmcp_revision_counts_as_known()) and is checked like a
+ * new write.
+ *
+ * Otherwise it is a write like any other: the same gate for patterns and
+ * code-running elements, the same cache purge, the same stamp for the
+ * next write.
  *
  * @param int  $post_id     Post ID.
  * @param int  $revision_id Revision to restore.
@@ -2952,6 +3091,11 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		);
 	}
 
+	$target = wpmcp_assert_writable_target( $post );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
 	$before = parse_blocks( $post->post_content );
 	$after  = parse_blocks( $revision->post_content );
 
@@ -2971,17 +3115,27 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		'warnings'   => array(),
 	);
 
-	// The same guard as every other write, with the revision itself counted
-	// as already stored. That is not a loophole: the revision belongs to
-	// this post (checked above), and WordPress fills a revision from what
-	// it stored, so its markup is the post's own history, not something
-	// the agent supplies. What the guard still catches is anything that
-	// would reach the database without having been there before - which
-	// by construction is nothing, and should it ever become something,
-	// the restore says so instead of saving it unfiltered.
-	$impact = wpmcp_kses_impact( $post->post_content, $revision->post_content, array( $revision->post_content ) );
+	// The same guard as every other write. A revision a person saved counts
+	// as already stored: it belongs to this post (checked above), and
+	// WordPress fills a revision from what it stored, so its markup is the
+	// post's own history, not something the agent supplies.
+	//
+	// A revision the agent saved does not count. Before 0.18.3 an agent
+	// save could get markup past kses (an onerror, a javascript: link),
+	// and each such save left a revision holding it. Counting those as
+	// known would let restore bring back exactly what the fix keeps out.
+	$known  = wpmcp_revision_counts_as_known( $revision );
+	$impact = wpmcp_kses_impact( $post->post_content, $revision->post_content, $known ? array( $revision->post_content ) : array() );
 	if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
-		return new \WP_Error( 'wpmcp_unsafe_markup', wpmcp_filtered_markup_error( $impact ) );
+		$message = wpmcp_filtered_markup_error( $impact );
+		if ( ! $known ) {
+			$message = sprintf(
+				'Revision %d was not saved by a person on this site (it was saved by the agent account, or its author no longer exists), so its markup is checked like a new write by the agent. %s',
+				(int) $revision_id,
+				$message
+			);
+		}
+		return new \WP_Error( 'wpmcp_unsafe_markup', $message );
 	}
 
 	if ( $dry_run ) {
@@ -3006,9 +3160,15 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		'ID'           => $post->ID,
 		'post_content' => wp_slash( $revision->post_content ),
 	);
-	$updated = wpmcp_should_preserve_markup( $impact, $post )
-		? wpmcp_update_post_preserving( $postarr )
-		: wp_update_post( $postarr, true );
+
+	list( $updated, $saved_revision ) = wpmcp_save_capturing_revision(
+		$post->ID,
+		function () use ( $impact, $post, $postarr ) {
+			return wpmcp_should_preserve_markup( $impact, $post )
+				? wpmcp_update_post_preserving( $postarr )
+				: wp_update_post( $postarr, true );
+		}
+	);
 
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
@@ -3022,6 +3182,11 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 
 	$result['message'] = 'Restored.';
 	$result['preview'] = wpmcp_preview_url( $post->ID );
+
+	// The revision this restore itself left behind: the undo of the undo.
+	$result['savedRevisionId'] = $saved_revision;
+
+	wpmcp_after_save( $post, $result );
 
 	wpmcp_log(
 		'wpmcp/content-restore',
@@ -3518,10 +3683,26 @@ function wpmcp_batch_write( array $args ) {
 
 	$complete = count( $items ) === $saved;
 
+	// Each post has its own entry from its write; this one ties them
+	// together, so it has to say which they were.
+	$saved_ids = array();
+	foreach ( $results as $entry ) {
+		if ( $entry['ok'] ) {
+			$saved_ids[] = $entry['postId'];
+		}
+	}
+
 	wpmcp_log(
 		'wpmcp/content-batch',
 		array(
-			'summary' => sprintf( 'Batch: %d of %d posts saved.', $saved, count( $items ) ),
+			'operation' => 'batch',
+			'summary'   => sprintf(
+				'Batch: %d of %d posts saved%s.%s',
+				$saved,
+				count( $items ),
+				empty( $saved_ids ) ? '' : ' (' . implode( ', ', $saved_ids ) . ')',
+				$complete ? '' : sprintf( ' Stopped at post %d.', (int) end( $results )['postId'] )
+			),
 		)
 	);
 

@@ -127,8 +127,29 @@ function apply_filters( $tag, $value ) {
 	return $value;
 }
 
+// Actions are recorded and can be fired, so a test can play the part of
+// WordPress (a revision being stored, say) inside a save.
+$GLOBALS['dbw_actions'] = array();
+
 function add_action( $tag, $callback, $priority = 10, $args = 1 ) {
+	$GLOBALS['dbw_actions'][ $tag ][] = $callback;
 	return true;
+}
+
+function remove_action( $tag, $callback, $priority = 10 ) {
+	foreach ( $GLOBALS['dbw_actions'][ $tag ] ?? array() as $i => $registered ) {
+		if ( $registered === $callback ) {
+			unset( $GLOBALS['dbw_actions'][ $tag ][ $i ] );
+			return true;
+		}
+	}
+	return false;
+}
+
+function do_action( $tag, ...$args ) {
+	foreach ( $GLOBALS['dbw_actions'][ $tag ] ?? array() as $callback ) {
+		$callback( ...$args );
+	}
 }
 
 function __return_true() {

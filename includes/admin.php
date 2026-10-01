@@ -572,9 +572,14 @@ function wpmcp_render_admin_page() {
 						</td>
 						<td>
 							<?php
-							echo $entry->dry_run
-								? esc_html__( 'dry run', 'wp-mcp-connector-plus' )
-								: esc_html( $entry->operation ? $entry->operation : '—' );
+							// "rejected" is a real write the checks refused (since 0.19).
+							if ( $entry->dry_run ) {
+								esc_html_e( 'dry run', 'wp-mcp-connector-plus' );
+							} elseif ( 'rejected' === $entry->operation ) {
+								esc_html_e( 'rejected', 'wp-mcp-connector-plus' );
+							} else {
+								echo esc_html( $entry->operation ? $entry->operation : '—' );
+							}
 							?>
 						</td>
 						<td>
