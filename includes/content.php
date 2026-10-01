@@ -1526,6 +1526,12 @@ function wpmcp_find_unstable_blocks( array $blocks, array $known, $prefix, array
  *   never starts like that. An "&" in front of letters is left alone:
  *   "&colon;" is a colon to a browser, so that difference stays a
  *   difference and the block is refused.
+ * - The same "&" inside block attributes. The serializer writes it there
+ *   as \u0026, and kses filters every attribute value on its own and
+ *   serializes again, so "Mueller & Soehne" comes back as
+ *   "Mueller \u0026amp; Soehne". Without this rule every attribute with
+ *   such a name in it was refused, which on a design system with its
+ *   texts in attributes is most headings.
  *
  * @param string $html Markup.
  * @return string
@@ -1533,6 +1539,7 @@ function wpmcp_find_unstable_blocks( array $blocks, array $known, $prefix, array
 function wpmcp_kses_equivalent( $html ) {
 	$html = (string) preg_replace( '#(["\'])\s*/>#', '$1 />', (string) $html );
 	$html = (string) preg_replace( '#<([a-zA-Z][a-zA-Z0-9]*)\s*/>#', '<$1 />', $html );
+	$html = (string) preg_replace( '/\\\\u0026(?=\s)/', '\\\\u0026amp;', $html );
 
 	return (string) preg_replace( '/&(?=\s)/', '&amp;', $html );
 }
