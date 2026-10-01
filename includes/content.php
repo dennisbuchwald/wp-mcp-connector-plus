@@ -2455,7 +2455,7 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
 		}
 	}
 
-	$slice = wpmcp_slice_text( $html, 60000, $offset );
+	$slice = wpmcp_slice_text( $html, WPMCP_WINDOW_BYTES, $offset );
 
 	return array_merge(
 		array(
@@ -2465,6 +2465,16 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
 		$slice
 	);
 }
+
+/**
+ * Bytes per window for content-preview and content-fetch-live.
+ *
+ * One number for both tools. content-fetch-live used 200000, more than an
+ * agent takes in comfortably in one piece and more than three times what
+ * content-preview returned for the same page, so the same page came back
+ * cut differently depending on which tool asked.
+ */
+const WPMCP_WINDOW_BYTES = 60000;
 
 /**
  * Cut a long text down to a window the caller can walk through.

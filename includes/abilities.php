@@ -609,7 +609,7 @@ function wpmcp_register_abilities() {
 					'offset'       => array(
 						'type'        => 'integer',
 						'default'     => 0,
-						'description' => 'Byte to start the returned HTML at. Long pages come back in windows of 200000 bytes; when one is not the whole page the answer says so in "truncated" and names the "nextOffset" to ask for.',
+						'description' => 'Byte to start the returned HTML at. Long pages come back in windows of 60000 bytes; when one is not the whole page the answer says so in "truncated" and names the "nextOffset" to ask for.',
 					),
 					'contains'     => array(
 						'type'        => 'string',

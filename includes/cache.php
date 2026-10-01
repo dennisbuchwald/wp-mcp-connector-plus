@@ -31,7 +31,7 @@ function wpmcp_purge_caches( $post_id ) {
 	$object = 'skipped';
 	if ( function_exists( 'wp_cache_flush' ) ) {
 		clean_post_cache( (int) $post_id );
-		$object = wp_using_ext_object_cache() ? 'flushed' : 'not persistent, nothing to flush';
+		$object = wp_using_ext_object_cache() ? 'post cache cleared' : 'not persistent, nothing to flush';
 	}
 
 	// Page caches announce themselves through their own hooks and functions.
@@ -215,7 +215,7 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contain
 		$base['scope'] = 'main content only: header, footer, styles and scripts removed';
 	}
 
-	return array_merge( $base, wpmcp_slice_text( $scope, 200000, $offset ) );
+	return array_merge( $base, wpmcp_slice_text( $scope, WPMCP_WINDOW_BYTES, $offset ) );
 }
 
 /**

@@ -148,6 +148,29 @@ respond( 503, 'down' );
 $out = fetch( 1 );
 check( ! is_wp_error( $out ) && false !== strpos( $out['hint'] ?? '', 'server error' ), '5xx: verweist auf content-preview und das Fehlerlog' );
 
+echo "\n\033[1mFenstergroesse\033[0m\n";
+
+// 200000 bytes per window was more than an agent's context takes in one
+// piece; content-preview already answered in windows of 60000. Both tools
+// now cut the same way.
+$long = '<html><body>' . str_repeat( 'x', 70000 ) . '</body></html>';
+respond( 200, $long );
+$out = fetch( 1 );
+check( ! is_wp_error( $out ) && true === ( $out['truncated'] ?? null ), 'eine Seite mit 70 KB kommt nicht in einem Stueck', wp_json_encode( $out['truncated'] ?? null ) );
+check( ! is_wp_error( $out ) && 60000 === ( $out['nextOffset'] ?? null ), 'das naechste Fenster beginnt bei 60000', wp_json_encode( $out['nextOffset'] ?? null ) );
+
+echo "\n\033[1mWas die Cache-Leerung meldet\033[0m\n";
+
+// clean_post_cache() clears one post's entries. "flushed" read as if the
+// whole object cache had been emptied, which nothing here does.
+function wp_cache_flush() { throw new RuntimeException( 'the whole object cache must not be flushed' ); }
+function clean_post_cache( $id ) { $GLOBALS['cleaned'][] = $id; }
+function wp_using_ext_object_cache() { return true; }
+function has_action( $tag ) { return false; }
+$purged = wpmcp_purge_caches( 1 );
+check( 'post cache cleared' === $purged['object'], 'mit persistentem Objekt-Cache: "post cache cleared"', $purged['object'] );
+check( array( 1 ) === ( $GLOBALS['cleaned'] ?? null ), 'und geleert wird nur der Beitrag' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mLive-Abruf in Ordnung.\033[0m\n";

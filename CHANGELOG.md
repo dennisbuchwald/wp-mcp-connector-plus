@@ -81,6 +81,11 @@ Ab hier gibt es eine Vertragsversion: `site-info` meldet `contractVersion` (eine
 - **`content-fetch-live` zaehlt JSON-LD auch im Body.** `head.jsonLdBlocks` zaehlte nur den `<head>`; ein FAQ-Schema, das `content-write` in einen HTML-Block schreibt, stand damit auf genau der Seite, die es auslieferte, als 0 da. Jetzt ist `jsonLdBlocks` die Summe, dazu `jsonLdInHead` und `jsonLdInBody`. **Die Bedeutung von `jsonLdBlocks` aendert sich damit** (vorher nur Kopf, jetzt ganze Seite).
 - **`content-duplicate` sagt, dass es sofort schreibt** (es gibt keinen Probelauf; die Kopie ist immer ein Entwurf), und der Standardtitel heisst "Original (Copy)", uebersetzbar, statt immer "(Kopie)".
 
+### Leistung und Betrieb
+
+- **`content-fetch-live` antwortet in Fenstern von 60000 Bytes statt 200000**, wie `content-preview`. 200 KB am Stueck waren mehr, als ein Agent sinnvoll auf einmal liest, und dieselbe Seite kam je nach Werkzeug anders geschnitten zurueck. Beide Werkzeuge nutzen jetzt dieselbe Zahl (`WPMCP_WINDOW_BYTES`). `nextOffset` fuehrt wie bisher zum Rest.
+- **Die Cache-Leerung meldet `object: "post cache cleared"` statt `"flushed"`.** Geleert werden nur die Eintraege des einen Beitrags (`clean_post_cache`), nicht der ganze Objekt-Cache; "flushed" klang nach dem Gegenteil.
+
 ### Zu beachten
 
 - **Seiten ohne HTTPS verlieren die Verbindung.** Laeuft eine Seite (auch eine Entwicklungsseite) nur ueber HTTP und ist nicht als `local` erklaert, kann sich der Agent nicht mehr anmelden. Die Statustabelle unter Werkzeuge > MCP Connector zeigt das jetzt als Fehler.
