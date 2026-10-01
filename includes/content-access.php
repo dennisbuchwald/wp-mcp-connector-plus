@@ -76,7 +76,7 @@ function wpmcp_get_readable_post( $post_id ) {
 			)
 		);
 	}
-	if ( ! wpmcp_post_is_public( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+	if ( ! wpmcp_user_can_read( $post ) ) {
 		if ( '' !== (string) ( $post->post_password ?? '' ) ) {
 			return new \WP_Error(
 				'wpmcp_password_protected',
@@ -101,6 +101,19 @@ function wpmcp_get_readable_post( $post_id ) {
  */
 function wpmcp_post_is_public( $post ) {
 	return 'publish' === $post->post_status && '' === (string) ( $post->post_password ?? '' );
+}
+
+/**
+ * May the current user read this post's content?
+ *
+ * Public content, or content the user may edit. A read and a search
+ * must draw this line identically, or a search shows what a read refuses.
+ *
+ * @param \WP_Post|object $post Post.
+ * @return bool
+ */
+function wpmcp_user_can_read( $post ) {
+	return wpmcp_post_is_public( $post ) || current_user_can( 'edit_post', $post->ID );
 }
 
 /**

@@ -168,7 +168,7 @@ function wpmcp_search_content( array $args ) {
 			}
 			// The query drew the line already. This is the per-post form
 			// of it, so a search can never show more than a read would.
-			if ( ! wpmcp_post_is_public( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+			if ( ! wpmcp_user_can_read( $post ) ) {
 				continue;
 			}
 			++$scanned;
