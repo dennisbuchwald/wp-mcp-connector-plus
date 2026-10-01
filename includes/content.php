@@ -476,14 +476,11 @@ function wpmcp_write_content( array $args ) {
 
 	if ( $impact['alters'] ) {
 		if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
-			$errors[] = sprintf(
-				'This change adds markup WordPress will not store from an agent account (%s). Inline scripts, iframes and embeds cannot be written this way; structured data can, as <script type="application/ld+json"> holding valid JSON. Remove it, or have a human add it in the editor. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
-				implode( ', ', $impact['added'] )
-			);
+			$errors[] = wpmcp_filtered_markup_error( $impact );
 		} elseif ( $impact['introduces'] ) {
 			$warnings[] = sprintf(
 				'This change adds markup WordPress would normally refuse from an agent account (%s). It is being written because this site opened the wpmcp_allow_filtered_markup filter. Close it again when the repair is done.',
-				implode( ', ', $impact['added'] )
+				! empty( $impact['blocks'] ) ? wpmcp_unstable_summary( $impact['blocks'] ) : implode( ', ', $impact['added'] )
 			);
 		} elseif ( ! empty( $impact['affected'] ) ) {
 			$warnings[] = sprintf(
@@ -580,19 +577,13 @@ function wpmcp_write_content( array $args ) {
 
 		// Dynamic data is gated by unfiltered_html in some block libraries.
 		// Where the site has allowed it, the capability is granted for this
-		// one call — and the guard below stands in for the filtering that
-		// WordPress then stops doing.
+		// one call. WordPress then stops filtering, and what stands in its
+		// place is the same check every other save gets, already made
+		// above: no block the agent changed may hold anything kses would
+		// alter. Until 0.18.3 this path had its own list of regular
+		// expressions, and <svg/onload>, &#106;avascript: or a meta refresh
+		// went straight past it.
 		$elevate = wpmcp_dynamic_data_allowed();
-
-		if ( $elevate ) {
-			$unsafe = wpmcp_unsafe_additions( $post->post_content, $validation['serialized'] );
-			if ( ! empty( $unsafe ) && ! wpmcp_filtered_markup_allowed( $post ) ) {
-				return new \WP_Error(
-					'wpmcp_unsafe_markup',
-					wpmcp_unsafe_message( $unsafe, $blocks )
-				);
-			}
-		}
 
 		// Publishing inside a work session: the capability for this one save,
 		// never on the role.
@@ -727,19 +718,39 @@ function wpmcp_write_content( array $args ) {
  * script in another, which is not the agent's doing and not the site
  * owner's intention.
  *
- * @param string $before Content currently stored.
- * @param string $after  Content about to be written.
+ * Until 0.18.3 "introduces" only knew whole elements: script, style,
+ * iframe, form, object, embed. Everything else kses removes - an onerror
+ * on an image, a javascript: link, an svg with onload - left it false,
+ * and false meant the save went past the filter. That was stored XSS at
+ * the lowest access level. The whole-element comparison is still made,
+ * for the labels it gives, but the deciding question is now asked of
+ * kses itself, block by block: see wpmcp_unstable_blocks().
+ *
+ * @param string   $before     Content currently stored.
+ * @param string   $after      Content about to be written.
+ * @param string[] $also_known Further content whose blocks count as
+ *                             already stored, e.g. the revision a restore
+ *                             brings back.
  * @return array {
  *     @type bool     $alters     Whether the save would change the content.
  *     @type bool     $introduces Whether the change adds filtered markup.
  *     @type string[] $affected   Which constructs are involved.
+ *     @type string[] $added      Whole elements that are new.
+ *     @type array    $blocks     New or changed blocks kses would alter,
+ *                                see wpmcp_unstable_blocks().
  * }
  */
-function wpmcp_kses_impact( $before, $after ) {
+function wpmcp_kses_impact( $before, $after, array $also_known = array() ) {
 	$filtered = function_exists( 'wp_kses_post' ) ? wp_kses_post( $after ) : $after;
 
 	$in_before = wpmcp_filtered_fragments( (string) $before );
 	$in_after  = wpmcp_filtered_fragments( (string) $after );
+
+	foreach ( $also_known as $known ) {
+		foreach ( wpmcp_filtered_fragments( (string) $known ) as $fragment => $count ) {
+			$in_before[ $fragment ] = max( $in_before[ $fragment ] ?? 0, $count );
+		}
+	}
 
 	// Compare the fragments themselves, not how many there are. Counting
 	// let a swap through: remove the page's JSON-LD block and add a script
@@ -754,11 +765,278 @@ function wpmcp_kses_impact( $before, $after ) {
 		}
 	}
 
+	$unstable = ( $filtered !== $after )
+		? wpmcp_unstable_blocks( (string) $after, array_merge( array( (string) $before ), $also_known ) )
+		: array();
+
 	return array(
 		'alters'     => ( $filtered !== $after ),
-		'introduces' => ! empty( $added ),
+		'introduces' => ! empty( $added ) || ! empty( $unstable ),
 		'affected'   => array_values( array_unique( $affected ) ),
 		'added'      => array_values( array_unique( $added ) ),
+		'blocks'     => $unstable,
+	);
+}
+
+/**
+ * The blocks of a write that the agent wrote and kses would alter.
+ *
+ * This is the whole rule for when a save may go past WordPress's content
+ * filter, and it has two halves.
+ *
+ * A block that is byte-identical to a block already stored - at any depth,
+ * compared by its serialized markup - is not the agent's doing. It keeps
+ * its markup, whatever kses would think of it: that is what stops an edit
+ * in one block from destroying the JSON-LD or the video embed in another.
+ *
+ * Every other block is the agent's, and it must come out of wp_kses_post
+ * exactly as it went in. Then skipping the filter changes nothing about
+ * it, and the save can go past the filter for the sake of the blocks that
+ * need it. Anything kses would remove or rewrite is refused instead, and
+ * named by its path. Asking kses itself, rather than keeping a list of
+ * what it removes, is the point: every list so far had holes, and kses is
+ * by definition what WordPress would have done.
+ *
+ * A changed container is judged by its own markup only (the opening and
+ * closing wrapper, its comment delimiter); its children are judged on
+ * their own, so an untouched video inside a group survives a change to
+ * the group's class.
+ *
+ * The one deliberate exception is structured data: a valid JSON-LD block
+ * is taken out before the comparison, as everywhere else in the plugin.
+ *
+ * @param string   $after   Content about to be written.
+ * @param string[] $sources Content whose blocks count as already stored.
+ * @return array<int, array{path: string, constructs: string[], stored: string}>
+ */
+function wpmcp_unstable_blocks( $after, array $sources ) {
+	if ( ! function_exists( 'wp_kses_post' ) ) {
+		return array();
+	}
+
+	$known = array();
+	foreach ( $sources as $source ) {
+		if ( '' !== (string) $source ) {
+			wpmcp_collect_known_markup( parse_blocks( (string) $source ), $known );
+		}
+	}
+
+	$found = array();
+	wpmcp_find_unstable_blocks( parse_blocks( (string) $after ), $known, '', $found );
+
+	return $found;
+}
+
+/**
+ * Remember every block of stored content by its exact markup.
+ *
+ * @param array $blocks Parsed blocks.
+ * @param array $known  Markup => true (by reference).
+ */
+function wpmcp_collect_known_markup( array $blocks, array &$known ) {
+	foreach ( $blocks as $block ) {
+		if ( null === $block['blockName'] ) {
+			$known[ (string) ( $block['innerHTML'] ?? '' ) ] = true;
+			continue;
+		}
+
+		$known[ serialize_block( $block ) ] = true;
+
+		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+			wpmcp_collect_known_markup( $block['innerBlocks'], $known );
+		}
+	}
+}
+
+/**
+ * Walk the blocks to be written and collect the ones kses would alter.
+ *
+ * Paths are counted the way content-read counts them: whitespace between
+ * blocks is no block, freeform HTML is one.
+ *
+ * @param array  $blocks Parsed blocks.
+ * @param array  $known  Markup already stored.
+ * @param string $prefix Path prefix, for recursion.
+ * @param array  $found  Result (by reference).
+ */
+function wpmcp_find_unstable_blocks( array $blocks, array $known, $prefix, array &$found ) {
+	$index = 0;
+
+	foreach ( $blocks as $block ) {
+		$freeform = null === $block['blockName'];
+		$own      = $freeform ? (string) ( $block['innerHTML'] ?? '' ) : '';
+
+		if ( $freeform && '' === trim( $own ) ) {
+			continue;
+		}
+
+		$path = ( '' === $prefix ) ? (string) $index : $prefix . '.' . $index;
+		++$index;
+
+		$markup = $freeform ? $own : serialize_block( $block );
+		if ( isset( $known[ $markup ] ) ) {
+			continue;
+		}
+
+		if ( ! $freeform ) {
+			// The block's own markup without its children: the delimiter
+			// with its attributes, and the wrapper chunks in order.
+			$own = get_comment_delimited_block_content(
+				$block['blockName'],
+				is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array(),
+				wpmcp_inner_html_from_content( (array) ( $block['innerContent'] ?? array() ) )
+			);
+		}
+
+		$checked  = wpmcp_strip_safe_jsonld( $own );
+		$filtered = wp_kses_post( $checked );
+
+		if ( $filtered !== $checked && $filtered !== wpmcp_kses_equivalent( $checked ) ) {
+			$found[] = array(
+				'path'       => $path,
+				'constructs' => wpmcp_kses_losses( $checked, $filtered ),
+				'stored'     => $filtered,
+			);
+		}
+
+		if ( ! $freeform && ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+			wpmcp_find_unstable_blocks( $block['innerBlocks'], $known, $path, $found );
+		}
+	}
+}
+
+/**
+ * The markup with the two rewrites kses makes that change nothing.
+ *
+ * kses rebuilds every tag it touches, and a self-closing one comes back
+ * with " />" where Gutenberg writes "/>". It also turns a lone "&" into
+ * "&amp;". Taken literally, "kses changes nothing" would therefore refuse
+ * every image block and every "Mueller & Soehne" an agent writes.
+ *
+ * Only rewrites a browser reads exactly like the original are made here,
+ * so markup equal to its kses version after them means the same thing
+ * as that kses version:
+ *
+ * - "/>" right after a quoted value or a bare tag name becomes " />";
+ *   the slash is ignored on void elements, the space is no attribute.
+ *   After an unquoted value it is left alone, because there the slash
+ *   belongs to the value.
+ * - "&" followed by whitespace becomes "&amp;"; a character reference
+ *   never starts like that. An "&" in front of letters is left alone:
+ *   "&colon;" is a colon to a browser, so that difference stays a
+ *   difference and the block is refused.
+ *
+ * @param string $html Markup.
+ * @return string
+ */
+function wpmcp_kses_equivalent( $html ) {
+	$html = (string) preg_replace( '#(["\'])\s*/>#', '$1 />', (string) $html );
+	$html = (string) preg_replace( '#<([a-zA-Z][a-zA-Z0-9]*)\s*/>#', '<$1 />', $html );
+
+	return (string) preg_replace( '/&(?=\s)/', '&amp;', $html );
+}
+
+/**
+ * Name what kses takes out of a piece of markup.
+ *
+ * For the message only - the decision has already been made by comparing
+ * the markup with kses's version of it. Elements, attributes and URL
+ * schemes are counted on both sides; whatever kses has fewer of is what
+ * it removed. When nothing is missing, kses only rewrote the markup
+ * (quotes, spacing, an unescaped ampersand), and the caller gets told to
+ * send it the way WordPress would store it.
+ *
+ * @param string $html     Markup as sent.
+ * @param string $filtered The same after wp_kses_post.
+ * @return string[]
+ */
+function wpmcp_kses_losses( $html, $filtered ) {
+	$sent = wpmcp_markup_inventory( $html );
+	$kept = wpmcp_markup_inventory( $filtered );
+
+	$losses = array();
+	foreach ( $sent as $item => $count ) {
+		if ( $count > ( $kept[ $item ] ?? 0 ) ) {
+			$losses[] = $item;
+		}
+	}
+
+	return $losses;
+}
+
+/**
+ * Elements, attributes and URL schemes in a piece of markup, counted.
+ *
+ * Attribute names are found after whitespace or a "/", because browsers
+ * accept both as a separator. A scheme is read the way a browser reads
+ * it: entities decoded, whitespace and control characters dropped.
+ *
+ * @param string $html Markup.
+ * @return array<string, int> "<svg", "onload=", "javascript:" => count.
+ */
+function wpmcp_markup_inventory( $html ) {
+	$items = array();
+	$add   = function ( $key ) use ( &$items ) {
+		$items[ $key ] = ( $items[ $key ] ?? 0 ) + 1;
+	};
+
+	if ( ! preg_match_all( '#<([a-zA-Z][a-zA-Z0-9:-]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>?#', (string) $html, $tags, PREG_SET_ORDER ) ) {
+		return $items;
+	}
+
+	foreach ( $tags as $tag ) {
+		$add( '<' . strtolower( $tag[1] ) );
+
+		if ( ! preg_match_all( '#([^\s"\'>/=]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s"\'>]+))?#', $tag[2], $attrs, PREG_SET_ORDER ) ) {
+			continue;
+		}
+
+		foreach ( $attrs as $attr ) {
+			$add( strtolower( $attr[1] ) . '=' );
+
+			$value = html_entity_decode( trim( $attr[2] ?? '', '"\'' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$value = preg_replace( '/[\x00-\x20]+/', '', $value );
+			if ( preg_match( '#^([a-z][a-z0-9+.-]*):#i', (string) $value, $scheme ) ) {
+				$add( strtolower( $scheme[1] ) . ':' );
+			}
+		}
+	}
+
+	return $items;
+}
+
+/**
+ * The refused blocks as one line: path and what kses would remove.
+ *
+ * @param array $blocks Result of wpmcp_unstable_blocks().
+ * @return string
+ */
+function wpmcp_unstable_summary( array $blocks ) {
+	$parts = array();
+
+	foreach ( $blocks as $block ) {
+		$parts[] = empty( $block['constructs'] )
+			? sprintf( 'block %s (only rewritten; WordPress would store it as: %s)', $block['path'], wpmcp_shorten( $block['stored'], 120 ) )
+			: sprintf( 'block %s (%s)', $block['path'], implode( ', ', $block['constructs'] ) );
+	}
+
+	return implode( '; ', $parts );
+}
+
+/**
+ * The refusal for markup kses would alter, said once for every caller.
+ *
+ * @param array $impact Result of wpmcp_kses_impact().
+ * @return string
+ */
+function wpmcp_filtered_markup_error( array $impact ) {
+	$where = ! empty( $impact['blocks'] )
+		? wpmcp_unstable_summary( $impact['blocks'] )
+		: implode( ', ', $impact['added'] );
+
+	return sprintf(
+		'This change adds markup WordPress will not store from an agent account: %s. Event handlers, javascript: URLs, inline scripts, iframes, embeds and forms cannot be written this way; structured data can, as <script type="application/ld+json"> holding valid JSON. Remove it, or have a human add it in the editor. A block that only needs rewriting goes through when sent exactly as WordPress would store it. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
+		$where
 	);
 }
 
@@ -948,24 +1226,16 @@ function wpmcp_plugin_slug_from_path( $file ) {
  * filter is scoped to the user being checked, and removed in a finally
  * block so a fatal inside the save cannot leave it standing.
  *
- * Callers must run wpmcp_unsafe_additions() first. With this capability
- * WordPress stops filtering the content, so that check is not a warning,
- * it is the replacement for what wp_kses would otherwise have done.
+ * Callers must have refused the write first when wpmcp_kses_impact()
+ * reports it introduces anything. With this capability WordPress stops
+ * filtering the content, so that check is not a warning, it is the
+ * replacement for what wp_kses would otherwise have done.
  *
  * @param array $postarr Arguments for wp_update_post.
  * @return int|\WP_Error
  */
 function wpmcp_update_post_elevated( array $postarr ) {
-	$user_id = get_current_user_id();
-
-	$grant = function ( $allcaps, $caps, $args, $user ) use ( $user_id ) {
-		if ( isset( $user->ID ) && (int) $user->ID === (int) $user_id ) {
-			$allcaps['unfiltered_html'] = true;
-		}
-		return $allcaps;
-	};
-
-	add_filter( 'user_has_cap', $grant, 100, 4 );
+	$release = wpmcp_grant_caps_for_request( array( 'unfiltered_html' ) );
 
 	try {
 		// Check that the grant took, rather than assuming it. unfiltered_html
@@ -981,7 +1251,7 @@ function wpmcp_update_post_elevated( array $postarr ) {
 
 		return wpmcp_update_post_preserving( $postarr );
 	} finally {
-		remove_filter( 'user_has_cap', $grant, 100 );
+		$release();
 	}
 }
 
@@ -1016,6 +1286,12 @@ function wpmcp_unfiltered_html_blocker() {
  * Only additions count. A page that already embeds a video must stay
  * editable, or the guard blocks the ordinary work it was meant to
  * protect.
+ *
+ * Since 0.18.3 this is no longer what decides a save. A list of patterns
+ * is a list of the attacks someone thought of: <svg/onload>,
+ * &#106;avascript:, a tab inside the scheme, a meta refresh all went past
+ * it. The decision is wpmcp_unstable_blocks(), which asks kses itself.
+ * This stays as a quick, readable description of the obvious cases.
  *
  * @param string $before Content currently stored.
  * @param string $after  Content about to be written.
@@ -1298,8 +1574,9 @@ function wpmcp_decode_structure( $value, $label ) {
  * Should this save bypass WordPress's content filter?
  *
  * Two reasons, and only these two. Editing one block must not destroy
- * markup in another that the agent never touched — safe, because nothing
- * of that kind is being added. And a repair explicitly opened by the site
+ * markup in another that the agent never touched — safe, because every
+ * block the agent did touch would come out of kses unchanged ("introduces"
+ * is false only then, see wpmcp_unstable_blocks()). And a repair explicitly opened by the site
  * has to reach the database, or opening it means nothing: the check would
  * let the script through and the save would drop it a moment later.
  *
@@ -1396,57 +1673,77 @@ function wpmcp_fragment_label( $fragment ) {
 }
 
 /**
+ * Run a save with WordPress's content filter switched off, and only that.
+ *
+ * kses sits on two filters for accounts without unfiltered_html. They are
+ * removed for the length of the callback and put back in a finally, so a
+ * fatal inside the save cannot leave the rest of the request unfiltered.
+ * Only the filters that were actually there go back: an account that
+ * never had them - one with unfiltered_html - must not leave this with a
+ * filter it did not have before.
+ *
+ * Whoever calls this has decided the content may skip the filter. For
+ * anything the agent wrote, that decision is wpmcp_should_preserve_markup().
+ *
+ * @param callable $save The save.
+ * @return mixed Whatever the save returns.
+ */
+function wpmcp_without_kses( callable $save ) {
+	$removed = array();
+
+	foreach ( array( 'content_save_pre', 'content_filtered_save_pre' ) as $filter ) {
+		if ( remove_filter( $filter, 'wp_filter_post_kses' ) ) {
+			$removed[] = $filter;
+		}
+	}
+
+	try {
+		return $save();
+	} finally {
+		foreach ( $removed as $filter ) {
+			add_filter( $filter, 'wp_filter_post_kses' );
+		}
+	}
+}
+
+/**
  * Insert a post without the content filter.
  *
  * A duplicate is a byte-for-byte copy of a post that already exists on
  * this site. Filtering it would strip markup the original is allowed to
  * hold — the copy would silently differ from what was copied, which is
  * the one thing a duplicate must never do. The agent supplies no content
- * here, only an id, so there is nothing it could smuggle in.
+ * here, only an id, so there is nothing it could smuggle in. The title it
+ * may supply still goes through its own filter, which stays on.
  *
  * @param array $postarr Arguments for wp_insert_post.
  * @return int|\WP_Error
  */
 function wpmcp_insert_post_preserving( array $postarr ) {
-	$filters = array( 'content_save_pre', 'content_filtered_save_pre' );
-
-	foreach ( $filters as $filter ) {
-		remove_filter( $filter, 'wp_filter_post_kses' );
-	}
-
-	$result = wp_insert_post( $postarr, true );
-
-	foreach ( $filters as $filter ) {
-		add_filter( $filter, 'wp_filter_post_kses' );
-	}
-
-	return $result;
+	return wpmcp_without_kses(
+		function () use ( $postarr ) {
+			return wp_insert_post( $postarr, true );
+		}
+	);
 }
 
 /**
  * Save without the kses filter, for the one case where it does harm.
  *
- * Only ever used when the content introduces no filtered markup beyond
- * what the page already held: the agent cannot smuggle a script in this
- * way, it can only fail to destroy one that was there already.
+ * Only ever used when every block the agent changed would come out of
+ * kses unchanged (wpmcp_should_preserve_markup), so skipping the filter
+ * changes nothing about the agent's part. What it protects is the rest:
+ * markup already stored in blocks the change did not touch.
  *
  * @param array $postarr Arguments for wp_update_post.
  * @return int|\WP_Error
  */
 function wpmcp_update_post_preserving( array $postarr ) {
-	$filters = array( 'content_save_pre', 'content_filtered_save_pre' );
-
-	foreach ( $filters as $filter ) {
-		remove_filter( $filter, 'wp_filter_post_kses' );
-	}
-
-	$result = wp_update_post( $postarr, true );
-
-	foreach ( $filters as $filter ) {
-		add_filter( $filter, 'wp_filter_post_kses' );
-	}
-
-	return $result;
+	return wpmcp_without_kses(
+		function () use ( $postarr ) {
+			return wp_update_post( $postarr, true );
+		}
+	);
 }
 
 /**
@@ -2459,6 +2756,19 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		'warnings'   => array(),
 	);
 
+	// The same guard as every other write, with the revision itself counted
+	// as already stored. That is not a loophole: the revision belongs to
+	// this post (checked above), and WordPress fills a revision from what
+	// it stored, so its markup is the post's own history, not something
+	// the agent supplies. What the guard still catches is anything that
+	// would reach the database without having been there before - which
+	// by construction is nothing, and should it ever become something,
+	// the restore says so instead of saving it unfiltered.
+	$impact = wpmcp_kses_impact( $post->post_content, $revision->post_content, array( $revision->post_content ) );
+	if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( $post ) ) {
+		return new \WP_Error( 'wpmcp_unsafe_markup', wpmcp_filtered_markup_error( $impact ) );
+	}
+
 	if ( $dry_run ) {
 		$result['message'] = 'Dry run only — nothing was restored. Call again with dry_run: false to restore.';
 		wpmcp_log(
@@ -2474,15 +2784,16 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		return $result;
 	}
 
-	// Saved without the content filter on purpose: this is a state the post
-	// already held, and filtering it again would repeat the very damage a
-	// restore is meant to undo.
-	$updated = wpmcp_update_post_preserving(
-		array(
-			'ID'           => $post->ID,
-			'post_content' => wp_slash( $revision->post_content ),
-		)
+	// Saved without the content filter when the revision holds markup kses
+	// would strip: this is a state the post already held, and filtering it
+	// again would repeat the very damage a restore is meant to undo.
+	$postarr = array(
+		'ID'           => $post->ID,
+		'post_content' => wp_slash( $revision->post_content ),
 	);
+	$updated = wpmcp_should_preserve_markup( $impact, $post )
+		? wpmcp_update_post_preserving( $postarr )
+		: wp_update_post( $postarr, true );
 
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
@@ -2744,10 +3055,7 @@ function wpmcp_create_content( array $args ) {
 				if ( empty( $validation['errors'] ) ) {
 					$impact = wpmcp_kses_impact( '', wpmcp_normalize_jsonld( $validation['serialized'] ) );
 					if ( $impact['introduces'] && ! wpmcp_filtered_markup_allowed( null ) ) {
-						$report['errors'][] = sprintf(
-							'This adds markup WordPress will not store from an agent account (%s). Structured data in <script type="application/ld+json"> is accepted; other scripts, iframes and embeds are not.',
-							implode( ', ', $impact['added'] )
-						);
+						$report['errors'][] = wpmcp_filtered_markup_error( $impact );
 					}
 				}
 			}

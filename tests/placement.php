@@ -46,7 +46,7 @@ function get_post_type_object( $type ) {
 	return (object) array( 'name' => $type, 'cap' => (object) array( 'publish_posts' => 'publish_pages', 'create_posts' => 'edit_pages' ) );
 }
 function current_user_can( ...$args ) { return true; }
-function wp_kses_post( $content ) { return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content ); }
+require_once __DIR__ . '/kses-stub.php';
 function wpmcp_pattern_access() { return 'read'; }
 function wpmcp_extra_post_types() { return array(); }
 function get_post_meta( $id, $key = '', $single = false ) { return $single ? '' : array(); }

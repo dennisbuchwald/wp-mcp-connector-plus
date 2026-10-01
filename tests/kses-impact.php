@@ -15,12 +15,7 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
-// Stand-in for wp_kses_post: strips the constructs WordPress strips.
-function wp_kses_post( $content ) {
-	$content = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content );
-	$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe>#is', '', $content );
-	return $content;
-}
+require_once __DIR__ . '/kses-stub.php';
 
 require_once dirname( __DIR__ ) . '/includes/content.php';
 
@@ -146,6 +141,20 @@ check( true === $i['introduces'], 'ein geaenderter Script-Inhalt zaehlt als neu'
 $i = wpmcp_kses_impact( $clean . $schema, $clean . $schema . $frame );
 check( array( '<iframe' ) === $i['added'], 'gemeldet wird nur das Neue', implode( ', ', $i['added'] ) );
 check( count( $i['affected'] ) === 2, 'waehrend "betroffen" beides nennt', implode( ', ', $i['affected'] ) );
+
+echo "\n\033[1mAttribute zaehlen wie Elemente (0.18.3)\033[0m\n";
+
+// Through 0.18.2 only whole elements counted as introduced. An attribute
+// kses strips made the save "alter" without "introducing", and that is
+// exactly the combination that went past the filter.
+$xss = '<!-- wp:core/paragraph --><p>Text <img src="x" onerror="alert(1)"></p><!-- /wp:core/paragraph -->';
+$i   = wpmcp_kses_impact( $clean . $schema, $clean . $schema . $xss );
+check( true === $i['introduces'], 'ein neues onerror ist neu eingebracht' );
+check( false === wpmcp_should_preserve_markup( $i ), 'und geht nicht am Filter vorbei', 'sonst landet es ungefiltert in der Datenbank' );
+check( '2' === ( $i['blocks'][0]['path'] ?? null ), 'der Block wird mit Pfad benannt', wp_json_encode( $i['blocks'] ) );
+
+$i = wpmcp_kses_impact( $clean, $clean . '<!-- wp:core/paragraph --><p><a href="&#106;avascript:alert(1)">x</a></p><!-- /wp:core/paragraph -->' );
+check( true === $i['introduces'], 'ein kodiertes javascript: ebenso' );
 
 echo "\n\033[1mDie Tuer fuer Reparaturen\033[0m\n";
 

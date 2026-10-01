@@ -616,6 +616,7 @@ php tests/run-tests.php                          # unit tests: round trips, patc
 php tests/register-abilities.php                 # abilities actually register
 php tests/verify-stored.php                      # saved content matches what was sent
 php tests/kses-impact.php                        # existing markup survives an unrelated edit
+php tests/markup-guard.php                       # nothing the agent writes goes past kses, on any path
 php tests/duplicate-preserves.php                # a copy is a copy
 php tests/search.php                             # site-wide search and its raw context
 php tests/privacy-page.php                       # the privacy page exception stays narrow

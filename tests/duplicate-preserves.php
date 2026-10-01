@@ -38,7 +38,7 @@ function wp_insert_post( $postarr, $error = false ) {
 }
 function wp_update_post( $postarr, $error = false ) { return $postarr['ID'] ?? 1; }
 function wp_slash( $v ) { return $v; }
-function wp_kses_post( $c ) { return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $c ); }
+require_once __DIR__ . '/kses-stub.php';
 
 require_once dirname( __DIR__ ) . '/includes/content.php';
 

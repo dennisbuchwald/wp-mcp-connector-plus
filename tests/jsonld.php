@@ -15,9 +15,7 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
-function wp_kses_post( $content ) {
-	return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content );
-}
+require_once __DIR__ . '/kses-stub.php';
 
 require_once dirname( __DIR__ ) . '/includes/content.php';
 

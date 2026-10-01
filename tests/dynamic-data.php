@@ -36,10 +36,7 @@ function wp_update_post( $postarr, $error = false ) {
 	return $postarr['ID'] ?? 1;
 }
 
-function wp_kses_post( $content ) {
-	$content = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $content );
-	return preg_replace( '#<iframe\b[^>]*>.*?</iframe>#is', '', $content );
-}
+require_once __DIR__ . '/kses-stub.php';
 
 require_once dirname( __DIR__ ) . '/includes/content.php';
 

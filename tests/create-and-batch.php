@@ -14,7 +14,7 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
-function wp_kses_post( $c ) { return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $c ); }
+require_once __DIR__ . '/kses-stub.php';
 function get_post_types( $args = array(), $output = 'names' ) {
 	$page = (object) array( 'name' => 'page', 'public' => true );
 	return 'names' === $output ? array( 'page' ) : array( 'page' => $page );
