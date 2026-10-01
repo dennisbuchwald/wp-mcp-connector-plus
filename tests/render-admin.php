@@ -285,7 +285,7 @@ $GLOBALS['stub']['level']      = 'draft';
 $GLOBALS['stub']['registered'] = 8;
 
 $html = render_case( 'Rechte laufen auseinander', function () { $GLOBALS['stub']['caps_match'] = false; } );
-expect_contains( $html, 'does not grant what the selected level promises', 'meldet nicht passende Rechte' );
+expect_contains( $html, 'stores more than reading', 'meldet nicht passende Rechte' );
 $GLOBALS['stub']['caps_match'] = true;
 
 echo "\n\033[1mAnwendungspasswoerter\033[0m\n";

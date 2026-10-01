@@ -240,10 +240,10 @@ function wpmcp_setup_steps() {
 		'detail' => $caps_match
 			? sprintf(
 				/* translators: %s: name of the access level */
-				__( 'Level "%s", and the agent role grants exactly that.', 'wp-mcp-connector-plus' ),
+				__( 'Level "%s". The agent role stores reading only; the level is applied on every request, so a setting or a session that ended leaves nothing behind.', 'wp-mcp-connector-plus' ),
 				$levels[ $level ]['label']
 			)
-			: __( 'The agent role does not grant what the selected level promises. Saving the settings again repairs it.', 'wp-mcp-connector-plus' ),
+			: __( 'The agent role is missing or stores more than reading. Deactivating and reactivating the plugin restores it.', 'wp-mcp-connector-plus' ),
 	);
 
 	// 6. Application passwords: the agent's only way in. Asking WordPress

@@ -30,8 +30,8 @@ const WPMCP_CAP = 'wpmcp_access';
  * Register the AI editor role. Draft-only by design: no publish_*, no
  * delete_*, no upload_files, no settings. Publishing stays human.
  *
- * edit_published_posts/pages are part of the full level only; the role's
- * capabilities follow the setting (see wpmcp_sync_role_capabilities).
+ * The role stores only the read set; what a level adds is worked out on
+ * every capability check (see wpmcp_agent_capabilities).
  */
 function wpmcp_register_role() {
 	// Re-create on every activation so cap changes ship with updates.
@@ -39,7 +39,7 @@ function wpmcp_register_role() {
 	add_role(
 		WPMCP_ROLE,
 		__( 'AI Editor', 'wp-mcp-connector-plus' ),
-		wpmcp_level_capabilities( wpmcp_access_level() )
+		wpmcp_role_capabilities()
 	);
 }
 
@@ -355,9 +355,8 @@ add_filter( 'wp_is_application_passwords_available_for_user', 'wpmcp_app_passwor
  * @return bool
  */
 function wpmcp_transport_permission() {
-	// A session that ran out between two requests has to close here too:
-	// nothing else runs on this endpoint, and waiting for someone to open
-	// wp-admin would leave the capabilities wide for as long as nobody does.
+	// The capabilities narrow on their own when a session runs out; this
+	// only tidies the stored timestamp and logs it on the first request.
 	if ( function_exists( 'wpmcp_close_expired_work_session' ) ) {
 		wpmcp_close_expired_work_session();
 	}

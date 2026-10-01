@@ -510,13 +510,18 @@ add_filter( 'wpmcp_allow_privacy_policy_edit', '__return_false' );
 - **Slug, status and post type are never touched**, so URLs stay put.
 - **Everything is logged** under *Tools → MCP Connector*.
 - **Kill switch:** `define( 'WPMCP_DISABLE', true );` in `wp-config.php`
-  stops the connector without deactivating the plugin.
+  stops the connector without deactivating the plugin. The agent account
+  can no longer sign in with its application password while it is set.
+- **Deactivating** ends a running work session and reduces the agent role
+  to reading. Application passwords, settings and the audit log stay, so
+  reactivating just works. Deleting the plugin removes all of it.
 
 Do not work around a permission problem by giving the agent user a
 built-in role such as Editor. Editor can publish and delete, which is
-exactly what every level here withholds. If the level and the granted
-capabilities disagree, the status table says so and saving the settings
-again repairs it.
+exactly what every level here withholds. The agent role itself stores
+only reading; what a level or a work session adds is worked out on every
+capability check, so a session that ran out or a level switched back
+leaves nothing behind on the role.
 
 To fix the level from code instead of the database, for instance on a
 production site that should never move past read-only:

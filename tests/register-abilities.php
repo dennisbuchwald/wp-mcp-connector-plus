@@ -74,6 +74,7 @@ function wp_get_ability( $name ) {
 
 function plugin_dir_path( $f ) { return dirname( $f ) . '/'; }
 function register_activation_hook( ...$a ) { return true; }
+function register_deactivation_hook( ...$a ) { return true; }
 function is_admin() { return false; }
 function wp_doing_cron() { return false; }
 function __( $t, $d = null ) { return $t; }
@@ -232,43 +233,114 @@ $GLOBALS['options']['wpmcp_access_level'] = 'draft';
 // --- The bug an independent test found ----------------------------------
 echo "\n\033[1mRechte folgen der Stufe\033[0m\n";
 
-// A site upgrading from an older version has no such option yet. Saving it
-// the first time is an add_option, not an update_option — the hook that
-// only listened for updates never ran, and the switch stayed decorative.
+// What the agent holds, worked out the way WordPress asks: everything
+// stored on its account, then the user_has_cap filter.
+function agent_caps( array $stored, array $roles = array( 'wpmcp_ai_editor' ) ) {
+	$user = (object) array( 'ID' => 7, 'roles' => $roles );
+	return array_keys( array_filter( wpmcp_agent_capabilities( $stored, array(), array(), $user ) ) );
+}
+
+// Since 0.19 the role stores only the read set at every level; the level
+// is applied per check, so neither a forgotten hook nor an expired session
+// can leave a capability behind.
 $GLOBALS['role']                          = new StubRole();
-$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+$GLOBALS['options']['wpmcp_access_level'] = 'full';
 wpmcp_sync_role_capabilities();
 check(
-	! isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
-	'Entwurfsstufe: kein Recht auf Veroeffentlichtes'
-);
-
-$GLOBALS['options']['wpmcp_access_level'] = 'full';
-do_action( 'add_option_wpmcp_access_level', 'wpmcp_access_level', 'full' );
-check(
-	isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
-	'Wechsel auf Vollstufe vergibt das Recht auch beim ERSTEN Speichern',
-	'add_option-Hook greift nicht — genau der gemeldete Fehler'
+	array( 'read', 'wpmcp_access' ) == array_keys( array_filter( $GLOBALS['role']->capabilities ) ),
+	'die Rolle speichert auf jeder Stufe nur Lesen und das Marker-Recht',
+	'gespeichert: ' . implode( ', ', array_keys( $GLOBALS['role']->capabilities ) )
 );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
-do_action( 'update_option_wpmcp_access_level', 'full', 'draft', 'wpmcp_access_level' );
+check( ! in_array( 'edit_published_pages', agent_caps( $GLOBALS['role']->capabilities ), true ), 'Entwurfsstufe: kein Recht auf Veroeffentlichtes' );
+check( in_array( 'edit_others_pages', agent_caps( $GLOBALS['role']->capabilities ), true ), 'aber auf fremde Entwuerfe' );
+
+// A site upgrading from an older version has no such option yet. Saving it
+// the first time is an add_option, not an update_option; the hook that
+// only listened for updates never ran, and the switch stayed decorative.
+// Now no hook has to run at all.
+$GLOBALS['options']['wpmcp_access_level'] = 'full';
 check(
-	! isset( $GLOBALS['role']->capabilities['edit_published_pages'] ),
-	'Zurueckschalten entzieht das Recht wieder'
+	in_array( 'edit_published_pages', agent_caps( $GLOBALS['role']->capabilities ), true ),
+	'Wechsel auf Vollstufe gilt sofort, ohne dass ein Hook laufen muss',
+	'genau der fruehere Fehler: Schalter umgelegt, Recht nicht da'
 );
 
-// The reconciler must repair drift from any other source.
+$GLOBALS['options']['wpmcp_access_level'] = 'read';
+check( array( 'read', 'wpmcp_access' ) == agent_caps( $GLOBALS['role']->capabilities ), 'Lesestufe: kein Bearbeitungsrecht' );
+
+// What an older version left on the role, or a role editor put there,
+// does not count for an account holding only the agent role.
+$stale = array( 'read' => true, 'wpmcp_access' => true, 'edit_pages' => true, 'edit_published_pages' => true, 'edit_published_posts' => true );
+$GLOBALS['options']['wpmcp_access_level'] = 'draft';
+check( ! in_array( 'edit_published_pages', agent_caps( $stale ), true ), 'gespeicherte Altrechte gelten nicht mehr', 'sonst bleibt die Rolle nach einem Update weit offen' );
+$GLOBALS['options']['wpmcp_access_level'] = 'read';
+check( ! in_array( 'edit_pages', agent_caps( $stale ), true ), 'auch nicht auf der Lesestufe' );
+
+// An expired session: the timestamp alone decides, nobody has to tidy up.
+$GLOBALS['options']['wpmcp_access_level']       = 'draft';
+$GLOBALS['options']['wpmcp_work_session_until'] = time() + 600;
+check( in_array( 'edit_published_pages', agent_caps( $GLOBALS['role']->capabilities ), true ), 'in einer Sitzung: Veroeffentlichtes bearbeitbar' );
+$GLOBALS['options']['wpmcp_work_session_until'] = time() - 1;
+check(
+	! in_array( 'edit_published_pages', agent_caps( $GLOBALS['role']->capabilities ), true ),
+	'abgelaufene Sitzung: sofort wieder weg',
+	'auch wenn niemand wp-admin oeffnet und nichts aufraeumt'
+);
+unset( $GLOBALS['options']['wpmcp_work_session_until'] );
+
+// A second role on the same account keeps what it grants.
+check(
+	in_array( 'edit_published_pages', agent_caps( $stale, array( 'wpmcp_ai_editor', 'editor' ) ), true ),
+	'eine zweite Rolle behaelt ihre eigenen Rechte'
+);
+check(
+	array( 'edit_posts' ) === agent_caps( array( 'edit_posts' => true ), array( 'editor' ) ),
+	'Konten ohne Agent-Rolle bleiben unberuehrt'
+);
+
+// The reconciler brings an older role back to the read set.
 $GLOBALS['options']['wpmcp_access_level'] = 'full';
 $GLOBALS['role']                          = new StubRole();
-check( false === wpmcp_role_caps_match(), 'Abweichung wird erkannt' );
+foreach ( $stale as $cap => $grant ) {
+	$GLOBALS['role']->add_cap( $cap );
+}
+check( false === wpmcp_role_caps_match(), 'Altrechte auf der Rolle werden erkannt' );
 wpmcp_reconcile_role();
-check( wpmcp_role_caps_match(), 'Abgleich stellt die Rechte wieder her' );
+check( wpmcp_role_caps_match(), 'Abgleich setzt die Rolle auf das Lese-Set zurueck' );
+check( ! isset( $GLOBALS['role']->capabilities['edit_published_pages'] ), 'ohne edit_published_pages' );
 
+foreach ( array( 'read', 'draft', 'full' ) as $level ) {
+	$GLOBALS['options']['wpmcp_access_level'] = $level;
+	check(
+		! array_intersect( array( 'publish_pages', 'publish_posts', 'upload_files', 'delete_pages' ), agent_caps( $GLOBALS['role']->capabilities ) ),
+		"Stufe '{$level}': kein Veroeffentlichungs-, Upload- oder Loeschrecht"
+	);
+}
+
+echo "\n\033[1mDeaktivieren\033[0m\n";
+
+$GLOBALS['wpdb'] = new class() {
+	public $prefix = 'wp_';
+	public function insert( ...$a ) { return 1; }
+};
+function current_time( ...$a ) { return '2026-10-01 12:00:00'; }
+function get_current_user_id() { return 1; }
+function update_option( $n, $v, $a = null ) { $GLOBALS['options'][ $n ] = $v; return true; }
+function delete_option( $n ) { unset( $GLOBALS['options'][ $n ] ); return true; }
+
+$GLOBALS['options']['wpmcp_work_session_until'] = time() + 3600;
+wpmcp_sync_role_capabilities();
+wpmcp_deactivate();
+check( ! wpmcp_work_session_active(), 'eine laufende Sitzung endet' );
 check(
-	! isset( $GLOBALS['role']->capabilities['publish_pages'] ),
-	'Auch auf der Vollstufe kein Veroeffentlichungsrecht'
+	array( 'read' ) === array_keys( array_filter( $GLOBALS['role']->capabilities ) ),
+	'die Rolle behaelt nur Lesen',
+	'ohne Plugin begrenzt nichts mehr den Zugang auf den Endpunkt'
 );
+wpmcp_reconcile_role();
+check( wpmcp_role_caps_match(), 'der naechste Abgleich stellt sie wieder her' );
 
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
 

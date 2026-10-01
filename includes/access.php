@@ -8,7 +8,9 @@
  * guarantee than one that checks, and it costs the agent no context.
  *
  * Capabilities follow the same setting, so WordPress enforces the same
- * boundary a second time, independently of this plugin's own logic.
+ * boundary a second time, independently of this plugin's own logic. They
+ * are worked out on every check rather than stored on the role, so a
+ * setting or a session that ended cannot leave anything behind.
  *
  * One line is not configurable: the agent can never publish. Every level
  * leaves that with a human.
@@ -389,8 +391,9 @@ function wpmcp_start_work_session( $hours ) {
 	$until = time() + ( $hours * HOUR_IN_SECONDS );
 	update_option( 'wpmcp_work_session_until', $until, false );
 
-	// The role has to follow, or the second line of defence is still narrow
-	// while the first one is open.
+	// The capabilities follow on their own (wpmcp_agent_capabilities works
+	// them out on every check). Reconciling the role here as well keeps
+	// anything an older version stored from outliving the switch.
 	wpmcp_sync_role_capabilities();
 
 	wpmcp_log(
@@ -422,12 +425,12 @@ function wpmcp_end_work_session() {
 }
 
 /**
- * Put the role back where the settings say, once a session has run out.
+ * Tidy up once a session has run out.
  *
- * The level drops on its own — it is read fresh every request — but the
- * capabilities are stored, and nothing writes them back unless somebody
- * opens wp-admin. This runs on the connector's own endpoint too, so the
- * second line of defence narrows at the same moment the first one does.
+ * Nothing depends on this any more: the level and the capabilities are
+ * both worked out from the timestamp on every check, so they narrow the
+ * second it passes. What is left to do is remove the stale entry and say
+ * so in the log, on whichever request comes first.
  */
 function wpmcp_close_expired_work_session() {
 	if ( ! get_option( 'wpmcp_work_session_until', 0 ) || wpmcp_work_session_active() ) {
@@ -445,6 +448,10 @@ function wpmcp_close_expired_work_session() {
  *
  * Never contains publish_*, delete_*, upload_files or manage_options —
  * not at any level, not through any setting.
+ *
+ * This is what the agent effectively holds at a level. The role itself
+ * stores only the read set (wpmcp_role_capabilities); the rest is added
+ * per check by wpmcp_agent_capabilities.
  *
  * @param string $level Access level.
  * @return array<string, bool>
@@ -472,6 +479,74 @@ function wpmcp_level_capabilities( $level ) {
 
 	return $caps;
 }
+
+/**
+ * What the agent role stores in the database.
+ *
+ * The read set and nothing more: the marker capability and read. Every
+ * editing capability depends on the level and on a session, and both can
+ * change without anyone opening wp-admin, so they are worked out on each
+ * check instead (see wpmcp_agent_capabilities). Stored, they outlived
+ * every change to either: a session that ran out at night kept the role
+ * wide until somebody opened the admin the next morning.
+ *
+ * It also means the role is inert wherever this plugin is not running.
+ *
+ * @return array<string, bool>
+ */
+function wpmcp_role_capabilities() {
+	return wpmcp_level_capabilities( 'read' );
+}
+
+/**
+ * Capabilities that depend on the level or a session.
+ *
+ * @return string[]
+ */
+function wpmcp_level_dependent_capabilities() {
+	return array_keys( array_diff_key( wpmcp_level_capabilities( 'full' ), wpmcp_role_capabilities() ) );
+}
+
+/**
+ * Give the agent the capabilities of the level in force right now.
+ *
+ * Runs on every capability check for a user holding the agent role. The
+ * level is read fresh, including whether a session is open, so nothing
+ * has to be written back when either changes.
+ *
+ * For an account holding only the agent role, the level decides those
+ * capabilities alone: whatever an older version stored on the role, or a
+ * role editor put on the account, is taken away again. An account that
+ * also holds another role keeps what that role grants; this only adds.
+ *
+ * Runs before the per-request grants (publishing in a session, uploads,
+ * dynamic data), which hook in at a later priority and must win.
+ *
+ * @param array<string, bool> $allcaps Everything the user holds.
+ * @param string[]            $caps    Capabilities being checked.
+ * @param array               $args    Context.
+ * @param \WP_User|object     $user    The user.
+ * @return array<string, bool>
+ */
+function wpmcp_agent_capabilities( $allcaps, $caps, $args, $user ) {
+	$roles = isset( $user->roles ) ? array_values( (array) $user->roles ) : array();
+	if ( ! in_array( WPMCP_ROLE, $roles, true ) ) {
+		return $allcaps;
+	}
+
+	if ( array( WPMCP_ROLE ) === $roles ) {
+		foreach ( wpmcp_level_dependent_capabilities() as $cap ) {
+			unset( $allcaps[ $cap ] );
+		}
+	}
+
+	foreach ( wpmcp_level_capabilities( wpmcp_access_level() ) as $cap => $grant ) {
+		$allcaps[ $cap ] = $grant;
+	}
+
+	return $allcaps;
+}
+add_filter( 'user_has_cap', 'wpmcp_agent_capabilities', 10, 4 );
 
 /**
  * Abilities available at the current access level.
@@ -579,10 +654,13 @@ function wpmcp_allow_privacy_policy_edit( $caps, $cap, $user_id, $args ) {
 add_filter( 'map_meta_cap', 'wpmcp_allow_privacy_policy_edit', 10, 4 );
 
 /**
- * Do the role's capabilities match the configured level?
+ * Does the role store exactly what it should?
  *
- * @return bool True also when the role is missing, so callers can tell
- *              "in step" from "cannot tell" via wpmcp_agent_role_exists().
+ * That is the read set, at every level: the level itself is applied per
+ * check. Anything more on the role is a leftover from an older version or
+ * the work of a role editor.
+ *
+ * @return bool False when the role is missing.
  */
 function wpmcp_role_caps_match() {
 	$role = get_role( WPMCP_ROLE );
@@ -590,7 +668,7 @@ function wpmcp_role_caps_match() {
 		return false;
 	}
 
-	$wanted = wpmcp_level_capabilities( wpmcp_access_level() );
+	$wanted = wpmcp_role_capabilities();
 	$actual = array_keys( array_filter( (array) $role->capabilities ) );
 
 	sort( $actual );
@@ -601,13 +679,13 @@ function wpmcp_role_caps_match() {
 }
 
 /**
- * Keep the role's capabilities in step with the access level.
+ * Put the role back to what it should store.
  *
- * Hooked to both add_option and update_option: WordPress fires
- * update_option_{$option} only when the option already existed, so on any
- * site upgrading from a version that had no such setting the first save
- * creates it and the update hook never runs. That left the switch visibly
- * flipped and practically inert.
+ * Since 0.19 that is the read set at every level, so this mostly removes
+ * what earlier versions stored. Still hooked to both add_option and
+ * update_option of the level: WordPress fires update_option_{$option} only
+ * when the option already existed, which once left a switch visibly
+ * flipped and practically inert. Cheap enough to keep as a belt.
  */
 function wpmcp_sync_role_capabilities() {
 	$role = get_role( WPMCP_ROLE );
@@ -616,7 +694,7 @@ function wpmcp_sync_role_capabilities() {
 		return;
 	}
 
-	$wanted = wpmcp_level_capabilities( wpmcp_access_level() );
+	$wanted = wpmcp_role_capabilities();
 
 	// Remove anything no longer granted, then add what is.
 	foreach ( array_keys( (array) $role->capabilities ) as $cap ) {
@@ -632,12 +710,13 @@ add_action( 'update_option_wpmcp_access_level', 'wpmcp_sync_role_capabilities' )
 add_action( 'add_option_wpmcp_access_level', 'wpmcp_sync_role_capabilities' );
 
 /**
- * Last line of defence: reconcile on any admin request.
+ * Tidy the stored role on admin and REST requests.
  *
- * Hooks can be missed — a level set by constant, an option written
- * directly, a role edited by another plugin. Comparing is cheap (roles
- * live in one cached option) and it only writes when something actually
- * drifted, so the setting can never quietly mean less than it says.
+ * Not a line of defence any more (wpmcp_agent_capabilities decides per
+ * check), but an update never runs the activation hook, so this is where a
+ * role stored by an older version is brought back to the read set. Comparing
+ * is cheap (roles live in one cached option) and it only writes when
+ * something actually drifted.
  */
 function wpmcp_reconcile_role() {
 	if ( ! wpmcp_role_caps_match() && get_role( WPMCP_ROLE ) ) {
@@ -646,3 +725,32 @@ function wpmcp_reconcile_role() {
 }
 add_action( 'admin_init', 'wpmcp_reconcile_role' );
 add_action( 'admin_init', 'wpmcp_close_expired_work_session' );
+add_action( 'rest_api_init', 'wpmcp_reconcile_role' );
+add_action( 'rest_api_init', 'wpmcp_close_expired_work_session' );
+
+/**
+ * Deactivation: leave nothing open behind.
+ *
+ * Ends a running session and reduces the role to read. With the plugin
+ * inactive nothing fences the agent account to its endpoint any more, so
+ * the role must not carry anything worth reaching. Application passwords
+ * are kept, so reactivating simply works again; activation restores the
+ * role. To remove the agent for good, uninstall the plugin.
+ */
+function wpmcp_deactivate() {
+	if ( wpmcp_work_session_active() ) {
+		wpmcp_end_work_session();
+	}
+	delete_option( 'wpmcp_work_session_until' );
+
+	$role = get_role( WPMCP_ROLE );
+	if ( ! $role ) {
+		return;
+	}
+	foreach ( array_keys( (array) $role->capabilities ) as $cap ) {
+		if ( 'read' !== $cap ) {
+			$role->remove_cap( $cap );
+		}
+	}
+	$role->add_cap( 'read' );
+}

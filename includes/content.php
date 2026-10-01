@@ -148,8 +148,14 @@ function wpmcp_get_writable_post( $post_id ) {
 		return $post;
 	}
 
-	if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-		if ( 'publish' === $post->post_status && ! wpmcp_live_edit_enabled() ) {
+	// The setting decides on its own, before any capability is asked:
+	// capabilities can come from places this plugin does not control (a
+	// second role on the account, a role editor), and "published pages are
+	// read-only" has to hold regardless.
+	$live_refused = 'publish' === $post->post_status && ! wpmcp_live_edit_enabled();
+
+	if ( $live_refused || ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( $live_refused ) {
 			return new \WP_Error(
 				'wpmcp_live_edit_disabled',
 				sprintf(

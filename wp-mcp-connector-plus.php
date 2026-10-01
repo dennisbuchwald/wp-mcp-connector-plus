@@ -31,6 +31,18 @@ define( 'WPMCP_FILE', __FILE__ );
  * connector off without deactivating the plugin (e.g. during incidents).
  */
 if ( defined( 'WPMCP_DISABLE' ) && WPMCP_DISABLE ) {
+	// Off means the agent cannot sign in either. Nothing below loads, so
+	// the fence that keeps its credential on the MCP endpoint is gone too,
+	// and its application password would otherwise still open the rest of
+	// the REST API. Inline, so the kill switch depends on nothing else.
+	add_filter(
+		'wp_is_application_passwords_available_for_user',
+		function ( $available, $user ) {
+			return ( isset( $user->roles ) && in_array( 'wpmcp_ai_editor', (array) $user->roles, true ) ) ? false : $available;
+		},
+		100,
+		2
+	);
 	return;
 }
 
@@ -253,4 +265,7 @@ function wpmcp_activate() {
 	wpmcp_create_audit_table();
 }
 
-// Deactivation intentionally keeps role + table (no data loss, cheap).
+// Deactivation ends a session and reduces the role to read; the audit
+// table, the settings and the agent's application passwords stay, so
+// reactivating just works. uninstall.php removes all of it.
+register_deactivation_hook( __FILE__, 'wpmcp_deactivate' );
