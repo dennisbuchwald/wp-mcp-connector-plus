@@ -279,7 +279,7 @@ tools there are, because a connected client keeps the list it was given.
 | `wpmcp/content-preview` | Server-rendered HTML, heading outline, and a signed preview URL that works without a login. Long pages come back in windows; the answer names its own size and where to continue. |
 | `wpmcp/content-revisions` | The saved history of a page: ids, timestamps, authors, block counts. |
 | `wpmcp/content-restore` | *Write levels only.* Undo — put a page back to one of its own revisions. |
-| `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. A long result names its `nextOffset`; `post_type` works as a single string too. |
+| `wpmcp/content-search` | Find a string or pattern across the whole site, with the raw text around every hit. A long result names its `nextOffset`; `post_type` works as a single string too. Sees what `content-list` sees; a regular expression reads every page in scope and stops at a limit (`scanLimitReached`, filter `wpmcp_search_limits`). |
 | `wpmcp/content-fetch-live` | The public URL over HTTP: what a visitor receives, cache headers and a parsed `head` (title, description, canonical, robots, Open Graph) included. `contains` answers "is my change on the page?" in a few hundred bytes; `body_only` drops header, footer, styles and scripts. |
 | `wpmcp/media-list` | Attachments with alt text, title and every post that embeds them. `missing_alt` narrows it to the ones with none. |
 | `wpmcp/media-read` | One attachment in the same shape. Takes `id`, or `post_id` like every other tool. |
@@ -339,9 +339,9 @@ carry a code an agent can branch on:
 | `wpmcp_bad_parent` | The parent does not exist, is the page itself, another post type or would form a loop. |
 | `wpmcp_bad_path` | A block path is malformed. |
 | `wpmcp_bad_payload` | `ops`, `tree`, `meta` or `items` arrived in a shape that cannot be decoded. |
-| `wpmcp_bad_regex` | `content-search`: the regular expression does not compile. |
+| `wpmcp_bad_regex` | `content-search`: the regular expression does not compile, is longer than 200 bytes, or failed while running on a page (the message names it). |
 | `wpmcp_bad_request` | A required argument is missing or arguments contradict each other. |
-| `wpmcp_bad_status` | `content-list`: a status that cannot be listed. |
+| `wpmcp_bad_status` | `content-list`, `content-search`: a status that cannot be listed or searched. |
 | `wpmcp_bad_upload` | `media-upload`: `data` is not valid base64. |
 | `wpmcp_batch_incomplete` | `content-batch`: a save failed after every dry run passed; the posts before it are saved. |
 | `wpmcp_dynamic_data_blocked` | The page holds dynamic data and the site has not allowed saving it. |

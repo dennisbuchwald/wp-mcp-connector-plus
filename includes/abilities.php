@@ -534,7 +534,7 @@ function wpmcp_register_abilities() {
 		'wpmcp/content-search',
 		array(
 			'label'       => __( 'Search content', 'wp-mcp-connector-plus' ),
-			'description' => 'Reads from the database. Finds a string or regular expression across the whole site in one call, and returns for every occurrence: the post, the block path, the block type, its per-instance id, whether the hit sits in the markup or in an attribute, and the raw text around it. Use this before changing anything that appears in several places — the context shows what the markup actually is at each site, so a change never has to be extrapolated from the cases you happened to look at.',
+			'description' => 'Reads from the database. Finds a string or regular expression across the whole site in one call, and returns for every occurrence: the post, the block path, the block type, its per-instance id, whether the hit sits in the markup or in an attribute, and the raw text around it. Use this before changing anything that appears in several places — the context shows what the markup actually is at each site, so a change never has to be extrapolated from the cases you happened to look at. Searches what content-list would list: statuses publish, draft, pending, future and private, each only where you may read it. "scanned" says how many posts were read. Prefer plain text: it is matched in the database first. A regular expression (at most 200 bytes) reads every post in scope and stops at a limit; then the answer has scanLimitReached and a hint, and post_type or post_status narrow it.',
 			'category'    => WPMCP_ABILITY_CATEGORY,
 			'input_schema' => array(
 				'type'       => 'object',
@@ -560,7 +560,7 @@ function wpmcp_register_abilities() {
 					'post_status'   => array(
 						'type'        => array( 'array', 'string' ),
 						'items'       => array( 'type' => 'string' ),
-						'description' => 'Restrict to these statuses, e.g. ["publish"].',
+						'description' => 'Restrict to these statuses, e.g. ["publish"]. One of publish, draft, pending, future, private.',
 					),
 					'context_chars' => array(
 						'type'        => 'integer',
