@@ -90,6 +90,33 @@ $file = wpmcp_inspect_upload( 'bild.png', $png );
 check( is_wp_error( $file ) && 'wpmcp_upload_too_large' === $file->get_error_code(), 'zu gross wird abgelehnt' );
 $GLOBALS['dbw_filters']['wpmcp_max_upload_bytes'] = array();
 
+echo "\n\033[1mPixel, nicht Bytes\033[0m\n";
+
+// A PNG header declaring a huge bitmap, a few dozen bytes long. WordPress
+// would decode all of it to make the thumbnails: 30000 x 30000 x 4 bytes.
+function png_header( $w, $h ) {
+	$ihdr = pack( 'NNCCCCC', $w, $h, 8, 2, 0, 0, 0 );
+	return "\x89PNG\r\n\x1a\n" . pack( 'N', 13 ) . 'IHDR' . $ihdr . pack( 'N', crc32( 'IHDR' . $ihdr ) )
+		. pack( 'N', 0 ) . 'IEND' . pack( 'N', crc32( 'IEND' ) );
+}
+
+$bomb = base64_encode( png_header( 30000, 30000 ) );
+$file = wpmcp_inspect_upload( 'klein.png', $bomb );
+check(
+	is_wp_error( $file ) && 'wpmcp_upload_too_many_pixels' === $file->get_error_code(),
+	'ein winziges PNG mit 900 Megapixeln wird abgelehnt',
+	is_wp_error( $file ) ? $file->get_error_code() : 'angenommen, ' . strlen( base64_decode( $bomb ) ) . ' Bytes'
+);
+check( is_wp_error( $file ) && false !== strpos( $file->get_error_message(), '30000 x 30000' ), 'die Meldung nennt die Abmessungen' );
+
+$file = wpmcp_inspect_upload( 'gross.png', base64_encode( png_header( 6000, 4000 ) ) );
+check( ! is_wp_error( $file ), 'ein Kamerabild mit 24 Megapixeln geht durch', is_wp_error( $file ) ? $file->get_error_message() : '' );
+
+add_filter( 'wpmcp_max_upload_pixels', function () { return 1000; } );
+$file = wpmcp_inspect_upload( 'gross.png', base64_encode( png_header( 6000, 4000 ) ) );
+check( is_wp_error( $file ) && 'wpmcp_upload_too_many_pixels' === $file->get_error_code(), 'die Grenze ist per Filter einstellbar' );
+$GLOBALS['dbw_filters']['wpmcp_max_upload_pixels'] = array();
+
 echo "\n\033[1mNur in einer Arbeitssitzung\033[0m\n";
 
 $out = wpmcp_media_upload( array( 'filename' => 'bild.png', 'data' => $png, 'alt' => 'Boot' ) );

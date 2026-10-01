@@ -21,12 +21,18 @@ const WPMCP_PREVIEW_TTL   = 900; // 15 minutes.
 /**
  * Build the token for a post + expiry timestamp.
  *
+ * The signed data starts with a purpose label. The key is the site's auth
+ * salt, which other code signs things with too; without the label, any
+ * HMAC over "<number>|<number>" made with that salt for some other purpose
+ * would double as a preview link to a draft. Changing the label invalidated
+ * the links issued before 0.19, which lived fifteen minutes anyway.
+ *
  * @param int $post_id Post ID.
  * @param int $expires Unix timestamp.
  * @return string
  */
 function wpmcp_preview_token( $post_id, $expires ) {
-	return hash_hmac( 'sha256', $post_id . '|' . $expires, wp_salt( 'auth' ) );
+	return hash_hmac( 'sha256', 'wpmcp-preview|' . (int) $post_id . '|' . (int) $expires, wp_salt( 'auth' ) );
 }
 
 /**

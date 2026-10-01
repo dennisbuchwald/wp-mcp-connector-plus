@@ -121,6 +121,20 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contain
 		return $post;
 	}
 
+	// Only a public page has a version a visitor receives. Fetching a
+	// draft or a password-protected page from outside returns a login
+	// screen, a 404 or the password form, and reads like a broken page.
+	if ( ! wpmcp_post_is_public( $post ) ) {
+		return new \WP_Error(
+			'wpmcp_not_public',
+			sprintf(
+				'Post %d is not public (%s), so there is no page a visitor could receive. content-preview renders the stored version and returns a signed preview link.',
+				$post->ID,
+				'' !== (string) $post->post_password ? 'password protected' : 'status "' . $post->post_status . '"'
+			)
+		);
+	}
+
 	$url = get_permalink( $post );
 	if ( ! $url ) {
 		return new \WP_Error( 'wpmcp_no_permalink', sprintf( 'Post %d has no public URL.', $post->ID ) );
@@ -130,21 +144,12 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contain
 		$url = add_query_arg( 'wpmcp_cb', (string) time(), $url );
 	}
 
-	$response = wp_remote_get(
-		$url,
-		array(
-			'timeout'     => 20,
-			'redirection' => 3,
-			'headers'     => array(
-				'Cache-Control' => 'no-cache',
-				'Pragma'        => 'no-cache',
-			),
-		)
-	);
-
-	if ( is_wp_error( $response ) ) {
-		return $response;
+	$fetched = wpmcp_fetch_own_url( $url );
+	if ( is_wp_error( $fetched ) ) {
+		return $fetched;
 	}
+	$response = $fetched['response'];
+	$url      = $fetched['url'];
 
 	$body   = (string) wp_remote_retrieve_body( $response );
 	$status = (int) wp_remote_retrieve_response_code( $response );
@@ -178,6 +183,11 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contain
 		'source'       => 'the public URL, as a visitor receives it',
 	);
 
+	$hint = '' !== $fetched['hint'] ? $fetched['hint'] : wpmcp_fetch_status_hint( $status );
+	if ( '' !== $hint ) {
+		$base['hint'] = $hint;
+	}
+
 	// Most checks after a write are one question — is my change on the
 	// page? — and the answer to it used to arrive as 200 KB of HTML that
 	// had to be written to disk and searched.
@@ -206,6 +216,85 @@ function wpmcp_fetch_live( $post_id, $cache_buster = true, $offset = 0, $contain
 	}
 
 	return array_merge( $base, wpmcp_slice_text( $scope, 200000, $offset ) );
+}
+
+/**
+ * Fetch one of this site's own URLs, the way an anonymous visitor would.
+ *
+ * Through wp_safe_remote_get, which refuses private and loopback addresses
+ * unless they are this site's own host. Redirects are followed by hand and
+ * only within this site's host: a permalink that redirects elsewhere is a
+ * finding to report, not a page to fetch on the server's behalf.
+ *
+ * @param string $url Absolute URL.
+ * @return array{response: array, url: string, hint: string}|\WP_Error
+ */
+function wpmcp_fetch_own_url( $url ) {
+	$home = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+	$hint = '';
+
+	for ( $hop = 0; ; $hop++ ) {
+		$response = wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'     => 10,
+				'redirection' => 0,
+				'headers'     => array(
+					'Cache-Control' => 'no-cache',
+					'Pragma'        => 'no-cache',
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$status   = (int) wp_remote_retrieve_response_code( $response );
+		$location = (string) wp_remote_retrieve_header( $response, 'location' );
+		if ( $status < 300 || $status >= 400 || '' === $location ) {
+			break;
+		}
+
+		$next = class_exists( '\WP_Http' ) ? \WP_Http::make_absolute_url( $location, $url ) : $location;
+		$host = strtolower( (string) wp_parse_url( $next, PHP_URL_HOST ) );
+
+		if ( $host !== $home ) {
+			$hint = sprintf( 'The page redirects to %s, which is not this site, so the redirect was not followed. Check the permalink and any redirect rules.', $next );
+			break;
+		}
+		if ( $hop >= 3 ) {
+			$hint = sprintf( 'The page redirected more than three times (last to %s). Check for a redirect loop.', $next );
+			break;
+		}
+
+		$url = $next;
+	}
+
+	return array(
+		'response' => $response,
+		'url'      => $url,
+		'hint'     => $hint,
+	);
+}
+
+/**
+ * What an HTTP status from the site's own page most likely means.
+ *
+ * @param int $status HTTP status.
+ * @return string Empty when there is nothing to say.
+ */
+function wpmcp_fetch_status_hint( $status ) {
+	if ( 401 === $status || 403 === $status ) {
+		return 'The site refused an anonymous visitor. Usually something in front of it: password protection on a staging site, a firewall or bot protection, or a coming-soon or maintenance mode. The page itself may be fine; content-preview shows the stored version.';
+	}
+	if ( 404 === $status ) {
+		return 'The site answered 404 for this post\'s own URL. If the slug or a parent changed recently, the permalinks may need flushing.';
+	}
+	if ( $status >= 500 ) {
+		return 'The site answered with a server error. content-preview shows whether the content itself renders; the PHP error log says why the page does not.';
+	}
+	return '';
 }
 
 /**

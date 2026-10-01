@@ -356,6 +356,21 @@ function wpmcp_max_upload_bytes() {
 }
 
 /**
+ * The most pixels an upload may have.
+ *
+ * Bytes are not the cost of an image, pixels are: WordPress decodes the
+ * whole bitmap to make every thumbnail size, at four bytes a pixel. A PNG
+ * of a few kilobytes can declare 30000 x 30000 pixels, and decoding that
+ * takes 3.6 GB of memory and the request with it. 40 megapixels is more
+ * than any web image needs and what a common PHP memory limit survives.
+ *
+ * @return int
+ */
+function wpmcp_max_upload_pixels() {
+	return (int) apply_filters( 'wpmcp_max_upload_pixels', 40000000 );
+}
+
+/**
  * Look at an upload before anything touches the disk.
  *
  * What a file is gets decided by its bytes, never by its name: a PNG
@@ -404,6 +419,23 @@ function wpmcp_inspect_upload( $filename, $data ) {
 		return new \WP_Error(
 			'wpmcp_upload_type',
 			'Only JPEG, PNG and WebP images are accepted, judged by the file contents rather than its name. SVG is refused because it can carry script.'
+		);
+	}
+
+	// getimagesizefromstring() reads the header only, so this check costs
+	// nothing even for the file it is there to stop.
+	$pixels = (int) $info[0] * (int) $info[1];
+	$limit  = wpmcp_max_upload_pixels();
+	if ( $pixels > $limit ) {
+		return new \WP_Error(
+			'wpmcp_upload_too_many_pixels',
+			sprintf(
+				'The image is %d x %d pixels (%.1f megapixels); the limit is %.1f megapixels. WordPress decodes every pixel to make the thumbnail sizes, so resize it first: a web image rarely needs more than 2500 pixels on its long side.',
+				(int) $info[0],
+				(int) $info[1],
+				$pixels / 1000000,
+				$limit / 1000000
+			)
 		);
 	}
 
