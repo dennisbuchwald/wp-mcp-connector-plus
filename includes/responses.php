@@ -1,13 +1,28 @@
 <?php
 /**
  * The shape of every answer: error codes in the message, a code on every
- * refusal, and phase timings under WP_DEBUG.
+ * refusal, and phase timings under WP_DEBUG. And the one default every
+ * writing tool shares: it is a dry run unless asked otherwise.
  *
  * @package wp-mcp-connector-plus
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
+}
+
+/**
+ * Whether a call is a dry run.
+ *
+ * Every writing tool defaults to one: it saves only when dry_run is sent
+ * and false. Leaving the argument out, or sending no arguments at all,
+ * checks and reports without writing.
+ *
+ * @param array|null $args Tool arguments.
+ * @return bool
+ */
+function wpmcp_is_dry_run( $args ) {
+	return ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 }
 
 /**

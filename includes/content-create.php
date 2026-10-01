@@ -200,7 +200,7 @@ function wpmcp_create_content( array $args ) {
 
 	$slug = isset( $args['slug'] ) ? sanitize_title( (string) $args['slug'] ) : '';
 
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$dry_run = wpmcp_is_dry_run( $args );
 
 	// The page that does not exist yet, for the checks that ask about one.
 	$stand_in = (object) array(
@@ -508,7 +508,7 @@ function wpmcp_batch_write( array $args ) {
 		$ids[] = $id;
 	}
 
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$dry_run = wpmcp_is_dry_run( $args );
 	$checks  = array();
 	$plans   = array();
 	$all_ok  = true;

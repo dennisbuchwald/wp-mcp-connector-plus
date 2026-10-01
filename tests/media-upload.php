@@ -20,6 +20,7 @@ function wpmcp_work_session_active() { return $GLOBALS['session']; }
 function sanitize_text_field( $v ) { return trim( wp_strip_all_tags( (string) $v ) ); }
 function sanitize_file_name( $v ) { return preg_replace( '/[^A-Za-z0-9._-]+/', '-', (string) $v ); }
 
+require_once dirname( __DIR__ ) . '/includes/responses.php';
 require_once dirname( __DIR__ ) . '/includes/media.php';
 
 $fail = 0;

@@ -468,7 +468,7 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) {
 	$timer   = wpmcp_debug_timer();
 	$post_id = (int) ( $args['post_id'] ?? 0 );
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$dry_run = wpmcp_is_dry_run( $args );
 
 	$post = wpmcp_get_writable_post( $post_id );
 	if ( is_wp_error( $post ) ) {

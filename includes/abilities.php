@@ -473,7 +473,7 @@ function wpmcp_ability_definitions() {
 				return wpmcp_restore_revision(
 					(int) ( $input['post_id'] ?? 0 ),
 					(int) ( $input['revision_id'] ?? 0 ),
-					! isset( $input['dry_run'] ) || (bool) $input['dry_run']
+					wpmcp_is_dry_run( $input )
 				);
 			},
 		),

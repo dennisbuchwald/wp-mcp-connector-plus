@@ -126,7 +126,7 @@ function wpmcp_media_update( array $args ) {
 		);
 	}
 
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$dry_run = wpmcp_is_dry_run( $args );
 	$changes = array();
 
 	if ( array_key_exists( 'alt', $args ) ) {
@@ -541,7 +541,7 @@ function wpmcp_media_upload( array $args ) {
 
 	$title   = sanitize_text_field( (string) ( $args['title'] ?? '' ) );
 	$title   = '' !== $title ? $title : pathinfo( $file['filename'], PATHINFO_FILENAME );
-	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
+	$dry_run = wpmcp_is_dry_run( $args );
 
 	$summary = array(
 		'filename' => $file['filename'],

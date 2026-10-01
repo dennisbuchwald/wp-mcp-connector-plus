@@ -65,6 +65,7 @@ function wpmcp_log( $ability, $args ) {
 	$GLOBALS['logged'][] = $args;
 }
 
+require_once dirname( __DIR__ ) . '/includes/responses.php';
 require_once dirname( __DIR__ ) . '/includes/media.php';
 
 $GLOBALS['posts'] = array(
