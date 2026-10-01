@@ -512,22 +512,25 @@ function wpmcp_render_smoke_test( $serialized ) {
 		}
 	);
 
+	// Back to exactly this level afterwards, however the render left it.
+	// A block that opens a buffer and throws, or simply forgets to close
+	// one, would otherwise leave buffers open that swallow the response.
+	$level = ob_get_level();
+
 	try {
 		ob_start();
 		do_blocks( $serialized );
-		ob_end_clean();
 	} catch ( \Throwable $e ) {
-		if ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
-		restore_error_handler();
 		return new \WP_Error(
 			'wpmcp_render_failed',
 			sprintf( '%s in %s:%d', $e->getMessage(), basename( $e->getFile() ), $e->getLine() )
 		);
+	} finally {
+		while ( ob_get_level() > $level ) {
+			ob_end_clean();
+		}
+		restore_error_handler();
 	}
-
-	restore_error_handler();
 
 	return array( 'notices' => array_slice( array_unique( $notices ), 0, 10 ) );
 }
