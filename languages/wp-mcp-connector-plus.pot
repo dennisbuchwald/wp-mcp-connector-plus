@@ -150,7 +150,7 @@ msgstr ""
 msgid "Close session now"
 msgstr ""
 
-#: includes/admin.php:23 includes/admin.php:530
+#: includes/admin.php:23 includes/admin.php:540
 msgid "WP MCP Connector Plus"
 msgstr ""
 
@@ -158,329 +158,341 @@ msgstr ""
 msgid "MCP Connector"
 msgstr ""
 
-#: includes/admin.php:130
+#: includes/admin.php:140
 msgid "Connection"
 msgstr ""
 
-#: includes/admin.php:131
+#: includes/admin.php:141
 msgid "Access"
 msgstr ""
 
-#: includes/admin.php:132
+#: includes/admin.php:142
 msgid "Activity"
 msgstr ""
 
-#: includes/admin.php:212
+#: includes/admin.php:222
 msgid "Sorry, you are not allowed to do that."
 msgstr ""
 
-#: includes/admin.php:262
+#: includes/admin.php:272
 msgid "The work session is closed. Everything is back to the saved settings."
 msgstr ""
 
 #. translators: %s: remaining time, e.g. "4 hours".
-#: includes/admin.php:270
+#: includes/admin.php:280
 #, php-format
 msgid "Work session opened. It closes itself in %s."
 msgstr ""
 
-#: includes/admin.php:295
+#: includes/admin.php:305
 msgid "The agent role is repaired: it stores reading only again."
 msgstr ""
 
-#: includes/admin.php:297
+#: includes/admin.php:307
 msgid "The agent role could not be repaired. Another plugin may be changing it back; deactivating and reactivating this plugin recreates it."
 msgstr ""
 
-#: includes/admin.php:397
+#: includes/admin.php:407
 msgid "WordPress with the Abilities API"
 msgstr ""
 
 #. translators: %s: WordPress version
-#: includes/admin.php:401
+#: includes/admin.php:411
 #, php-format
 msgid "WordPress %s."
 msgstr ""
 
 #. translators: %s: WordPress version
-#: includes/admin.php:403
+#: includes/admin.php:413
 #, php-format
 msgid "WordPress %s has no Abilities API. Version 6.9 or newer is required."
 msgstr ""
 
-#: includes/admin.php:410
+#: includes/admin.php:420
 msgid "Abilities registered"
 msgstr ""
 
-#: includes/admin.php:413
+#: includes/admin.php:423
 msgid "Cannot be determined without the Abilities API."
 msgstr ""
 
 #. translators: 1: registered count, 2: expected count
-#: includes/admin.php:416
+#: includes/admin.php:426
 #, php-format
 msgid "%1$d of %2$d."
 msgstr ""
 
-#: includes/admin.php:419
+#: includes/admin.php:429
 msgid "The MCP server will connect but expose no tools."
 msgstr ""
 
-#: includes/admin.php:426
+#: includes/admin.php:436
 msgid "MCP transport"
 msgstr ""
 
 #. translators: %s: mcp-adapter version
-#: includes/admin.php:431
+#: includes/admin.php:441
 #, php-format
 msgid "mcp-adapter %s. Endpoint: "
 msgstr ""
 
-#: includes/admin.php:434
+#: includes/admin.php:444
 msgid "No usable mcp-adapter. Abilities stay reachable over wp-abilities/v1, but there is no MCP endpoint."
 msgstr ""
 
-#: includes/admin.php:442
+#: includes/admin.php:452
 msgid "Agent user and credential"
 msgstr ""
 
 #. translators: 1: user login, 2: number of application passwords
-#: includes/admin.php:447
+#: includes/admin.php:457
 #, php-format
 msgid "%1$s, %2$d application password."
 msgid_plural "%1$s, %2$d application passwords."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin.php:451
+#: includes/admin.php:461
 msgid "Not created yet. Use the form below."
 msgstr ""
 
-#: includes/admin.php:460
+#: includes/admin.php:470
 msgid "Permissions in step"
 msgstr ""
 
 #. translators: %s: name of the access level
-#: includes/admin.php:465
+#: includes/admin.php:475
 #, php-format
 msgid "Level \"%s\". The agent role stores reading only; the level is applied on every request, so a setting or a session that ended leaves nothing behind."
 msgstr ""
 
-#: includes/admin.php:468
+#: includes/admin.php:478
 msgid "The agent role is missing or stores more than reading."
 msgstr ""
 
-#: includes/admin.php:480
+#: includes/admin.php:490
 msgid "Application passwords"
 msgstr ""
 
-#: includes/admin.php:483
+#: includes/admin.php:493
 msgid "This site is not served over HTTPS. An application password travels with every request, so WordPress allows them only over HTTPS or in an environment declared local. The agent cannot connect until the site runs on HTTPS."
 msgstr ""
 
-#: includes/admin.php:485
+#: includes/admin.php:495
 msgid "Switched off for everyone by the theme or another plugin. The connector reopened them for the agent account only; every human account keeps them switched off."
 msgstr ""
 
-#: includes/admin.php:486
+#: includes/admin.php:496
 msgid "Available. The connector leaves them as they were for every human account."
 msgstr ""
 
-#: includes/admin.php:494
+#: includes/admin.php:504
 msgid "Last connection"
 msgstr ""
 
 #. translators: 1: time since the call, e.g. "5 mins", 2: tool name, 3: date and time in the site's timezone
-#: includes/admin.php:499
+#: includes/admin.php:509
 #, php-format
 msgid "%1$s ago (%2$s, %3$s)."
 msgstr ""
 
-#: includes/admin.php:504
+#: includes/admin.php:514
 msgid "No call from the agent yet. Its first call shows up here once a client has connected."
 msgstr ""
 
-#: includes/admin.php:533
+#: includes/admin.php:543
 msgid "Connector sections"
 msgstr ""
 
-#: includes/admin.php:568
+#: includes/admin.php:578
 msgid "OK"
 msgstr ""
 
-#: includes/admin.php:569
+#: includes/admin.php:579
 msgid "To do"
 msgstr ""
 
-#: includes/admin.php:570
+#: includes/admin.php:580
 msgid "Problem"
 msgstr ""
 
-#: includes/admin.php:573
+#: includes/admin.php:583
 msgid "Status"
 msgstr ""
 
-#: includes/admin.php:596
+#: includes/admin.php:606
 msgid "Repair now"
 msgstr ""
 
-#: includes/admin.php:621
+#: includes/admin.php:631
 msgid "Work session"
 msgstr ""
 
-#: includes/admin.php:625
+#: includes/admin.php:635
 msgid "A work session is running."
 msgstr ""
 
 #. translators: %s: remaining time, e.g. "3 hours".
-#: includes/admin.php:629
+#: includes/admin.php:639
 #, php-format
 msgid "Everything is open for another %s: published pages, synced patterns, dynamic data, theme building blocks and templates, and the agent may publish and upload images. It closes itself, you do not have to remember it."
 msgstr ""
 
-#: includes/admin.php:636
+#: includes/admin.php:646
 msgid "Working on the site?"
 msgstr ""
 
-#: includes/admin.php:637
+#: includes/admin.php:647
 msgid "Open everything for a set time instead of leaving a wide setting on. A session lifts the access level to published pages, makes synced patterns editable, allows dynamic data and brings theme building blocks, templates and navigation menus into scope. Other non-public post types, customer data above all, stay a tick somebody makes on purpose. It is also the only time the agent may publish and upload images: opening a session is deciding that what gets built in it may go live. It closes itself when the time is up; the settings below are what the site falls back to."
 msgstr ""
 
-#: includes/admin.php:642
+#: includes/admin.php:652
 msgid "A session widens what the agent may do with the tools it already has. It does not add tools: the tool list follows the level below, because MCP clients read it once when they connect and never ask again."
 msgstr ""
 
-#: includes/admin.php:649
+#: includes/admin.php:659
 msgid "Close now"
 msgstr ""
 
 #. translators: 1: name of the drafts level, 2: name of the widest level
-#: includes/admin.php:661
+#: includes/admin.php:671
 #, php-format
 msgid "The level is \"Read only\", so the agent has no write tools and a session cannot give it any. Set the level to \"%1$s\" or \"%2$s\" to let the agent write during a session."
 msgstr ""
 
-#: includes/admin.php:671
+#: includes/admin.php:681
 msgid "Settings"
 msgstr ""
 
-#: includes/admin.php:676
+#: includes/admin.php:686
 msgid "What the agent may do"
 msgstr ""
 
-#: includes/admin.php:692
+#: includes/admin.php:702
 msgid "No level lets the agent publish or upload images."
 msgstr ""
 
-#: includes/admin.php:693
+#: includes/admin.php:703
 msgid "Both are possible only during a work session you open (see above). Deleting and changing settings are never possible. Tools the level does not allow are not registered at all, so the agent never sees them, and a work session does not add any. Every write creates a revision."
 msgstr ""
 
-#: includes/admin.php:695
+#: includes/admin.php:705
 msgid "Currently fixed by a constant in wp-config.php."
 msgstr ""
 
-#: includes/admin.php:701
+#: includes/admin.php:711
 msgid "Additional post types"
 msgstr ""
 
-#: includes/admin.php:708
+#: includes/admin.php:718
 msgid "This site has no other post types to add."
 msgstr ""
 
-#: includes/admin.php:715
+#: includes/admin.php:725
 msgid "Select all"
 msgstr ""
 
-#: includes/admin.php:730
+#: includes/admin.php:740
 msgid "This post type usually holds other people's data."
 msgstr ""
 
-#: includes/admin.php:731
+#: includes/admin.php:741
 msgid "personal data"
 msgstr ""
 
-#: includes/admin.php:740
+#: includes/admin.php:750
 msgid "Public post types and pages are already in scope. Everything else is listed here — a theme's headers, footers, hooks and content templates among them. Adding one is a real decision: those apply to every page at once, the way a synced pattern does, so a change there is not confined to the page being edited. In code, the wpmcp_allowed_post_types filter does the same thing."
 msgstr ""
 
-#: includes/admin.php:742
+#: includes/admin.php:752
 msgid "The ones marked \"personal data\" are a different question."
 msgstr ""
 
-#: includes/admin.php:743
+#: includes/admin.php:753
 msgid "Orders, subscriptions and form entries hold your customers' names and addresses. Ticking one lets the agent read them. That is rarely what you want from a tool for editing pages, and on a shop it is a decision your privacy policy has to cover."
 msgstr ""
 
-#: includes/admin.php:748
+#: includes/admin.php:758
 msgid "Dynamic data"
 msgstr ""
 
-#: includes/admin.php:753
+#: includes/admin.php:763
 msgid "Blocked — pages containing dynamic data stay read-only"
 msgstr ""
 
-#: includes/admin.php:754
+#: includes/admin.php:764
 msgid "Allowed — the agent may save them too"
 msgstr ""
 
-#: includes/admin.php:771
+#: includes/admin.php:781
 msgid "This setting cannot take effect on this site."
 msgstr ""
 
-#: includes/admin.php:776
+#: includes/admin.php:786
 msgid "Some block libraries refuse to save a page holding dynamic data unless the account has unfiltered_html — the capability that permits storing arbitrary HTML and JavaScript. That would be the widest permission in a role that deliberately cannot publish, delete, upload or change settings, so it is never given to the role. When this is allowed, it is granted for the length of one save and taken away again, and a write that newly introduces a script tag, an inline event handler or a javascript: URL is still refused. Every such save is marked in the activity log."
 msgstr ""
 
-#: includes/admin.php:781
+#: includes/admin.php:791
 msgid "Synced patterns"
 msgstr ""
 
-#: includes/admin.php:786
+#: includes/admin.php:796
 msgid "Hidden — the agent cannot see what is inside them"
 msgstr ""
 
-#: includes/admin.php:787
+#: includes/admin.php:797
 msgid "Readable — the agent can look inside but not change them"
 msgstr ""
 
-#: includes/admin.php:788
+#: includes/admin.php:798
 msgid "Editable — the agent may change them"
 msgstr ""
 
-#: includes/admin.php:803
+#: includes/admin.php:813
 msgid "A synced pattern appears on every page that embeds it, so changing one changes all of them at once — and a pattern has no draft state. The dry run says how many pieces of content are affected before anything is saved."
 msgstr ""
 
-#: includes/admin.php:834
+#: includes/admin.php:818
+msgid "Keep the activity log"
+msgstr ""
+
+#: includes/admin.php:823
+msgid "days"
+msgstr ""
+
+#: includes/admin.php:825
+msgid "Older entries are deleted once a day. 0 keeps them forever. Every read, dry run and refusal is an entry, so on a site the agent works on daily the log grows by thousands of rows a month."
+msgstr ""
+
+#: includes/admin.php:856
 msgid "Activity log"
 msgstr ""
 
-#: includes/admin.php:836
+#: includes/admin.php:858
 msgid "Every call the agent made, newest first: what it read, what it tried, what it saved and what was refused. Saves link to the revision they left, so the change can be compared and undone in the editor."
 msgstr ""
 
-#: includes/admin.php:840
+#: includes/admin.php:862
 msgid "Entries are kept forever."
 msgstr ""
 
 #. translators: %d: number of days
-#: includes/admin.php:843
+#: includes/admin.php:865
 #, php-format
 msgid "Entries are kept for %d day."
 msgid_plural "Entries are kept for %d days."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin.php:853
+#: includes/admin.php:875
 msgid "Search summaries"
 msgstr ""
 
-#: includes/admin.php:919
+#: includes/admin.php:941
 msgid "Copied"
 msgstr ""
 
-#: includes/admin.php:920
+#: includes/admin.php:942
 msgid "Press Ctrl+C (Cmd+C) to copy"
 msgstr ""
 
@@ -750,22 +762,22 @@ msgstr ""
 msgid "untitled"
 msgstr ""
 
-#: wp-mcp-connector-plus.php:62
+#: wp-mcp-connector-plus.php:76
 msgid "WP MCP Connector Plus is inactive."
 msgstr ""
 
 #. translators: %s: current WordPress version
-#: wp-mcp-connector-plus.php:65
+#: wp-mcp-connector-plus.php:79
 #, php-format
 msgid "It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector."
 msgstr ""
 
-#: wp-mcp-connector-plus.php:209
+#: wp-mcp-connector-plus.php:223
 msgid "WP MCP Connector Plus:"
 msgstr ""
 
 #. translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions
-#: wp-mcp-connector-plus.php:212
+#: wp-mcp-connector-plus.php:226
 #, php-format
 msgid "The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1."
 msgstr ""

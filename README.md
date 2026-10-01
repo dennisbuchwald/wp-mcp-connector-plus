@@ -108,7 +108,10 @@ on every screen, front end included, with *Close session now* under it.
 
 The *Activity* tab lists every call, 25 per page, filterable by tool,
 result (saved, dry run, rejected), user and post ID, with times in the
-site's timezone and a *Compare revisions* link for every save.
+site's timezone and a *Compare revisions* link for every save. Entries
+older than 90 days are deleted once a day (WP-Cron event
+`wpmcp_prune_log`); the number is set on the *Access* tab, 0 keeps
+everything, and the `wpmcp_log_retention_days` filter overrides it.
 
 For development instead of a release ZIP:
 

@@ -486,6 +486,7 @@ function current_time( ...$a ) { return '2026-10-01 12:00:00'; }
 function get_current_user_id() { return 1; }
 function update_option( $n, $v, $a = null ) { $GLOBALS['options'][ $n ] = $v; return true; }
 function delete_option( $n ) { unset( $GLOBALS['options'][ $n ] ); return true; }
+function wp_clear_scheduled_hook( $hook ) { $GLOBALS['cron_cleared'][] = $hook; return 0; }
 
 $GLOBALS['options']['wpmcp_work_session_until'] = time() + 3600;
 wpmcp_sync_role_capabilities();

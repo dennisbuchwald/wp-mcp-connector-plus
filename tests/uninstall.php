@@ -72,6 +72,7 @@ function seed( $blog ) {
 		'wpmcp_dynamic_data'                     => 'allowed',
 		'wpmcp_work_session_until'               => time() + 60,
 		'wpmcp_db_version'                       => '1',
+		'wpmcp_log_retention_days'               => 30,
 		'external_updates-wp-mcp-connector-plus' => 'x',
 		'blogname'                               => 'Kunde',
 	);
@@ -131,6 +132,7 @@ check( ! isset( $GLOBALS['tables']['wp_wpmcp_log'] ), 'das Protokoll ist geloesc
 check( isset( $GLOBALS['tables']['wp_posts'] ), 'sonst keine Tabelle' );
 check( array( 'blogname' ) === array_keys( $GLOBALS['options'][1] ), 'alle Einstellungen sind weg, fremde bleiben', 'uebrig: ' . implode( ', ', array_keys( $GLOBALS['options'][1] ) ) );
 check( in_array( 'puc_cron_check_updates-wp-mcp-connector-plus', $GLOBALS['cleared'][1] ?? array(), true ), 'und die Update-Pruefung ist abgemeldet' );
+check( in_array( 'wpmcp_prune_log', $GLOBALS['cleared'][1] ?? array(), true ), 'die taegliche Protokoll-Bereinigung ist abgemeldet' );
 check( in_array( '_wpmcp_last_write', $GLOBALS['meta_cleared'][1] ?? array(), true ), 'der Stempel "vom Agenten geaendert" ist von allen Seiten entfernt' );
 
 echo "\n";

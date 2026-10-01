@@ -825,6 +825,7 @@ add_action( 'plugins_loaded', 'wpmcp_maybe_upgrade' );
 function wpmcp_upgrade() {
 	wpmcp_create_audit_table();
 	wpmcp_sync_role_capabilities();
+	wpmcp_schedule_log_pruning();
 	update_option( 'wpmcp_db_version', WPMCP_DB_VERSION, true );
 }
 
@@ -835,13 +836,19 @@ function wpmcp_upgrade() {
  * inactive nothing fences the agent account to its endpoint any more, so
  * the role must not carry anything worth reaching. Application passwords
  * are kept, so reactivating simply works again; activation restores the
- * role. To remove the agent for good, uninstall the plugin.
+ * role. To remove the agent for good, uninstall the plugin. The daily log
+ * clean-up is unscheduled.
  */
 function wpmcp_deactivate() {
 	if ( wpmcp_work_session_active() ) {
 		wpmcp_end_work_session();
 	}
 	delete_option( 'wpmcp_work_session_until' );
+
+	// The clean-up function is gone while the plugin is inactive; an event
+	// left behind would fire into nothing every day. Activation or the
+	// next update schedules it again.
+	wp_clear_scheduled_hook( 'wpmcp_prune_log' );
 
 	$role = get_role( WPMCP_ROLE );
 	if ( ! $role ) {

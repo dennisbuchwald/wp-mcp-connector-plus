@@ -88,10 +88,99 @@ function wpmcp_log( $ability, array $data = array() ) {
  * How long log entries are kept, in days; 0 means forever.
  *
  * One place for the number, so what the Activity tab promises and what
- * the clean-up deletes cannot drift apart.
+ * the clean-up deletes cannot drift apart. Set under Tools > MCP
+ * Connector > Access; a site that has to keep the log for a fixed time
+ * (an agency contract, an audit) can pin it with the filter.
  *
  * @return int
  */
 function wpmcp_log_retention_days() {
-	return max( 0, (int) get_option( 'wpmcp_log_retention_days', 90 ) );
+	/**
+	 * Filters how many days audit log entries are kept. 0 keeps them forever.
+	 *
+	 * @param int $days Days from the setting (default 90).
+	 */
+	return max( 0, (int) apply_filters( 'wpmcp_log_retention_days', (int) get_option( 'wpmcp_log_retention_days', 90 ) ) );
 }
+
+/**
+ * The retention setting as it may be stored.
+ *
+ * A whole number of days from 0 (forever) to 3650 (ten years). A larger
+ * number is not wrong as such, but it is almost always a typo, and
+ * "forever" has its own value.
+ *
+ * @param mixed $value Submitted value.
+ * @return int
+ */
+function wpmcp_sanitize_retention_days( $value ) {
+	return min( 3650, absint( is_numeric( $value ) ? $value : 0 ) );
+}
+
+/**
+ * Cron event that deletes expired log entries.
+ */
+const WPMCP_PRUNE_HOOK = 'wpmcp_prune_log';
+
+/**
+ * Rows deleted per statement.
+ *
+ * One DELETE over a year of entries holds a lock on the table for as long
+ * as it runs, and every tool call writes to that table. Small statements
+ * let the inserts in between.
+ */
+const WPMCP_PRUNE_CHUNK = 5000;
+
+/**
+ * Delete log entries older than the retention period.
+ *
+ * Runs once a day from WP-Cron. By creation time, which has an index, in
+ * chunks, and at most a fixed number of chunks per run: a site that
+ * collected years of entries before this existed catches up over a few
+ * days instead of in one long request.
+ *
+ * @return int Rows deleted.
+ */
+function wpmcp_prune_log() {
+	global $wpdb;
+
+	$days = wpmcp_log_retention_days();
+	if ( 0 === $days ) {
+		return 0;
+	}
+
+	$table   = wpmcp_audit_table();
+	$cutoff  = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+	$deleted = 0;
+
+	for ( $round = 0; $round < 40; $round++ ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table, name built from the prefix.
+		$rows = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s LIMIT %d", $cutoff, WPMCP_PRUNE_CHUNK ) );
+		if ( ! is_numeric( $rows ) || (int) $rows <= 0 ) {
+			break;
+		}
+		$deleted += (int) $rows;
+		if ( (int) $rows < WPMCP_PRUNE_CHUNK ) {
+			break;
+		}
+	}
+
+	return $deleted;
+}
+add_action( WPMCP_PRUNE_HOOK, 'wpmcp_prune_log' );
+
+/**
+ * Make sure the daily clean-up is scheduled.
+ *
+ * Activation and every update schedule it (wpmcp_upgrade). Cron events
+ * still go missing: a cron manager plugin deletes "unknown" events, a
+ * database is copied from staging without them. So admin_init checks as
+ * well; wp_next_scheduled() reads the cron option, which is already
+ * loaded, so the check costs nothing measurable.
+ */
+function wpmcp_schedule_log_pruning() {
+	if ( ! wp_next_scheduled( WPMCP_PRUNE_HOOK ) ) {
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', WPMCP_PRUNE_HOOK );
+	}
+}
+add_action( 'admin_init', 'wpmcp_schedule_log_pruning' );

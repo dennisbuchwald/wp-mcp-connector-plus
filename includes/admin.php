@@ -102,6 +102,16 @@ function wpmcp_admin_init() {
 			'default'           => 'read',
 		)
 	);
+
+	register_setting(
+		'wpmcp_settings',
+		'wpmcp_log_retention_days',
+		array(
+			'type'              => 'integer',
+			'sanitize_callback' => 'wpmcp_sanitize_retention_days',
+			'default'           => 90,
+		)
+	);
 }
 add_action( 'admin_init', 'wpmcp_admin_init' );
 
@@ -801,6 +811,18 @@ function wpmcp_render_access_tab() {
 					<?php endforeach; ?>
 					<p class="description">
 						<?php esc_html_e( 'A synced pattern appears on every page that embeds it, so changing one changes all of them at once — and a pattern has no draft state. The dry run says how many pieces of content are affected before anything is saved.', 'wp-mcp-connector-plus' ); ?>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpmcp-log-retention"><?php esc_html_e( 'Keep the activity log', 'wp-mcp-connector-plus' ); ?></label></th>
+				<td>
+					<input type="number" id="wpmcp-log-retention" name="wpmcp_log_retention_days" class="small-text"
+						min="0" max="3650" step="1"
+						value="<?php echo esc_attr( (string) (int) get_option( 'wpmcp_log_retention_days', 90 ) ); ?>" />
+					<?php esc_html_e( 'days', 'wp-mcp-connector-plus' ); ?>
+					<p class="description">
+						<?php esc_html_e( 'Older entries are deleted once a day. 0 keeps them forever. Every read, dry run and refusal is an entry, so on a site the agent works on daily the log grows by thousands of rows a month.', 'wp-mcp-connector-plus' ); ?>
 					</p>
 				</td>
 			</tr>

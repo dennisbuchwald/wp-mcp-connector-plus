@@ -53,7 +53,8 @@ function esc_textarea( $t ) { return htmlspecialchars( (string) $t, ENT_QUOTES )
 function wp_kses( $t, $allowed ) { return $t; }
 function add_action( ...$a ) { return true; }
 function add_filter( ...$a ) { return true; }
-function register_setting( ...$a ) { return true; }
+function apply_filters( $tag, $value, ...$a ) { return $value; }
+function register_setting( ...$a ) { $GLOBALS['stub']['settings'][ $a[1] ] = $a[2] ?? array(); return true; }
 function add_management_page( ...$a ) { return true; }
 function settings_fields( $g ) { echo ''; }
 function submit_button( $text = null, ...$rest ) { echo '<button>' . esc_html( (string) $text ) . '</button>'; }
@@ -467,6 +468,11 @@ expect_not_contains( $html, 'Publishing is never possible', 'kein "Publishing is
 expect_contains( $html, 'Synced patterns', 'zeigt die Muster-Einstellung' );
 expect_contains( $html, 'Dynamic data', 'zeigt die Dynamic-Data-Einstellung' );
 expect_contains( $html, 'Additional post types', 'zeigt die Post-Type-Auswahl' );
+expect_contains( $html, 'name="wpmcp_log_retention_days"', 'die Aufbewahrung des Protokolls ist einstellbar' );
+expect_contains( $html, 'max="3650"', 'bis zehn Jahre' );
+wpmcp_admin_init();
+$retention = $GLOBALS['stub']['settings']['wpmcp_log_retention_days'] ?? array();
+expect_contains( ( is_string( $retention['sanitize_callback'] ?? null ) ? $retention['sanitize_callback'] : '' ) . '|' . ( $retention['default'] ?? '' ), 'wpmcp_sanitize_retention_days|90', 'als Einstellung registriert, Standard 90, bereinigt' );
 expect_contains( $html, 'gp_elements', 'listet einen vorhandenen Post-Type' );
 expect_contains( $html, 'wpmcp-toggle-all', 'bietet "Alle auswaehlen" bei langer Liste' );
 expect_contains( $html, 'indeterminate', 'halb ausgewaehlt sieht auch halb aus' );

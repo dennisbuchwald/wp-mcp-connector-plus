@@ -32,6 +32,7 @@ function wpmcp_uninstall_options() {
 		'wpmcp_dynamic_data',
 		'wpmcp_work_session_until',
 		'wpmcp_db_version',
+		'wpmcp_log_retention_days',
 		// Written by the bundled update checker.
 		'external_updates-wp-mcp-connector-plus',
 	);
@@ -70,6 +71,7 @@ function wpmcp_uninstall_site() {
 	delete_post_meta_by_key( '_wpmcp_last_write' );
 
 	wp_clear_scheduled_hook( 'puc_cron_check_updates-wp-mcp-connector-plus' );
+	wp_clear_scheduled_hook( 'wpmcp_prune_log' );
 }
 
 if ( is_multisite() ) {
