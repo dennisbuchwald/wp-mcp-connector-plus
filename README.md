@@ -53,10 +53,24 @@ content — subtly malformed markup that looks fine and breaks silently.
 
 ## Setup
 
-**1. Install.** Download the ZIP from
+**1. Install.** Download `wp-mcp-connector-plus.zip` from
 [Releases](https://github.com/dennisbuchwald/wp-mcp-connector-plus/releases)
 and upload it under *Plugins → Add New → Upload Plugin*. Dependencies are
 bundled; no Composer on the server required.
+
+Take the attached `wp-mcp-connector-plus.zip`, not the "Source code" ZIP
+below it: the source archive's folder carries the version in its name, so
+WordPress installs the plugin under that name and the next update arrives
+as a second copy.
+
+If the upload screen answers **403 Forbidden**, that is the server's web
+application firewall, not WordPress. ModSecurity reads what is uploaded,
+and the test suite in this repository holds real attack strings as
+fixtures — its whole job is to prove the connector refuses them. The
+release ZIP is built without them for exactly this reason. Should a
+firewall still object, unpack the ZIP into `wp-content/plugins/` over
+SFTP or the hosting panel's file manager; the folder must be named
+`wp-mcp-connector-plus`.
 
 **2. Open *Tools → MCP Connector*.** The status table tells you whether
 everything needed is actually in place:
@@ -583,9 +597,12 @@ define( 'WPMCP_GITHUB_TOKEN', 'github_pat_...' );
 ```
 
 Releasing: bump the version in the plugin header **and** `WPMCP_VERSION`,
-add an entry to [CHANGELOG.md](CHANGELOG.md), tag it, push. A tag is
-enough — the update checker uses the latest release and falls back to the
-highest version tag, so there is nothing to click on GitHub. The header version is what sites compare
+add an entry to [CHANGELOG.md](CHANGELOG.md), tag it, push. Pushing the
+tag runs [the release workflow](.github/workflows/release.yml), which
+builds `wp-mcp-connector-plus.zip` — right folder name, no test suite, no
+Composer files — and publishes it as the release asset. Sites prefer that
+asset; without one they fall back to the highest version tag, so an update
+still arrives either way. The header version is what sites compare
 against — a forgotten bump means no update appears.
 
 `vendor/` is committed on purpose: WordPress installs the release ZIP as-is

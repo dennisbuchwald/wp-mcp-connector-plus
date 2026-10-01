@@ -1,0 +1,44 @@
+# A tag should produce the file people actually install.
+#
+# Without this, the only download is GitHub's source archive: its folder
+# carries the ref in its name ("wp-mcp-connector-plus-0.18.0"), so
+# WordPress installs the plugin under that name and the next update
+# arrives as a second copy. The asset built here has the plain folder
+# name, and the update checker prefers it over the source archive.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the install ZIP
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p build
+          # git archive honours export-ignore, so tests and the repo's own
+          # plumbing stay out of what gets installed.
+          git archive --format=tar --prefix=wp-mcp-connector-plus/ HEAD | tar -x -C build
+          # Docs are for the repository page, not for a WordPress server:
+          # their examples contain the same markup a firewall objects to.
+          rm -f build/wp-mcp-connector-plus/README.md build/wp-mcp-connector-plus/CHANGELOG.md
+          test -f build/wp-mcp-connector-plus/vendor/autoload.php
+          grep -q "Version: *${VERSION}" build/wp-mcp-connector-plus/wp-mcp-connector-plus.php
+          (cd build && zip -qr "../wp-mcp-connector-plus.zip" wp-mcp-connector-plus)
+          unzip -l wp-mcp-connector-plus.zip | tail -1
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: wp-mcp-connector-plus.zip

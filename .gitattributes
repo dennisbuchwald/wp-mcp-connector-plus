@@ -1,0 +1,15 @@
+# What a source archive should not carry.
+#
+# GitHub's own ZIPs ("Download ZIP", and the one behind every tag) are
+# git archives, so this list decides what a stranger downloads. The test
+# suite is the reason it matters: it holds real attack strings as
+# fixtures, because its job is to prove the connector refuses them. A
+# server-side firewall such as ModSecurity reads the upload, sees
+# "document.cookie" and "<script>alert(1)</script>" and refuses the
+# whole plugin at the WordPress upload screen.
+/tests          export-ignore
+/.github        export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/composer.json  export-ignore
+/composer.lock  export-ignore
