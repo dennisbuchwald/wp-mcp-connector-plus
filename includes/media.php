@@ -162,17 +162,33 @@ function wpmcp_media_update( array $args ) {
 		return $response;
 	}
 
-	if ( ! empty( $changes['alt']['changed'] ) ) {
-		update_post_meta( $attachment->ID, '_wp_attachment_image_alt', $changes['alt']['to'] );
-	}
-
+	// The title first: it is the save that can fail. Reported as saved
+	// whatever wp_update_post said, a refused title used to come back as
+	// "Saved.", with the alt text already written next to it.
 	if ( ! empty( $changes['title']['changed'] ) ) {
-		wp_update_post(
+		$updated = wp_update_post(
 			array(
 				'ID'         => $attachment->ID,
 				'post_title' => wp_slash( $changes['title']['to'] ),
-			)
+			),
+			true
 		);
+		if ( is_wp_error( $updated ) || ! $updated ) {
+			return new \WP_Error(
+				'wpmcp_save_failed',
+				sprintf(
+					'WordPress did not save the title of attachment %d%s. Nothing was changed.',
+					$attachment->ID,
+					is_wp_error( $updated ) ? ': ' . $updated->get_error_message() : ''
+				)
+			);
+		}
+	}
+
+	// update_post_meta() unslashes; without wp_slash() a backslash in the
+	// alt text was lost.
+	if ( ! empty( $changes['alt']['changed'] ) ) {
+		update_post_meta( $attachment->ID, '_wp_attachment_image_alt', wp_slash( $changes['alt']['to'] ) );
 	}
 
 	wpmcp_log(
@@ -529,7 +545,8 @@ function wpmcp_media_upload( array $args ) {
 		$attachment_id = wp_insert_attachment(
 			array(
 				'post_mime_type' => $file['mime'],
-				'post_title'     => $title,
+				// wp_insert_post() unslashes its arguments as well.
+				'post_title'     => wp_slash( $title ),
 				'post_status'    => 'inherit',
 				'post_author'    => get_current_user_id(),
 			),
@@ -544,7 +561,7 @@ function wpmcp_media_upload( array $args ) {
 		}
 
 		wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $upload['file'] ) );
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt );
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt ) );
 	} finally {
 		$release();
 	}

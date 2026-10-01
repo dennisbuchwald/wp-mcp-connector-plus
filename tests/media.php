@@ -25,18 +25,25 @@ $GLOBALS['logged']  = array();
 function get_post_meta( $id, $key, $single = false ) {
 	return $GLOBALS['meta'][ $id ][ $key ] ?? '';
 }
+// WordPress unslashes what its write functions are given.
+function wp_unslash( $value ) {
+	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
 function update_post_meta( $id, $key, $value ) {
-	$GLOBALS['meta'][ $id ][ $key ] = $value;
+	$GLOBALS['meta'][ $id ][ $key ] = wp_unslash( $value );
 	return true;
 }
 function sanitize_text_field( $value ) {
 	return trim( preg_replace( '/[\r\n\t]+/', ' ', wp_strip_all_tags( (string) $value ) ) );
 }
 function wp_slash( $v ) {
-	return $v;
+	return is_string( $v ) ? addslashes( $v ) : $v;
 }
 function wp_update_post( $postarr, $error = false ) {
-	$GLOBALS['updated'][] = $postarr;
+	if ( ! empty( $GLOBALS['update_fails'] ) ) {
+		return $error ? new WP_Error( 'db_update_error', 'Could not update post in the database.' ) : 0;
+	}
+	$GLOBALS['updated'][] = array_map( 'wp_unslash', $postarr );
 	return $postarr['ID'] ?? 1;
 }
 function get_post( $id ) {
@@ -122,6 +129,20 @@ $GLOBALS['updated'] = array();
 wpmcp_media_update( array( 'id' => 1234, 'title' => 'Boyn Logo', 'dry_run' => false ) );
 check( 1 === count( $GLOBALS['updated'] ), 'der Titel geht ueber wp_update_post' );
 check( 'Boyn Logo' === $GLOBALS['updated'][0]['post_title'], 'mit dem neuen Wert' );
+
+// Both fields go through functions that unslash. A backslash is text.
+$result = wpmcp_media_update( array( 'id' => 1234, 'alt' => 'Pfad C:\\Bilder', 'dry_run' => false ) );
+check( 'Pfad C:\\Bilder' === $GLOBALS['meta'][1234]['_wp_attachment_image_alt'], 'ein Backslash im Alt-Text bleibt erhalten', $GLOBALS['meta'][1234]['_wp_attachment_image_alt'] );
+
+// A save WordPress refused is not "Saved.".
+$GLOBALS['update_fails'] = true;
+$GLOBALS['logged']       = array();
+$GLOBALS['meta'][1234]['_wp_attachment_image_alt'] = 'vorher';
+$result = wpmcp_media_update( array( 'id' => 1234, 'title' => 'Neu', 'alt' => 'nachher', 'dry_run' => false ) );
+check( is_wp_error( $result ), 'scheitert der Titel, kommt ein Fehler', is_wp_error( $result ) ? '' : (string) ( $result['message'] ?? '' ) );
+check( 'vorher' === $GLOBALS['meta'][1234]['_wp_attachment_image_alt'], 'und auch der Alt-Text bleibt, wie er war', 'sonst ist die Haelfte gespeichert und der Aufruf meldet einen Fehler' );
+check( empty( $GLOBALS['logged'] ), 'und nichts wird als gespeichert protokolliert' );
+$GLOBALS['update_fails'] = false;
 
 echo "\n\033[1mWas es nicht tut\033[0m\n";
 

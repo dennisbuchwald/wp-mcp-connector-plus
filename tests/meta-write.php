@@ -29,8 +29,16 @@ function get_post_meta( $id, $key = '', $single = false ) {
 	}
 	return $GLOBALS['meta'][ $key ] ?? '';
 }
+// WordPress unslashes whatever update_post_meta() is given; a caller that
+// does not slash first loses every backslash in the value.
+function wp_slash( $value ) {
+	return is_array( $value ) ? array_map( 'wp_slash', $value ) : ( is_string( $value ) ? addslashes( $value ) : $value );
+}
+function wp_unslash( $value ) {
+	return is_array( $value ) ? array_map( 'wp_unslash', $value ) : ( is_string( $value ) ? stripslashes( $value ) : $value );
+}
 function update_post_meta( $id, $key, $value ) {
-	$GLOBALS['meta'][ $key ] = $value;
+	$GLOBALS['meta'][ $key ] = wp_unslash( $value );
 	return true;
 }
 function delete_post_meta( $id, $key ) {
@@ -140,6 +148,17 @@ $diff    = wpmcp_meta_diff( $post, array( 'rank_math_title' => 'Gleich' ) );
 $written = wpmcp_apply_meta( $post, $diff['fields'] );
 check( empty( $written ), 'ein unveraendertes Feld wird nicht angefasst' );
 
+// A backslash is ordinary text in a title ("5\" Zoll", a Windows path in a
+// how-to). update_post_meta() unslashes, so it has to be slashed first.
+$GLOBALS['meta'] = array();
+$diff    = wpmcp_meta_diff( $post, array( 'rank_math_title' => 'Monitor 27\\" C:\\Daten' ) );
+wpmcp_apply_meta( $post, $diff['fields'] );
+check(
+	'Monitor 27\\" C:\\Daten' === ( $GLOBALS['meta']['rank_math_title'] ?? null ),
+	'Backslashes kommen unveraendert in der Datenbank an',
+	var_export( $GLOBALS['meta']['rank_math_title'] ?? null, true )
+);
+
 echo "\n\033[1mPlugin-Meta auf ihrem eigenen Post-Type\033[0m\n";
 
 // A GeneratePress element is nothing but its settings. Created through the
@@ -165,6 +184,11 @@ check(
 
 $diff = wpmcp_meta_diff( $element, array( '_generate_element_display_conditions' => $conditions ) );
 check( 0 === $diff['changes'], 'dasselbe Array noch einmal ist keine Aenderung' );
+
+$hook = array( array( 'rule' => 'post:page', 'object' => 'a\\b' ) );
+$diff = wpmcp_meta_diff( $element, array( '_generate_element_display_conditions' => $hook ) );
+wpmcp_apply_meta( $element, $diff['fields'] );
+check( $hook === $GLOBALS['meta']['_generate_element_display_conditions'], 'auch in einem Array bleibt der Backslash erhalten' );
 
 $diff = wpmcp_meta_diff( $page, array( '_generate_block_type' => 'site-footer' ) );
 check( ! empty( $diff['errors'] ), 'auf einer normalen Seite bleibt das Praefix gesperrt' );

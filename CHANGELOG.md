@@ -31,6 +31,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Behoben
 
 - **Menschen behalten ihre Anwendungspasswoerter.** Fuer jedes menschliche Konto lieferte das Plugin `false`, auch auf Seiten, die die Funktion nie abgeschaltet hatten. Das brach die WordPress-App und Automationen (n8n und aehnliche). Jetzt bekommt jedes menschliche Konto genau das, was es ohne das Plugin haette: aus, wo die Haertung des Themes oder ein Sicherheits-Plugin sie fuer alle abgeschaltet hat, sonst das, was WordPress und die anderen Plugins fuer dieses Konto entscheiden.
+- **Backslashes in SEO-Feldern, Element-Einstellungen und Alt-Texten bleiben erhalten.** `update_post_meta` und `wp_update_post` entfernen einen Backslash, wenn der Wert nicht vorher mit `wp_slash` geschuetzt wurde. Ein Titel wie `Monitor 27\"` oder eine Display-Regel mit Backslash kam so verkuerzt in der Datenbank an, ohne Warnung. Betroffen waren `content-write` mit `meta`, `media-update` (Alt-Text) und `media-upload` (Alt-Text und Titel).
+- **`media-update` meldet einen abgelehnten Titel als Fehler.** Das Ergebnis von `wp_update_post` wurde nicht geprueft: ein Titel, den WordPress nicht gespeichert hat, kam als "Saved." zurueck, und der Alt-Text war daneben schon geschrieben. Jetzt wird der Titel zuerst gespeichert; scheitert er, kommt `wpmcp_save_failed` und nichts ist geaendert.
 
 ### Zu beachten
 

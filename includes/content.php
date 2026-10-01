@@ -2814,7 +2814,10 @@ function wpmcp_apply_meta( $post, array $fields ) {
 		if ( '' === $field['to'] ) {
 			delete_post_meta( $post->ID, $key );
 		} else {
-			update_post_meta( $post->ID, $key, $field['to'] );
+			// update_post_meta() unslashes what it is given, as every
+			// WordPress write function does. Unslashed, a backslash in a
+			// title or a display rule was silently gone.
+			update_post_meta( $post->ID, $key, wp_slash( $field['to'] ) );
 		}
 		$written[] = $key;
 	}
