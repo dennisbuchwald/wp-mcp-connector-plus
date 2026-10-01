@@ -1475,10 +1475,17 @@ function wpmcp_find_unstable_blocks( array $blocks, array $known, $prefix, array
 		if ( ! $freeform ) {
 			// The block's own markup without its children: the delimiter
 			// with its attributes, and the wrapper chunks in order.
+			//
+			// Safe JSON-LD comes out of the inner markup before the
+			// delimiter goes around it. kses parses and reserializes block
+			// markup (filter_block_content), and a block left empty by the
+			// strip comes back in the void form "<!-- wp:html /-->", which
+			// read as a change: every Custom HTML block holding structured
+			// data, the usual place for it, was refused.
 			$own = get_comment_delimited_block_content(
 				$block['blockName'],
 				is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array(),
-				wpmcp_inner_html_from_content( (array) ( $block['innerContent'] ?? array() ) )
+				wpmcp_strip_safe_jsonld( wpmcp_inner_html_from_content( (array) ( $block['innerContent'] ?? array() ) ) )
 			);
 		}
 
