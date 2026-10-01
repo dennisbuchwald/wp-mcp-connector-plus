@@ -372,6 +372,54 @@ function wpmcp_shorten( $text, $max = 80 ) {
 }
 
 /**
+ * Move a byte offset back to the start of the character it falls into.
+ *
+ * Windows and excerpts are cut by byte count, because the offsets in the
+ * API are byte offsets and have to stay comparable with strlen(). A cut
+ * through the second byte of an umlaut leaves a string that is not UTF-8,
+ * and json_encode() refuses the whole response over it. Every cut goes
+ * through this first, start and end alike, so a window ends before a
+ * character it cannot hold whole and the next window begins with it.
+ *
+ * Continuation bytes are 10xxxxxx. A character has at most three of them,
+ * so the walk stops after three steps even in text that is not UTF-8.
+ *
+ * @param string $text   Text being cut.
+ * @param int    $offset Byte offset.
+ * @return int Offset at a character boundary, never greater than $offset.
+ */
+function wpmcp_utf8_boundary( $text, $offset ) {
+	$text   = (string) $text;
+	$length = strlen( $text );
+	$offset = max( 0, min( (int) $offset, $length ) );
+
+	for ( $steps = 0; $steps < 3 && $offset > 0 && $offset < $length; ++$steps ) {
+		if ( 0x80 !== ( ord( $text[ $offset ] ) & 0xC0 ) ) {
+			break;
+		}
+		--$offset;
+	}
+
+	return $offset;
+}
+
+/**
+ * Cut a byte range out of a text without splitting a character.
+ *
+ * @param string $text   Text.
+ * @param int    $start  First byte.
+ * @param int    $length Bytes at most.
+ * @return string
+ */
+function wpmcp_utf8_cut( $text, $start, $length ) {
+	$text  = (string) $text;
+	$start = wpmcp_utf8_boundary( $text, $start );
+	$end   = wpmcp_utf8_boundary( $text, $start + max( 0, (int) $length ) );
+
+	return (string) substr( $text, $start, $end - $start );
+}
+
+/**
  * Path helpers: [2,0,1] <-> "2.0.1".
  *
  * @param array $path Path segments.
@@ -891,11 +939,13 @@ function wpmcp_patch_confirmations( array $blocks, array $ops ) {
 		$replace = (string) ( $op['replace'] ?? '' );
 		$pos     = '' === $replace ? false : strpos( $html, $replace );
 
+		// Cut at character boundaries: half an umlaut at either end makes
+		// the whole response impossible to encode.
 		if ( false === $pos ) {
-			$excerpt = substr( $html, 0, 240 );
+			$excerpt = wpmcp_utf8_cut( $html, 0, 240 );
 		} else {
-			$start   = max( 0, $pos - 80 );
-			$excerpt = ( $start > 0 ? '...' : '' ) . substr( $html, $start, strlen( $replace ) + 160 );
+			$start   = wpmcp_utf8_boundary( $html, max( 0, $pos - 80 ) );
+			$excerpt = ( $start > 0 ? '...' : '' ) . wpmcp_utf8_cut( $html, $start, ( $pos - $start ) + strlen( $replace ) + 80 );
 		}
 
 		$out[] = array(

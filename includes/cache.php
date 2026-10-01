@@ -351,8 +351,10 @@ function wpmcp_find_in_page( $html, $needle, $limit = 5 ) {
 	while ( false !== ( $pos = stripos( $html, $needle, $offset ) ) ) {
 		++$count;
 		if ( count( $snippets ) < $limit ) {
-			$start      = max( 0, $pos - 100 );
-			$snippets[] = trim( preg_replace( '/\s+/', ' ', substr( $html, $start, $length + 200 ) ) );
+			// Cut at character boundaries, or a snippet starting in half
+			// an umlaut breaks the encoding of the whole response.
+			$start      = wpmcp_utf8_boundary( $html, max( 0, $pos - 100 ) );
+			$snippets[] = trim( preg_replace( '/\s+/', ' ', wpmcp_utf8_cut( $html, $start, ( $pos - $start ) + $length + 100 ) ) );
 		}
 		$offset = $pos + $length;
 	}

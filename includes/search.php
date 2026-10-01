@@ -143,7 +143,10 @@ function wpmcp_search_blocks( array $blocks, array $prefix, $query, $is_regex, $
 		// a phone number can sit in either and needs finding in both.
 		$haystacks = array(
 			'innerHTML' => (string) ( $block['innerHTML'] ?? '' ),
-			'attrs'     => empty( $block['attrs'] ) ? '' : (string) wp_json_encode( $block['attrs'] ),
+			// Encoded the way the serializer stores them. With the
+			// defaults "Müller" became "M\u00fcller" and every "/" a "\/",
+			// so a name with an umlaut or any URL was never found.
+			'attrs'     => empty( $block['attrs'] ) ? '' : (string) wp_json_encode( $block['attrs'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ),
 		);
 
 		foreach ( $haystacks as $where => $haystack ) {
@@ -232,11 +235,14 @@ function wpmcp_find_offsets( $haystack, $query, $is_regex ) {
  * @return array { before: string, match: string, after: string }
  */
 function wpmcp_context_around( $haystack, $offset, $length, $context ) {
-	$start = max( 0, $offset - $context );
+	// Byte arithmetic, cut at character boundaries: a context that ends
+	// in half an umlaut is not UTF-8, and the whole response fails to
+	// encode over it.
+	$start = wpmcp_utf8_boundary( $haystack, max( 0, $offset - $context ) );
 
 	return array(
-		'before' => substr( $haystack, $start, $offset - $start ),
-		'match'  => substr( $haystack, $offset, $length ),
-		'after'  => substr( $haystack, $offset + $length, $context ),
+		'before' => (string) substr( $haystack, $start, $offset - $start ),
+		'match'  => (string) substr( $haystack, $offset, $length ),
+		'after'  => wpmcp_utf8_cut( $haystack, $offset + $length, $context ),
 	);
 }

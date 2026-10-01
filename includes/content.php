@@ -2194,14 +2194,21 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
  * being cut off is a fact the caller can see and answer.
  *
  * @param string $text   Full text.
+ * Offsets stay byte offsets, but both ends of a window sit on a character
+ * boundary (wpmcp_utf8_boundary): a window ends before a character it
+ * cannot hold whole, the next one starts with it, and an offset sent from
+ * inside a character starts at that character. "offset" in the result is
+ * where the window really begins.
+ *
  * @param int    $max    Bytes to return at most.
  * @param int    $offset Byte to start at.
  * @return array { html: string, bytes: int, offset: int, truncated: bool, nextOffset?: int }
  */
 function wpmcp_slice_text( $text, $max, $offset = 0 ) {
+	$text   = (string) $text;
 	$total  = strlen( $text );
-	$offset = max( 0, min( (int) $offset, $total ) );
-	$slice  = substr( $text, $offset, $max );
+	$offset = wpmcp_utf8_boundary( $text, (int) $offset );
+	$slice  = wpmcp_utf8_cut( $text, $offset, $max );
 
 	$result = array(
 		'html'      => $slice,

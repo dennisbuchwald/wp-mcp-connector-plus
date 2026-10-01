@@ -107,6 +107,17 @@ $hits   = wpmcp_search_in_post( new StubPost( $markup ), 'tel:+4971323696900', f
 check( 1 === count( $hits ), 'Treffer im Attribut gefunden' );
 check( 'attrs' === $hits[0]['in'], 'und als Attribut-Treffer gekennzeichnet' );
 
+// The attributes are searched as JSON, and the serializer stores them
+// unescaped. Encoded with the defaults, "Müller" became "M\u00fcller" and
+// every "/" a "\/": a name with an umlaut or any URL in an attribute was
+// never found, and the result said so with a confident zero.
+$markup = '<!-- wp:acme/team {"name":"Jörg Müller","url":"https://example.test/team/joerg"} /-->';
+$hits   = wpmcp_search_in_post( new StubPost( $markup ), 'Müller', false, 10 );
+check( 1 === count( $hits ), 'ein Umlaut im Attribut wird gefunden', count( $hits ) . ' Treffer' );
+check( ! empty( $hits ) && false !== strpos( $hits[0]['context']['before'], 'Jörg ' ), 'und der Kontext zeigt den Text, wie er gespeichert ist', var_export( $hits[0]['context']['before'] ?? null, true ) );
+$hits = wpmcp_search_in_post( new StubPost( $markup ), 'https://example.test/team/joerg', false, 10 );
+check( 1 === count( $hits ), 'eine URL im Attribut ebenso', count( $hits ) . ' Treffer' );
+
 // Nested blocks are reached.
 $markup = '<!-- wp:core/group --><div><!-- wp:acme/button {"url":"tel:+49"} /--></div><!-- /wp:core/group -->';
 $hits   = wpmcp_search_in_post( new StubPost( $markup ), 'tel:+49', false, 10 );
