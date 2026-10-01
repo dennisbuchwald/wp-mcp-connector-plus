@@ -87,6 +87,25 @@ check( 0 === $s['offset'], 'ein negativer Offset faengt vorne an' );
 $s = wpmcp_slice_text( $long, 250 );
 check( false === $s['truncated'], 'genau passend ist nicht abgeschnitten' );
 
+echo "\n\033[1mEinmal rendern\033[0m\n";
+
+// The preview rendered every page twice: once inside the render check,
+// whose output was thrown away, and once more for the answer. A block
+// that echoes instead of returning also printed straight into the JSON
+// response the second time, outside any buffer.
+if ( ! function_exists( 'do_shortcode' ) ) {
+	function do_shortcode( $html ) { return $html; }
+}
+$page = (object) array( 'ID' => 5, 'post_content' => '<!-- wp:heading --><h2>Titel</h2><!-- /wp:heading --><!-- wp:paragraph --><p>Text</p><!-- /wp:paragraph -->' );
+$GLOBALS['dbw_do_blocks_calls'] = 0;
+$out = wpmcp_render_post_html( $page );
+check( ! is_wp_error( $out ) && false !== strpos( $out['html'], '<p>Text</p>' ), 'die Vorschau liefert das gerenderte HTML' );
+check( ! is_wp_error( $out ) && 'Titel' === ( $out['headings'][0]['text'] ?? null ), 'mit Ueberschriften' );
+check( 1 === $GLOBALS['dbw_do_blocks_calls'], 'und rendert die Seite genau einmal', $GLOBALS['dbw_do_blocks_calls'] . ' Mal do_blocks' );
+
+$smoke = wpmcp_render_smoke_test( '<p>x</p>' );
+check( '<p>x</p>' === ( $smoke['html'] ?? null ), 'der Render-Test gibt sein Ergebnis zurueck, statt es wegzuwerfen' );
+
 echo "\n";
 if ( 0 === $fail ) {
 	echo "\033[32mLange Ausgaben in Ordnung.\033[0m\n";

@@ -495,11 +495,16 @@ function wpmcp_find_hex_values( array $style ) {
  * Stage 5b: render the markup once with errors converted to exceptions, so
  * a broken render.php surfaces here instead of on the live page.
  *
+ * The rendered HTML comes back too, so a caller that needs it (the
+ * preview) does not render the page a second time. Anything a block
+ * echoes instead of returning stays in the discarded buffer either way.
+ *
  * @param string $serialized Serialized block markup.
- * @return array|\WP_Error { notices: string[] }
+ * @return array|\WP_Error { notices: string[], html: string }
  */
 function wpmcp_render_smoke_test( $serialized ) {
 	$notices = array();
+	$html    = '';
 
 	set_error_handler( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_handler
 		function ( $errno, $errstr, $errfile, $errline ) use ( &$notices ) {
@@ -519,7 +524,7 @@ function wpmcp_render_smoke_test( $serialized ) {
 
 	try {
 		ob_start();
-		do_blocks( $serialized );
+		$html = (string) do_blocks( $serialized );
 	} catch ( \Throwable $e ) {
 		return new \WP_Error(
 			'wpmcp_render_failed',
@@ -532,5 +537,8 @@ function wpmcp_render_smoke_test( $serialized ) {
 		restore_error_handler();
 	}
 
-	return array( 'notices' => array_slice( array_unique( $notices ), 0, 10 ) );
+	return array(
+		'notices' => array_slice( array_unique( $notices ), 0, 10 ),
+		'html'    => $html,
+	);
 }

@@ -373,6 +373,47 @@ $entry = end( $GLOBALS['logged'] );
 check( ! is_wp_error( $r ) && ! empty( $r['ok'] ), 'zwei Posten gespeichert', message_of( $r ) );
 check( 'wpmcp/content-batch' === ( $entry['ability'] ?? '' ) && false !== strpos( $entry['summary'], '41' ) && false !== strpos( $entry['summary'], '42' ), 'die Zusammenfassung nennt die Beitraege', $entry['summary'] ?? '' );
 
+echo "\n\033[1mBatch prueft einmal\033[0m\n";
+
+// A real batch ran every item through the full check twice: once in the
+// dry run that guards the whole run, once more in the save. The second
+// check of an unchanged post repeats the first exactly, render included.
+$GLOBALS['patterns']        = 'write';
+$GLOBALS['wpdb']->embedding = array();
+$op = array( array( 'op' => 'insert', 'path' => '1', 'block' => array( 'name' => 'core/paragraph', 'html' => '<p>C</p>' ) ) );
+post( 43, $para );
+post( 44, $para );
+$GLOBALS['dbw_do_blocks_calls'] = 0;
+$r = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 43, 'ops' => $op ), array( 'post_id' => 44, 'ops' => $op ) ), 'dry_run' => false ) );
+check( ! is_wp_error( $r ) && ! empty( $r['ok'] ) && 2 === $r['saved'], 'zwei Posten gespeichert', message_of( $r ) );
+check( 2 === $GLOBALS['dbw_do_blocks_calls'], 'jede Seite wird einmal geprueft (und gerendert), nicht zweimal', $GLOBALS['dbw_do_blocks_calls'] . ' Renderlaeufe' );
+check( false !== strpos( $GLOBALS['posts'][44]->post_content, '<p>C</p>' ), 'und das Gepruefte ist gespeichert' );
+
+// Changed between its dry run and its save: checked again, on what is
+// stored now.
+post( 45, $para );
+post( 46, $para );
+$GLOBALS['dbw_actions']['wpmcp_saved'][] = function ( $id ) {
+	if ( 45 === $id ) {
+		$GLOBALS['posts'][46]->post_content      = '<!-- wp:paragraph --><p>Von jemand anderem</p><!-- /wp:paragraph -->';
+		$GLOBALS['posts'][46]->post_modified_gmt = '2026-10-01 11:11:11';
+	}
+};
+$GLOBALS['dbw_do_blocks_calls'] = 0;
+$r = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 45, 'ops' => $op ), array( 'post_id' => 46, 'ops' => $op ) ), 'dry_run' => false ) );
+array_pop( $GLOBALS['dbw_actions']['wpmcp_saved'] );
+check( 3 === $GLOBALS['dbw_do_blocks_calls'], 'eine Seite, die sich dazwischen geaendert hat, wird neu geprueft', $GLOBALS['dbw_do_blocks_calls'] . ' Renderlaeufe' );
+check( false !== strpos( $GLOBALS['posts'][46]->post_content, 'Von jemand anderem' ) && false !== strpos( $GLOBALS['posts'][46]->post_content, '<p>C</p>' ), 'und die Aenderung auf den neuen Stand angewandt' );
+
+// A pattern renders inside other pages. Saved first, it changes how the
+// pages after it render, so nothing in that batch is carried over.
+post( 47, $para, 'wp_block' );
+post( 48, $para );
+$GLOBALS['dbw_do_blocks_calls'] = 0;
+$r = wpmcp_batch_write( array( 'items' => array( array( 'post_id' => 47, 'ops' => $op ), array( 'post_id' => 48, 'ops' => $op ) ), 'dry_run' => false ) );
+check( ! is_wp_error( $r ) && ! empty( $r['ok'] ), 'ein Batch mit einem Muster wird gespeichert', message_of( $r ) );
+check( 4 === $GLOBALS['dbw_do_blocks_calls'], 'und jede Seite beim Speichern neu geprueft', $GLOBALS['dbw_do_blocks_calls'] . ' Renderlaeufe' );
+
 echo "\n\033[1mRevisionsliste ohne Parser\033[0m\n";
 
 // blockCount per revision used to parse each one, up to 50 per call.

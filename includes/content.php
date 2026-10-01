@@ -385,6 +385,20 @@ function wpmcp_after_save( $post, array &$response ) {
 }
 
 /**
+ * Post types whose content renders inside other posts.
+ *
+ * A synced pattern appears wherever a core/block references it, a
+ * navigation menu wherever core/navigation does, template parts and
+ * templates around every page. Changing one changes how other posts
+ * render.
+ *
+ * @return string[]
+ */
+function wpmcp_embedded_post_types() {
+	return array( 'wp_block', 'wp_navigation', 'wp_template_part', 'wp_template' );
+}
+
+/**
  * Pages purged inside the request after a pattern changed.
  *
  * Each purge is a call into the page cache plugin, and some of those
@@ -960,10 +974,18 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 /**
  * Write a block tree to a post — full replacement or patch operations.
  *
- * @param array $args { post_id, tree?, ops?, dry_run }.
+ * The two optional parameters are for content-batch only, never for
+ * anything an agent sends: a plan is the result of the whole validation,
+ * and taking one from outside would skip it.
+ *
+ * @param array      $args     { post_id, tree?, ops?, dry_run }.
+ * @param array|null $checked  A plan from this request's dry run of the
+ *                             same item, with the post's modified time it
+ *                             was made against (see wpmcp_batch_write).
+ * @param array|null $plan_out Receives that pair, for a later save.
  * @return array|\WP_Error
  */
-function wpmcp_write_content( array $args ) {
+function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) {
 	$post_id = (int) ( $args['post_id'] ?? 0 );
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 
@@ -1000,10 +1022,23 @@ function wpmcp_write_content( array $args ) {
 		return $locked;
 	}
 
-	$plan = wpmcp_plan_write( $post, $args, $dry_run );
+	// The plan depends on the stored post and the arguments. When the post
+	// is exactly as it was for the dry run, a plan made then is this plan.
+	$modified = (string) ( $post->post_modified_gmt ?? '' );
+	if ( '' !== $modified && is_array( $checked ) && isset( $checked['plan'], $checked['modified'] ) && $checked['modified'] === $modified ) {
+		$plan                       = $checked['plan'];
+		$plan['response']['dryRun'] = $dry_run;
+	} else {
+		$plan = wpmcp_plan_write( $post, $args, $dry_run );
+	}
 	if ( is_wp_error( $plan ) ) {
 		return $plan;
 	}
+
+	$plan_out = array(
+		'plan'     => $plan,
+		'modified' => $modified,
+	);
 
 	if ( $locked ) {
 		$plan['response']['warnings'][] = $locked->get_error_message() . ' The real write will be refused until then.';
@@ -2478,13 +2513,15 @@ function wpmcp_preview_content( $post_id, $include_html = true, $offset = 0 ) {
  * @return array|\WP_Error
  */
 function wpmcp_render_post_html( $post, $offset = 0 ) {
+	// One render: the check's result is the preview. Rendering again for
+	// the answer doubled the cost of every preview, and a block that
+	// echoes would have printed into the response outside any buffer.
 	$smoke = wpmcp_render_smoke_test( $post->post_content );
 	if ( is_wp_error( $smoke ) ) {
 		return $smoke;
 	}
 
-	$html = do_blocks( $post->post_content );
-	$html = do_shortcode( $html );
+	$html = do_shortcode( $smoke['html'] );
 
 	$headings = array();
 	if ( preg_match_all( '/<h([1-6])[^>]*>(.*?)<\/h\1>/is', $html, $matches, PREG_SET_ORDER ) ) {
@@ -4016,7 +4053,16 @@ function wpmcp_batch_write( array $args ) {
 
 	$dry_run = ! isset( $args['dry_run'] ) || (bool) $args['dry_run'];
 	$checks  = array();
+	$plans   = array();
 	$all_ok  = true;
+
+	// Plans from the dry run are carried into the save, so a real batch
+	// validates and renders each page once instead of twice. Only for
+	// posts unchanged since (wpmcp_write_content compares the modified
+	// time), and not at all when the batch holds a post that renders
+	// inside other content: saving that first changes how the pages after
+	// it render, and their render check has to see it.
+	$reuse = true;
 
 	foreach ( $items as $i => $item ) {
 		if ( ! is_array( $item ) || empty( $item['post_id'] ) ) {
@@ -4025,14 +4071,19 @@ function wpmcp_batch_write( array $args ) {
 			continue;
 		}
 
+		$target = get_post( (int) $item['post_id'] );
+		if ( $target && in_array( $target->post_type, wpmcp_embedded_post_types(), true ) ) {
+			$reuse = false;
+		}
+
 		$item['dry_run'] = true;
-		$check           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item ) );
+		$plans[ $i ]     = null;
+		$check           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item, null, $plans[ $i ] ) );
 
 		// A dry run only warns about a page open in the editor. For a real
 		// run that warning is a certain refusal halfway through, after the
 		// posts before it are saved, so it stops the run before any save.
 		if ( ! $dry_run && $check['ok'] ) {
-			$target = get_post( (int) $item['post_id'] );
 			$locked = $target ? wpmcp_post_lock_error( $target ) : null;
 			if ( $locked ) {
 				$check = wpmcp_batch_item( $i, (int) $item['post_id'], $locked );
@@ -4062,7 +4113,7 @@ function wpmcp_batch_write( array $args ) {
 
 	foreach ( $items as $i => $item ) {
 		$item['dry_run'] = false;
-		$entry           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item ), true );
+		$entry           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item, $reuse ? $plans[ $i ] : null ), true );
 		$results[]       = $entry;
 
 		if ( ! $entry['ok'] ) {

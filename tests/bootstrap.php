@@ -173,7 +173,9 @@ function wp_strip_all_tags( $text ) {
 }
 
 function do_blocks( $content ) {
-	// Tests exercise tree/validation logic, not block rendering.
+	// Tests exercise tree/validation logic, not block rendering. Counted,
+	// so a test can tell how often a code path renders.
+	$GLOBALS['dbw_do_blocks_calls'] = ( $GLOBALS['dbw_do_blocks_calls'] ?? 0 ) + 1;
 	return $content;
 }
 
