@@ -7,6 +7,18 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.18.1] - 2026-10-01
+
+Nur Verpackung, am Plugin selbst aendert sich nichts.
+
+### Behoben
+
+- **Der Upload im WordPress-Backend scheiterte an der Server-Firewall.** Im GitHub-ZIP lag der komplette `tests`-Ordner, und darin stehen echte Angriffs-Strings als Testdaten (`<script>alert(1)</script>`, `document.cookie`) - genau dafuer sind sie da, sie beweisen, dass der Connector so etwas ablehnt. ModSecurity liest den Upload mit, sieht die Zeichenketten und lehnt das ganze Plugin mit 403 ab. Jetzt fliegt der Testordner per `.gitattributes` (`export-ignore`) aus jedem Archiv, das GitHub ausliefert.
+- **Der Ordnername im Download stimmt jetzt.** Ein Tag loest einen Release-Workflow aus, der `wp-mcp-connector-plus.zip` baut (richtiger Ordnername, ohne Tests, ohne Doku, ohne Composer-Dateien) und ans Release haengt. Das Quellarchiv von GitHub trug die Version im Ordnernamen, WordPress legte das Plugin darunter an, und das naechste Update kam als zweite Kopie daneben.
+- README sagt, welche Datei zu nehmen ist und was eine 403 beim Hochladen bedeutet, inklusive Ausweg ueber den Dateimanager.
+
+---
+
 ## [0.18.0] - 2026-09-21
 
 Aus zwei Praxisberichten von Agenten: weniger Nachpruefen, weniger Einzelaufrufe, strukturierte Daten schreibbar.
