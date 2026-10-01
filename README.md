@@ -739,6 +739,51 @@ against — a forgotten bump means no update appears.
 `vendor/` is committed on purpose: WordPress installs the release ZIP as-is
 and never runs Composer.
 
+## Architecture
+
+`wp-mcp-connector-plus.php` boots the plugin. What a page view needs is
+loaded always and kept cheap; the tools load only in
+`wpmcp_load_abilities()` (REST and WP-CLI, on `wp_abilities_api_init`);
+the admin screens only in wp-admin. One line per file in `includes/`:
+
+**Always loaded**
+
+- `auth.php`: the AI role, application passwords for the agent only, the fence around the MCP route.
+- `access.php`: access levels, work sessions, the capabilities the agent holds per check, role upkeep.
+- `audit.php`: the log table, writing entries, retention.
+- `preview.php`: signed, time-limited preview links for drafts.
+- `editor.php`: the stamp on pages the agent saved and the notice in the block editor.
+- `admin-bar.php`: a running work session in the admin bar.
+- `updater.php`: updates from GitHub releases.
+
+**Loaded with the tools**
+
+- `schema.php`: attribute checks against `block.json`.
+- `tree.php`: block arrays to the JSON tree and back, paths, patch operations.
+- `validate.php`: the validation pipeline every write passes (structure, nesting, roundtrip, render).
+- `catalog.php`: `blocks-catalog` and `blocks-describe`, the playbook.
+- `content.php`: loads the content files below, nothing else.
+- `content-access.php`: which posts may be read and which written (types, statuses, live edit, edit lock).
+- `content-read.php`: `content-list`, `content-read`, `content-preview`.
+- `content-write.php`: `content-write`: plan, check, save, verify, placement, cache purge after a save.
+- `content-create.php`: `content-create`, `content-duplicate`, `content-batch`.
+- `revisions.php`: `content-revisions`, `content-restore`.
+- `markup-guard.php`: what kses may skip (unchanged blocks, safe JSON-LD) and the unfiltered_html grant.
+- `save-errors.php`: explaining a save WordPress or a plugin refused.
+- `meta.php`: readable and writable post meta (SEO fields, theme elements).
+- `site-info.php`: `site-info`.
+- `responses.php`: answer shape (error codes, `ok: false`), dry run default, debug timings.
+- `search.php`: `content-search`.
+- `cache.php`: cache purges and `content-fetch-live`; also loaded alone by the deferred purge cron event.
+- `media.php`: `media-list`, `media-read`, `media-update`, `media-upload`.
+- `abilities.php`: the table of tools (label, description, input schema, callback) and their registration.
+
+**wp-admin only**
+
+- `admin.php`: Tools > MCP Connector (Connection, Access, Activity).
+- `setup.php`: the one-click connection setup, loaded by `admin.php`.
+- `class-wpmcp-log-table.php`: the activity log as a list table, loaded by `admin.php`.
+
 ## Tests
 
 ```bash

@@ -122,6 +122,11 @@ Ab hier gibt es eine Vertragsversion: `site-info` meldet `contractVersion` (eine
 - Fehlt der Parser, sagt `tests/bootstrap.php` jetzt, was zu tun ist ("Run tests/fetch-shim.sh first"), statt mit einem "Failed opening required" abzubrechen.
 - **Eine zweite Testebene gegen echtes WordPress (`tests/wp-real`).** Die bisherigen Tests laufen gegen Nachbauten der WordPress-Funktionen und sehen nur, was deren Autor fuer WordPress hielt. Die neue Ebene laedt WordPress 6.9.8 mit dem SQLite-Drop-in 3.0.2 (kein MySQL noetig) und der WordPress-Testbibliothek derselben Version, aktiviert das Plugin so, wie WordPress es tut, und prueft nur, was die Nachbauten nicht sehen koennen: kses und die Markup-Pruefung, Rechte fuer einen einzelnen Save (auch wenn er abbricht) und was die gespeicherte Rolle haelt, Anwendungspasswoerter mit echten Filter-Prioritaeten, den REST-Zaun bei einer Anfrage mit echtem Anwendungspasswort, die registrierten Abilities je Stufe, Backslashes bis in die Datenbank, Vorschau-Links in der echten Hauptabfrage, Update und Deinstallation, `content-create` und die Bearbeitungssperre. `bash tests/wp-real/setup.sh` holt alles einmal (Pruefsummen fest hinterlegt) in einen von git ignorierten Ordner; nichts davon landet im `vendor/` des Plugins. `run-all.sh` laesst die Ebene mitlaufen, sobald sie eingerichtet ist (oder mit `WPMCP_REAL=1`), und sagt sonst, dass sie fehlt. In der CI laeuft sie als eigener Job auf PHP 8.1 und 8.4, mit zwischengespeicherten Downloads. Der erste Lauf fand vier Fehler, die alle Nachbau-Tests bestanden hatten (unter "Behoben").
 
+
+### Intern
+
+- **Aufgeraeumt, ohne Verhalten zu aendern.** `includes/content.php` (ueber 4000 Zeilen) ist auf zehn Dateien nach Zustaendigkeit verteilt und laedt sie nur noch (Dateiliste im Abschnitt "Architecture" der README). Die Werkzeuge stehen in einer Tabelle (`wpmcp_ability_definitions()`), Kategorie, Ausgabeschema und Rechtepruefung kommen an einer Stelle dazu. Doppelte Regeln stecken in je einer Funktion: welche geparsten Bloecke ein Pfad meint (`wpmcp_is_visible_block`), Probelauf als Standard (`wpmcp_is_dry_run`), wer einen Beitrag lesen darf (`wpmcp_user_can_read`). Die nicht mehr genutzte Musterliste fuer gefaehrliches Markup (`wpmcp_unsafe_additions`, `wpmcp_unsafe_message`) ist entfernt; seit 0.18.3 entscheidet kses selbst.
+
 ---
 
 ## [0.18.3] - 2026-10-01
