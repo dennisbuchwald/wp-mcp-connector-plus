@@ -1,0 +1,40 @@
+# The whole suite on every push and pull request, on the oldest PHP the
+# plugin claims to support (Requires PHP: 8.1) and on a current one.
+#
+# The release workflow calls this one before it builds, so a tag cannot
+# publish a ZIP the tests have not seen. The integration test needs the
+# dbw-base-core block definitions, which are not public; run-all.sh skips
+# it here with a notice and it stays a local check.
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      # mbstring: the kses stub decodes numeric entities with mb_chr.
+      # gd: media-upload.php builds real JPEG/WebP bytes to upload.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, gd
+          coverage: none
+          ini-values: error_reporting=-1, display_errors=1
+
+      - name: Run the test suite
+        run: bash tests/run-all.sh

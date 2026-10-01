@@ -602,7 +602,10 @@ tag runs [the release workflow](.github/workflows/release.yml), which
 builds `wp-mcp-connector-plus.zip` — right folder name, no test suite, no
 Composer files — and publishes it as the release asset. Sites prefer that
 asset; without one they fall back to the highest version tag, so an update
-still arrives either way. The header version is what sites compare
+still arrives either way. The workflow runs the full test suite first and
+stops when the tag, the header version and `WPMCP_VERSION` disagree, or
+when the ZIP would carry `tests/` or an attack string a server firewall
+refuses. The header version is what sites compare
 against — a forgotten bump means no update appears.
 
 `vendor/` is committed on purpose: WordPress installs the release ZIP as-is
@@ -611,32 +614,19 @@ and never runs Composer.
 ## Tests
 
 ```bash
-tests/fetch-shim.sh                              # once: fetch the real WP block parser
-php tests/run-tests.php                          # unit tests: round trips, patches, validation
-php tests/register-abilities.php                 # abilities actually register
-php tests/verify-stored.php                      # saved content matches what was sent
-php tests/kses-impact.php                        # existing markup survives an unrelated edit
-php tests/markup-guard.php                       # nothing the agent writes goes past kses, on any path
-php tests/duplicate-preserves.php                # a copy is a copy
-php tests/search.php                             # site-wide search and its raw context
-php tests/privacy-page.php                       # the privacy page exception stays narrow
-php tests/patch-html.php                         # editing text inside a block, and when it refuses
-php tests/long-output.php                        # long pages are windowed, never quietly halved
-php tests/save-refusal.php                       # a refusal from elsewhere says where it came from
-php tests/meta-write.php                         # SEO fields: whitelist, diff, and the old value
-php tests/media.php                              # alt text, and what an image is used on
-php tests/dynamic-data.php                       # the guard that replaces kses on an elevated save
-php tests/large-payload.php                      # a 32 KB legal text in one call
-php tests/head-and-plugins.php                   # does the meta title reach the page?
-php tests/placement.php                          # slug, parent and status: where the line runs
-php tests/shipped-files.php                      # what the vendor folder announces to other plugins
-php tests/work-session.php                       # the window closes itself, and what it never opens
-php tests/media-upload.php                       # an image judged by its bytes, only in a session
-php tests/jsonld.php                             # structured data in, scripts still out
-php tests/create-and-batch.php                   # a dry run that looks, a batch that is all or nothing
-php tests/render-admin.php                       # admin page renders in every state
-php tests/run-integration.php /path/to/your-theme-or-core
+bash tests/run-all.sh                            # everything, as CI runs it
+php tests/<name>.php                             # one suite on its own
+DBW_CORE_PATH=/path/to/core bash tests/run-all.sh  # include the integration test
 ```
+
+`run-all.sh` fetches the WordPress block parser on first use (pinned to
+one commit, see `tests/fetch-shim.sh`), runs every `tests/*.php` that is
+not a helper, and fails on a PHP warning, notice or deprecation as well as
+on a failed check. The integration test against real `block.json` files
+runs when `DBW_CORE_PATH` (or a sibling `dbw-base-core` checkout) is found
+and is skipped otherwise. [CI](.github/workflows/tests.yml) runs the same
+script on PHP 8.1 and 8.4 for every push and pull request, and the release
+workflow runs it before it builds.
 
 The suite runs without a WordPress install but uses the **real** WordPress
 block parser and serializer, so a passing round-trip here means the same

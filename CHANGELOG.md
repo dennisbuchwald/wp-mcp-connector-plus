@@ -7,6 +7,18 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Tests und Auslieferung
+
+- **Ein Befehl fuer die ganze Testsuite: `bash tests/run-all.sh`.** Er holt den WordPress-Blockparser, wenn er fehlt, findet jede `tests/*.php` von selbst (Helfer wie `bootstrap.php` und `kses-stub.php` erkennt er daran, dass ein anderer Test sie einbindet) und laesst die Integrationspruefung gegen dbw-base-core laufen, wenn der Core da ist (`DBW_CORE_PATH` oder der Nachbarordner), sonst meldet er sie als uebersprungen. Ein neuer Test kann damit nicht mehr geschrieben und dann nie ausgefuehrt werden. Eine PHP-Warnung, ein Notice oder ein Deprecated zaehlt als Fehler, nicht nur eine fehlgeschlagene Pruefung.
+- **CI auf GitHub** (`.github/workflows/tests.yml`): bei jedem Push und Pull Request auf PHP 8.1 (die kleinste unterstuetzte Version) und 8.4. Die Integrationspruefung wird dort uebersprungen, weil dbw-base-core nicht oeffentlich ist.
+- **Release erst nach gruenen Tests.** Der Release-Workflow ruft dieselbe Testsuite auf, bevor er baut, und bricht ab, wenn Tag, `Version:` im Plugin-Kopf und `WPMCP_VERSION` nicht uebereinstimmen. Ausserdem prueft er das fertige ZIP: Ein `tests/`-Ordner oder die Zeichenketten `alert(1)` bzw. `document.cookie` irgendwo darin stoppen die Veroeffentlichung, weil eine Server-Firewall (z.B. ModSecurity) genau daran das ganze Plugin beim Hochladen ablehnt.
+- **Blockparser fest angepinnt.** `tests/fetch-shim.sh` holt den Parser jetzt von einem festen Commit des WordPress-6.9-Branches statt vom jeweils neuesten Stand; ein anderer Branch oder Commit laesst sich weiter als Argument uebergeben. Die Dateien sind identisch mit dem bisherigen Stand.
+- Fehlt der Parser, sagt `tests/bootstrap.php` jetzt, was zu tun ist ("Run tests/fetch-shim.sh first"), statt mit einem "Failed opening required" abzubrechen.
+
+---
+
 ## [0.18.3] - 2026-10-01
 
 Sicherheits-Hotfix. Bitte zeitnah einspielen.

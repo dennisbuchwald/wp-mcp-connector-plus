@@ -13,6 +13,17 @@
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'WPMCP_VERSION', 'test' );
 
+// The parser is fetched, not committed. Without this check a fresh clone
+// dies on a bare "Failed opening required" that names a file nobody has
+// heard of, instead of saying what to do about it.
+foreach ( array( 'class-wp-block-parser-block.php', 'class-wp-block-parser-frame.php', 'class-wp-block-parser.php' ) as $wpmcp_shim_file ) {
+	if ( ! is_file( __DIR__ . '/wp-shim/' . $wpmcp_shim_file ) ) {
+		fwrite( STDERR, "The WordPress block parser is missing (tests/wp-shim/{$wpmcp_shim_file}).\nRun tests/fetch-shim.sh first, or use tests/run-all.sh, which fetches it.\n" );
+		exit( 1 );
+	}
+}
+unset( $wpmcp_shim_file );
+
 require_once __DIR__ . '/wp-shim/class-wp-block-parser-block.php';
 require_once __DIR__ . '/wp-shim/class-wp-block-parser-frame.php';
 require_once __DIR__ . '/wp-shim/class-wp-block-parser.php';
