@@ -5,6 +5,11 @@
 # publish a ZIP the tests have not seen. The integration test needs the
 # dbw-base-core block definitions, which are not public; run-all.sh skips
 # it here with a notice and it stays a local check.
+#
+# Two jobs. "tests" runs the suite against shims, without network.
+# "real-wordpress" runs tests/wp-real against a real WordPress on SQLite,
+# for what only WordPress itself can answer (kses, filter priorities,
+# slashing, the main query, REST authentication).
 name: Tests
 
 on:
@@ -39,3 +44,38 @@ jobs:
 
       - name: Run the test suite
         run: bash tests/run-all.sh
+
+  real-wordpress:
+    name: Real WordPress, PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      # pdo_sqlite and sqlite3: the SQLite Database Integration drop-in.
+      # mbstring and gd: WordPress core and the media code paths.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, gd, pdo_sqlite, sqlite3
+          tools: composer:v2
+          coverage: none
+          ini-values: error_reporting=-1, display_errors=1
+
+      # WordPress, the SQLite drop-in and the test dependencies are pinned in
+      # setup.sh and composer.lock, so those two files are the cache key.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            tests/wp-real/.cache/downloads
+            tests/wp-real/.cache/vendor
+          key: wp-real-${{ runner.os }}-${{ hashFiles('tests/wp-real/setup.sh', 'tests/wp-real/composer.lock') }}
+
+      - name: Set up WordPress
+        run: bash tests/wp-real/setup.sh
+
+      - name: Run the real-WordPress tests
+        run: bash tests/wp-real/run.sh

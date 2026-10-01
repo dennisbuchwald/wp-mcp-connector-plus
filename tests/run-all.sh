@@ -16,7 +16,14 @@
 # when they are found (DBW_CORE_PATH, or the sibling checkout this repo
 # usually lives next to) and is skipped with a notice otherwise, as in CI.
 #
+# The real-WordPress layer (tests/wp-real) runs when it has been set up
+# (bash tests/wp-real/setup.sh, about 30 MB once) or when WPMCP_REAL=1
+# asks for it, which sets it up on the spot. Otherwise it is skipped with
+# a notice: the rest of the suite needs no network, and that stays so.
+# It takes a couple of seconds once there, so it is not left out for speed.
+#
 # Usage: bash tests/run-all.sh
+#        WPMCP_REAL=1 bash tests/run-all.sh   # set up the real layer if missing
 set -euo pipefail
 
 TESTS="$(cd "$(dirname "$0")" && pwd)"
@@ -44,9 +51,16 @@ failures=()
 run_test() {
 	local label="$1"
 	shift
+	run_command "$label" "$PHP" "${PHP_FLAGS[@]}" "$@"
+}
+
+# run_command <label> <command> [args...]
+run_command() {
+	local label="$1"
+	shift
 	local output status
 	set +e
-	output="$("$PHP" "${PHP_FLAGS[@]}" "$@" 2>&1)"
+	output="$("$@" 2>&1)"
 	status=$?
 	set -e
 	if [ "$status" -ne 0 ]; then
@@ -86,6 +100,14 @@ if [ -d "$core/blocks/src" ]; then
 	run_test run-integration.php "$TESTS/run-integration.php" "$core"
 else
 	echo "skip  run-integration.php (dbw-base-core not found at $core; set DBW_CORE_PATH to run it)"
+	skipped=$((skipped + 1))
+fi
+
+real="$TESTS/wp-real"
+if [ "${WPMCP_REAL:-}" = "1" ] || { [ -d "$real/.cache/wordpress" ] && [ -f "$real/.cache/vendor/autoload.php" ]; }; then
+	run_command wp-real "$BASH" "$real/run.sh"
+else
+	echo "skip  wp-real (not set up; run bash tests/wp-real/setup.sh, or WPMCP_REAL=1 bash tests/run-all.sh)"
 	skipped=$((skipped + 1))
 fi
 

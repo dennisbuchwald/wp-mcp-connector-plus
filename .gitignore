@@ -13,3 +13,7 @@
 # that was never generated. That is a fatal error on the whole site.
 /vendor/composer/jetpack_autoload_*.php
 /vendor/autoload_packages.php
+
+# The real-WordPress test layer fetches WordPress, the SQLite drop-in and
+# PHPUnit here (tests/wp-real/setup.sh).
+/tests/wp-real/.cache/

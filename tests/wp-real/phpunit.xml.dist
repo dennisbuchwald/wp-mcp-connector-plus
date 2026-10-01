@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+	The real-WordPress layer. Run it through run.sh, which makes sure
+	setup.sh has fetched WordPress first.
+-->
+<phpunit
+	bootstrap="bootstrap.php"
+	backupGlobals="false"
+	cacheResult="false"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	convertErrorsToExceptions="true"
+	convertNoticesToExceptions="true"
+	convertWarningsToExceptions="true"
+	convertDeprecationsToExceptions="true"
+	failOnRisky="true"
+	failOnWarning="true"
+>
+	<testsuites>
+		<testsuite name="real-wordpress">
+			<directory suffix="Test.php">tests</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

@@ -745,6 +745,8 @@ and never runs Composer.
 bash tests/run-all.sh                            # everything, as CI runs it
 php tests/<name>.php                             # one suite on its own
 DBW_CORE_PATH=/path/to/core bash tests/run-all.sh  # include the integration test
+bash tests/wp-real/setup.sh                      # fetch the real-WordPress layer once
+bash tests/wp-real/run.sh --filter RestFence     # run (part of) it on its own
 ```
 
 `run-all.sh` fetches the WordPress block parser on first use (pinned to
@@ -759,6 +761,34 @@ workflow runs it before it builds.
 The suite runs without a WordPress install but uses the **real** WordPress
 block parser and serializer, so a passing round-trip here means the same
 thing it would on a live site.
+
+### Against a real WordPress
+
+A shim answers what its author thought WordPress answers. Where that is
+the whole question, `tests/wp-real` asks WordPress itself: WordPress core
+(pinned, 6.9.8) on the SQLite Database Integration drop-in (pinned, 3.0.2,
+so no MySQL server is needed), with the WordPress PHPUnit test library of
+the same version (`wp-phpunit/wp-phpunit`), PHPUnit 9.6 and the PHPUnit
+Polyfills. `setup.sh` downloads and checks them into the git-ignored
+`tests/wp-real/.cache`; they never touch the plugin's own `vendor/`, which
+ships. The plugin is linked into `wp-content/plugins` under its slug,
+stored in `active_plugins` and activated through its activation hook, and
+every test runs in a transaction that SQLite rolls back, dropped and
+created tables included.
+
+It covers only what the shims cannot see: kses and the markup guard,
+capabilities granted for one save (also when the save throws) and what the
+stored role holds, application passwords under real filter priorities, the
+REST fence on a request that arrives with a real application password,
+which abilities exist at each level and who may run them, slashing of
+content, attributes and meta down to the stored bytes, the preview gate in
+the real main query, update and uninstall on a real database, and
+`content-create` and the post lock. Its first run found four bugs the
+shims had passed (see the changelog).
+
+`run-all.sh` runs it once `setup.sh` has been run, or with `WPMCP_REAL=1`,
+and says it skipped it otherwise. CI runs it as a second job on PHP 8.1 and
+8.4, with the downloads cached.
 
 Each suite exists because of a specific failure:
 
