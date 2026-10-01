@@ -66,6 +66,9 @@ function wpmcp_uninstall_site() {
 		delete_option( $option );
 	}
 
+	// The stamp behind the "changed by the AI agent" notice in the editor.
+	delete_post_meta_by_key( '_wpmcp_last_write' );
+
 	wp_clear_scheduled_hook( 'puc_cron_check_updates-wp-mcp-connector-plus' );
 }
 

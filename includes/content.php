@@ -258,6 +258,55 @@ function wpmcp_assert_writable_target( $post ) {
 }
 
 /**
+ * Refuse a save while a person has the page open in the editor.
+ *
+ * expected_modified only sees what was saved. A person typing in the
+ * block editor has saved nothing yet, so the agent's write passes, and
+ * then one of two things happens: their next save silently replaces the
+ * agent's work, or the editor reloads and what they had not saved is
+ * gone. WordPress already knows they are there: the editor keeps the
+ * post lock fresh through the heartbeat, the same lock that shows other
+ * people "X is currently editing". This asks for it.
+ *
+ * The lock is held by a person by construction: wp_check_post_lock()
+ * ignores the current user, and the agent never opens the editor. A lock
+ * held by another agent account is ignored as well, since nothing can be
+ * lost in a browser it does not have.
+ *
+ * wp_check_post_lock() lives in wp-admin/includes/post.php, which a REST
+ * request does not load; core's own autosave controller loads it the
+ * same way.
+ *
+ * @param \WP_Post|object $post Post about to be saved.
+ * @return \WP_Error|null wpmcp_locked, or null when nobody holds the lock.
+ */
+function wpmcp_post_lock_error( $post ) {
+	if ( ! function_exists( 'wp_check_post_lock' ) && is_file( ABSPATH . 'wp-admin/includes/post.php' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/post.php';
+	}
+	if ( ! function_exists( 'wp_check_post_lock' ) || empty( $post->ID ) ) {
+		return null;
+	}
+
+	$holder = (int) wp_check_post_lock( $post->ID );
+	if ( ! $holder || wpmcp_is_ai_user( $holder ) ) {
+		return null;
+	}
+
+	$user = get_userdata( $holder );
+	$name = ( $user && ! empty( $user->display_name ) ) ? $user->display_name : sprintf( 'User %d', $holder );
+
+	return new \WP_Error(
+		'wpmcp_locked',
+		sprintf(
+			'%s is editing this page right now (post %d is open in the editor). Saving now would either be overwritten by their next save or throw away what they have not saved yet. Try again once they have closed it: the lock ends about two and a half minutes after the editor is closed. Then read the page again, since they may have changed it.',
+			$name,
+			(int) $post->ID
+		)
+	);
+}
+
+/**
  * Run a save and catch the revision it stores, if it stores one.
  *
  * WordPress skips the revision when nothing it tracks changed, a status
@@ -302,6 +351,15 @@ function wpmcp_save_capturing_revision( $post_id, callable $save ) {
  * @return \WP_Post|null The post as stored now.
  */
 function wpmcp_after_save( $post, array &$response ) {
+	/**
+	 * Fires after the agent saved a post for real (write, batch item,
+	 * restore). Dry runs and refusals never reach it. The plugin itself
+	 * uses it to remember when, for the notice in the block editor.
+	 *
+	 * @param int $post_id Post that was saved.
+	 */
+	do_action( 'wpmcp_saved', (int) $post->ID );
+
 	// The stamp for the next write on this page. Without it a sequence of
 	// writes needs a read between every pair, purely to fetch this one
 	// value, and dropping expected_modified to avoid that throws away the
@@ -894,9 +952,20 @@ function wpmcp_write_content( array $args ) {
 		);
 	}
 
+	// A person with the page open in the editor. A real write is refused;
+	// a dry run says so and goes on, since checking costs them nothing.
+	$locked = wpmcp_post_lock_error( $post );
+	if ( $locked && ! $dry_run ) {
+		return $locked;
+	}
+
 	$plan = wpmcp_plan_write( $post, $args, $dry_run );
 	if ( is_wp_error( $plan ) ) {
 		return $plan;
+	}
+
+	if ( $locked ) {
+		$plan['response']['warnings'][] = $locked->get_error_message() . ' The real write will be refused until then.';
 	}
 
 	$response      = $plan['response'];
@@ -3182,6 +3251,11 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		return $target;
 	}
 
+	$locked = wpmcp_post_lock_error( $post );
+	if ( $locked && ! $dry_run ) {
+		return $locked;
+	}
+
 	$before = parse_blocks( $post->post_content );
 	$after  = parse_blocks( $revision->post_content );
 
@@ -3198,7 +3272,7 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		'revisionId' => (int) $revision_id,
 		'revisionAt' => $revision->post_modified_gmt,
 		'diff'       => $diff,
-		'warnings'   => array(),
+		'warnings'   => $locked ? array( $locked->get_error_message() . ' The real restore will be refused until then.' ) : array(),
 	);
 
 	// The same guard as every other write. A revision a person saved counts
@@ -3902,7 +3976,19 @@ function wpmcp_batch_write( array $args ) {
 
 		$item['dry_run'] = true;
 		$check           = wpmcp_batch_item( $i, (int) $item['post_id'], wpmcp_write_content( $item ) );
-		$checks[]        = $check;
+
+		// A dry run only warns about a page open in the editor. For a real
+		// run that warning is a certain refusal halfway through, after the
+		// posts before it are saved, so it stops the run before any save.
+		if ( ! $dry_run && $check['ok'] ) {
+			$target = get_post( (int) $item['post_id'] );
+			$locked = $target ? wpmcp_post_lock_error( $target ) : null;
+			if ( $locked ) {
+				$check = wpmcp_batch_item( $i, (int) $item['post_id'], $locked );
+			}
+		}
+
+		$checks[] = $check;
 
 		if ( ! $check['ok'] ) {
 			$all_ok = false;
@@ -3916,7 +4002,7 @@ function wpmcp_batch_write( array $args ) {
 			'items'   => $checks,
 			'message' => $all_ok
 				? 'Every item passed its dry run — nothing was saved. Call again with dry_run: false.'
-				: 'At least one item failed its dry run, so nothing was saved. The items say which and why.',
+				: 'At least one item failed its dry run or is open in the editor, so nothing was saved. The items say which and why.',
 		);
 	}
 

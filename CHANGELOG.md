@@ -31,6 +31,11 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - **`content-restore` prueft dasselbe wie `content-write`.** Ein synchronisiertes Muster liess sich ohne Schreibrecht fuer Muster zurueckspielen, ein GeneratePress-Element mit "Execute PHP" ebenso. Beide Pruefungen stecken jetzt in einer gemeinsamen Funktion (`wpmcp_assert_writable_target`), die Schreiben, Wiederherstellen und Duplizieren nutzen.
 - **`content-duplicate` kopiert kein Element mit "Execute PHP".** Die Kopie traegt die Einstellungen mit und fuehrt damit ebenfalls PHP aus. Ein Muster wird nur dupliziert, wenn Muster schreibbar sind.
 
+### Neu
+
+- **Kein Speichern, waehrend ein Mensch die Seite im Editor offen hat.** `expected_modified` schuetzt nur, was schon gespeichert ist. Wer gerade im Block-Editor tippt, hat noch nichts gespeichert: der Schreibvorgang des Agenten ging durch, und dann ueberschrieb entweder das naechste Speichern des Menschen die Arbeit des Agenten oder ein Neuladen verwarf, was der Mensch noch nicht gespeichert hatte. Jetzt fragen `content-write`, `content-batch` und `content-restore` vor dem Speichern die Bearbeitungssperre von WordPress ab (`wp_check_post_lock`, dieselbe, die anderen "X bearbeitet gerade" zeigt) und lehnen mit `wpmcp_locked` ab, mit dem Namen der Person. Ein Probelauf warnt nur. Ein Batch mit einer gesperrten Seite speichert gar nichts, auch nicht die Seiten davor.
+- **Der Editor sagt, wenn der Agent eine Seite geaendert hat.** Jedes echte Speichern (Schreiben, Batch, Wiederherstellen) merkt sich die Zeit in `_wpmcp_last_write`. Wer die Seite innerhalb von 24 Stunden im Block-Editor oeffnet, sieht oben den Hinweis "The AI agent changed this page 12 mins ago" mit Verweis auf Revisionen und Protokoll. Neue Aktion `wpmcp_saved` fuer eigenen Code. Beim Loeschen des Plugins wird der Stempel entfernt.
+
 ### Behoben
 
 - **Menschen behalten ihre Anwendungspasswoerter.** Fuer jedes menschliche Konto lieferte das Plugin `false`, auch auf Seiten, die die Funktion nie abgeschaltet hatten. Das brach die WordPress-App und Automationen (n8n und aehnliche). Jetzt bekommt jedes menschliche Konto genau das, was es ohne das Plugin haette: aus, wo die Haertung des Themes oder ein Sicherheits-Plugin sie fuer alle abgeschaltet hat, sonst das, was WordPress und die anderen Plugins fuer dieses Konto entscheiden.

@@ -81,6 +81,7 @@ require_once WPMCP_DIR . 'includes/auth.php';
 require_once WPMCP_DIR . 'includes/access.php';
 require_once WPMCP_DIR . 'includes/audit.php';
 require_once WPMCP_DIR . 'includes/preview.php';
+require_once WPMCP_DIR . 'includes/editor.php';
 require_once WPMCP_DIR . 'includes/updater.php';
 
 /**

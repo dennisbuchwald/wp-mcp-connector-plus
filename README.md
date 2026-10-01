@@ -331,6 +331,7 @@ carry a code an agent can branch on:
 | `wpmcp_forbidden` | The account lacks the WordPress capability for this post or attachment. |
 | `wpmcp_forbidden_type` | The post type is outside the connector's scope. |
 | `wpmcp_live_edit_disabled` | The post is published and the access level keeps published pages read-only. |
+| `wpmcp_locked` | A person has the post open in the editor; a real write or restore waits until they close it (a dry run only warns). |
 | `wpmcp_no_app_passwords` | Setup (admin): application passwords are not available on this site. |
 | `wpmcp_no_permalink` | `content-fetch-live`: the post has no public URL. |
 | `wpmcp_nonce` | Setup (admin): the form's security check failed. |
@@ -380,7 +381,10 @@ not enough:
   write is refused if someone edited the page in the meantime, rather than
   silently overwriting them. A successful write returns the new `modified`
   value, so a sequence of writes needs no read between them just to fetch
-  it.
+  it. A page somebody has open in the block editor right now is refused
+  with `wpmcp_locked` (the dry run only warns): they have saved nothing
+  yet, so `expected_modified` cannot see them, and either their next save
+  or a reload would lose one side's work.
 - **Around it:** accounts without `unfiltered_html` — which the agent
   deliberately is — have their content run through `wp_kses_post` on save,
   which removes scripts and iframes. Writing such markup is therefore an

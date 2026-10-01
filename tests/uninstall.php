@@ -56,6 +56,7 @@ function get_users( $args ) {
 }
 function remove_role( $role ) { unset( $GLOBALS['roles'][ $GLOBALS['blog'] ][ $role ] ); }
 function delete_option( $name ) { unset( $GLOBALS['options'][ $GLOBALS['blog'] ][ $name ] ); return true; }
+function delete_post_meta_by_key( $key ) { $GLOBALS['meta_cleared'][ $GLOBALS['blog'] ][] = $key; return true; }
 function wp_clear_scheduled_hook( $hook ) { $GLOBALS['cleared'][ $GLOBALS['blog'] ][] = $hook; }
 
 function seed( $blog ) {
@@ -130,6 +131,7 @@ check( ! isset( $GLOBALS['tables']['wp_wpmcp_log'] ), 'das Protokoll ist geloesc
 check( isset( $GLOBALS['tables']['wp_posts'] ), 'sonst keine Tabelle' );
 check( array( 'blogname' ) === array_keys( $GLOBALS['options'][1] ), 'alle Einstellungen sind weg, fremde bleiben', 'uebrig: ' . implode( ', ', array_keys( $GLOBALS['options'][1] ) ) );
 check( in_array( 'puc_cron_check_updates-wp-mcp-connector-plus', $GLOBALS['cleared'][1] ?? array(), true ), 'und die Update-Pruefung ist abgemeldet' );
+check( in_array( '_wpmcp_last_write', $GLOBALS['meta_cleared'][1] ?? array(), true ), 'der Stempel "vom Agenten geaendert" ist von allen Seiten entfernt' );
 
 echo "\n";
 if ( 0 === $fail ) {
