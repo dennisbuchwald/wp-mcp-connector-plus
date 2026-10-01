@@ -430,7 +430,7 @@ function wpmcp_setup_steps() {
 	);
 
 	// 3. Is there a usable mcp-adapter? Other plugins bundle their own.
-	$adapter_ok = function_exists( 'wpmcp_adapter_is_usable' ) && wpmcp_adapter_is_usable();
+	$adapter_ok = wpmcp_adapter_is_usable();
 	$adapter_v  = defined( '\WP\MCP\Core\McpAdapter::VERSION' ) ? \WP\MCP\Core\McpAdapter::VERSION : null;
 	$steps[]    = array(
 		'title'  => __( 'MCP transport', 'wp-mcp-connector-plus' ),
@@ -465,7 +465,7 @@ function wpmcp_setup_steps() {
 	// 5. Do the granted capabilities actually match the chosen level?
 	$levels     = wpmcp_access_levels();
 	$level      = wpmcp_access_level();
-	$caps_match = function_exists( 'wpmcp_role_caps_match' ) ? wpmcp_role_caps_match() : true;
+	$caps_match = wpmcp_role_caps_match();
 	$steps[]    = array(
 		'title'  => __( 'Permissions in step', 'wp-mcp-connector-plus' ),
 		'state'  => $caps_match ? 'ok' : 'error',

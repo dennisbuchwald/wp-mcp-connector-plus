@@ -270,7 +270,7 @@ function wpmcp_post_lock_error( $post ) {
 function wpmcp_writable_statuses() {
 	$statuses = array( 'draft', 'pending' );
 
-	if ( function_exists( 'wpmcp_work_session_active' ) && wpmcp_work_session_active() ) {
+	if ( wpmcp_work_session_active() ) {
 		$statuses[] = 'publish';
 	}
 

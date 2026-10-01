@@ -357,9 +357,7 @@ add_filter( 'wp_is_application_passwords_available_for_user', 'wpmcp_app_passwor
 function wpmcp_transport_permission() {
 	// The capabilities narrow on their own when a session runs out; this
 	// only tidies the stored timestamp and logs it on the first request.
-	if ( function_exists( 'wpmcp_close_expired_work_session' ) ) {
-		wpmcp_close_expired_work_session();
-	}
+	wpmcp_close_expired_work_session();
 
 	return is_user_logged_in() && current_user_can( WPMCP_CAP );
 }
