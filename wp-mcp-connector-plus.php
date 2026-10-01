@@ -152,6 +152,19 @@ function wpmcp_load_abilities() {
 add_action( 'wp_abilities_api_init', 'wpmcp_load_abilities' );
 
 /**
+ * Deferred cache purges after a pattern change (see
+ * wpmcp_purge_embedding_pages). A cron request loads none of the tools,
+ * so the event loads the one file it needs.
+ *
+ * @param int[] $ids Post IDs.
+ */
+function wpmcp_run_deferred_purge( $ids ) {
+	require_once WPMCP_DIR . 'includes/cache.php';
+	wpmcp_purge_posts( $ids );
+}
+add_action( 'wpmcp_purge_posts', 'wpmcp_run_deferred_purge' );
+
+/**
  * mcp-adapter releases this plugin has been checked against. Used only for
  * the diagnostic message — compatibility itself is decided by the API
  * shape below, not by a version string.

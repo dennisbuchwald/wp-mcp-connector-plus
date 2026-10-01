@@ -377,17 +377,58 @@ function wpmcp_after_save( $post, array &$response ) {
 	// show the old version: the pattern's own cache was never where a
 	// visitor saw it.
 	if ( 'wp_block' === $post->post_type ) {
-		$embedding = wpmcp_pattern_usage_ids( $post->ID );
-		foreach ( $embedding as $embedding_id ) {
-			wpmcp_purge_caches( $embedding_id );
-		}
-		if ( ! empty( $embedding ) ) {
-			$response['cache']['alsoPurged'] = $embedding;
-		}
+		$response['cache'] = array_merge( $response['cache'], wpmcp_purge_embedding_pages( wpmcp_pattern_usage_ids( $post->ID ) ) );
 	}
 	$response['verify'] = 'content-read shows what is stored. Use content-fetch-live to see what a visitor gets.';
 
 	return $fresh;
+}
+
+/**
+ * Pages purged inside the request after a pattern changed.
+ *
+ * Each purge is a call into the page cache plugin, and some of those
+ * delete files or send an HTTP request to a CDN. A pattern on 2000 pages
+ * (the most wpmcp_pattern_usage_ids returns) meant 2000 of them before
+ * the agent got its answer, long enough for a proxy to cut the request
+ * off after the save had gone through. Not measured on a real site; the
+ * number is a judgement: enough for every ordinary pattern to be done at
+ * once, small enough to stay well inside a request.
+ */
+const WPMCP_PURGE_NOW = 200;
+
+/**
+ * Clear the caches of the pages that embed a pattern.
+ *
+ * The first WPMCP_PURGE_NOW at once, the rest through WP-Cron in chunks
+ * of the same size, one event a minute apart. Scheduled pages are
+ * reported as a count: their caches are still stale for those minutes,
+ * which is what an agent checking a live page needs to know.
+ *
+ * @param int[] $ids Embedding post IDs.
+ * @return array { alsoPurged?: int[], alsoScheduled?: int }
+ */
+function wpmcp_purge_embedding_pages( array $ids ) {
+	$ids = array_values( array_map( 'intval', $ids ) );
+	if ( empty( $ids ) ) {
+		return array();
+	}
+
+	$now = array_slice( $ids, 0, WPMCP_PURGE_NOW );
+	foreach ( $now as $id ) {
+		wpmcp_purge_caches( $id );
+	}
+	$report = array( 'alsoPurged' => $now );
+
+	$later = array_slice( $ids, WPMCP_PURGE_NOW );
+	if ( ! empty( $later ) ) {
+		foreach ( array_chunk( $later, WPMCP_PURGE_NOW ) as $i => $chunk ) {
+			wp_schedule_single_event( time() + 60 * ( $i + 1 ), 'wpmcp_purge_posts', array( $chunk ) );
+		}
+		$report['alsoScheduled'] = count( $later );
+	}
+
+	return $report;
 }
 
 /**

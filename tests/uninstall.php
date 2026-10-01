@@ -58,6 +58,7 @@ function remove_role( $role ) { unset( $GLOBALS['roles'][ $GLOBALS['blog'] ][ $r
 function delete_option( $name ) { unset( $GLOBALS['options'][ $GLOBALS['blog'] ][ $name ] ); return true; }
 function delete_post_meta_by_key( $key ) { $GLOBALS['meta_cleared'][ $GLOBALS['blog'] ][] = $key; return true; }
 function wp_clear_scheduled_hook( $hook ) { $GLOBALS['cleared'][ $GLOBALS['blog'] ][] = $hook; }
+function wp_unschedule_hook( $hook ) { $GLOBALS['cleared'][ $GLOBALS['blog'] ][] = $hook . ' (all)'; }
 
 function seed( $blog ) {
 	$prefix = 1 === $blog ? 'wp_' : "wp_{$blog}_";
@@ -133,6 +134,7 @@ check( isset( $GLOBALS['tables']['wp_posts'] ), 'sonst keine Tabelle' );
 check( array( 'blogname' ) === array_keys( $GLOBALS['options'][1] ), 'alle Einstellungen sind weg, fremde bleiben', 'uebrig: ' . implode( ', ', array_keys( $GLOBALS['options'][1] ) ) );
 check( in_array( 'puc_cron_check_updates-wp-mcp-connector-plus', $GLOBALS['cleared'][1] ?? array(), true ), 'und die Update-Pruefung ist abgemeldet' );
 check( in_array( 'wpmcp_prune_log', $GLOBALS['cleared'][1] ?? array(), true ), 'die taegliche Protokoll-Bereinigung ist abgemeldet' );
+check( in_array( 'wpmcp_purge_posts (all)', $GLOBALS['cleared'][1] ?? array(), true ), 'und geplante Cache-Leerungen, egal mit welchen Seiten' );
 check( in_array( '_wpmcp_last_write', $GLOBALS['meta_cleared'][1] ?? array(), true ), 'der Stempel "vom Agenten geaendert" ist von allen Seiten entfernt' );
 
 echo "\n";

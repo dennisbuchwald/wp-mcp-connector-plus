@@ -83,6 +83,23 @@ function wpmcp_purge_caches( $post_id ) {
 }
 
 /**
+ * Clear the caches of several posts: the WP-Cron side of a pattern change.
+ *
+ * Scheduled by wpmcp_purge_embedding_pages() for the pages beyond the
+ * first 200; the main plugin file loads this file for the event, since
+ * cron requests never load the tools.
+ *
+ * @param int[] $ids Post IDs.
+ */
+function wpmcp_purge_posts( $ids ) {
+	foreach ( (array) $ids as $id ) {
+		if ( (int) $id > 0 ) {
+			wpmcp_purge_caches( (int) $id );
+		}
+	}
+}
+
+/**
  * Is a page cache plugin active without a purge function we recognise?
  *
  * @return bool

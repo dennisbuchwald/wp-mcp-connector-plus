@@ -251,6 +251,39 @@ check( array( 10, 70, 71 ) === $GLOBALS['purged'], 'auch der Seiten, die das Mus
 check( ! is_wp_error( $r ) && isset( $r['cache'] ), 'die Antwort sagt, was mit dem Cache passiert ist' );
 check( ! is_wp_error( $r ) && '2026-10-01 12:34:56' === ( $r['modified'] ?? null ), 'und gibt den Stempel fuer den naechsten Schreibvorgang zurueck', var_export( $r['modified'] ?? null, true ) );
 
+echo "\n\033[1mEin Muster in sehr vielen Seiten\033[0m\n";
+
+// Up to 2000 embedding pages were purged inside the request, one page
+// cache call each, before the agent got its answer. The first 200 still
+// are; the rest go to WP-Cron in chunks.
+if ( ! function_exists( 'wp_schedule_single_event' ) ) {
+	function wp_schedule_single_event( $time, $hook, $args = array() ) {
+		$GLOBALS['single_events'][] = array( 'time' => $time, 'hook' => $hook, 'args' => $args );
+		return true;
+	}
+}
+$GLOBALS['single_events']   = array();
+$GLOBALS['wpdb']->embedding = range( 1001, 1450 );
+$GLOBALS['purged']          = array();
+$r = wpmcp_restore_revision( 10, 501, false );
+check( ! is_wp_error( $r ) && ! empty( $r['ok'] ), 'gespeichert', message_of( $r ) );
+check( 201 === count( $GLOBALS['purged'] ), 'sofort geleert: die Seite selbst und 200 einbindende', count( $GLOBALS['purged'] ) . ' geleert' );
+check( ! is_wp_error( $r ) && 200 === count( $r['cache']['alsoPurged'] ?? array() ) && 1001 === ( $r['cache']['alsoPurged'][0] ?? null ), 'alsoPurged nennt diese 200' );
+check( ! is_wp_error( $r ) && 250 === ( $r['cache']['alsoScheduled'] ?? null ), 'alsoScheduled zaehlt die 250 uebrigen', wp_json_encode( $r['cache']['alsoScheduled'] ?? null ) );
+$later = array();
+foreach ( $GLOBALS['single_events'] as $event ) {
+	if ( 'wpmcp_purge_posts' === $event['hook'] ) {
+		$later = array_merge( $later, $event['args'][0] ?? array() );
+		check( count( $event['args'][0] ?? array() ) <= 200, 'ein geplanter Lauf leert hoechstens 200 Seiten' );
+	}
+}
+check( range( 1201, 1450 ) === $later, 'die uebrigen 250 sind eingeplant, keine doppelt, keine vergessen', count( $later ) . ' eingeplant' );
+
+$GLOBALS['single_events']   = array();
+$GLOBALS['wpdb']->embedding = array( 70, 71 );
+$r = wpmcp_restore_revision( 10, 501, false );
+check( ! is_wp_error( $r ) && ! isset( $r['cache']['alsoScheduled'] ) && array() === $GLOBALS['single_events'], 'bei wenigen Seiten wird nichts eingeplant' );
+
 echo "\n\033[1mRevisionen des Agenten zaehlen nicht als bekannt\033[0m\n";
 
 // Saved by the agent before 0.18.3, through the hole.

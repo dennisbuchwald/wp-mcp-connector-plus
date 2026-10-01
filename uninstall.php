@@ -72,6 +72,9 @@ function wpmcp_uninstall_site() {
 
 	wp_clear_scheduled_hook( 'puc_cron_check_updates-wp-mcp-connector-plus' );
 	wp_clear_scheduled_hook( 'wpmcp_prune_log' );
+	// Deferred purges carry their post IDs as arguments, and
+	// wp_clear_scheduled_hook() only matches events by their arguments.
+	wp_unschedule_hook( 'wpmcp_purge_posts' );
 }
 
 if ( is_multisite() ) {
