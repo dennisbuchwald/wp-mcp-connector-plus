@@ -57,41 +57,33 @@ function wpmcp_allowed_post_types() {
 }
 
 /**
- * How many published posts embed a given synced pattern.
- *
- * Editing a pattern changes every one of them at once, so the number
- * belongs in the dry run before anyone decides to save.
- *
- * @param int $pattern_id Pattern post ID.
- * @return int
- */
-function wpmcp_pattern_usage_count( $pattern_id ) {
-	global $wpdb;
-
-	$needle = '"ref":' . (int) $pattern_id;
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- content search, no core API for this.
-	return (int) $wpdb->get_var(
-		$wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->posts}
-			 WHERE post_status NOT IN ('trash', 'auto-draft')
-			   AND post_type != 'revision'
-			   AND post_content LIKE %s",
-			'%' . $wpdb->esc_like( $needle ) . '%'
-		)
-	);
-}
-
-/**
  * Which posts embed a synced pattern.
  *
+ * The one query behind both the warning in a dry run (how many) and the
+ * cache purge after a save (which). They used to be two queries with two
+ * opinions: the count included other patterns and had no limit, the list
+ * left patterns out and stopped at 200.
+ *
+ * Other patterns count: a pattern nested in another changes with it, and
+ * so does every page embedding that one.
+ *
+ * The reference is matched with what follows it in the block comment,
+ * '"ref":12}' or '"ref":12,' (pattern overrides add a "content" key
+ * after it). A bare '"ref":12' also matched pattern 123 and 1200, and the
+ * dry run warned about pages the edit would never touch.
+ *
  * @param int $pattern_id Pattern post ID.
- * @return int[]
+ * @return int[] Post IDs, at most 2000.
  */
 function wpmcp_pattern_usage_ids( $pattern_id ) {
 	global $wpdb;
 
-	$needle = '"ref":' . (int) $pattern_id;
+	$pattern_id = (int) $pattern_id;
+	if ( $pattern_id <= 0 ) {
+		return array();
+	}
+
+	$needle = '"ref":' . $pattern_id;
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- content search, no core API for this.
 	return array_map(
@@ -100,13 +92,30 @@ function wpmcp_pattern_usage_ids( $pattern_id ) {
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}
 				 WHERE post_status NOT IN ('trash', 'auto-draft')
-				   AND post_type NOT IN ('revision', 'wp_block')
-				   AND post_content LIKE %s
-				 LIMIT 200",
-				'%' . $wpdb->esc_like( $needle ) . '%'
+				   AND post_type != 'revision'
+				   AND ID != %d
+				   AND ( post_content LIKE %s OR post_content LIKE %s )
+				 ORDER BY ID
+				 LIMIT 2000",
+				$pattern_id,
+				'%' . $wpdb->esc_like( $needle . '}' ) . '%',
+				'%' . $wpdb->esc_like( $needle . ',' ) . '%'
 			)
 		)
 	);
+}
+
+/**
+ * How many posts embed a given synced pattern.
+ *
+ * Editing a pattern changes every one of them at once, so the number
+ * belongs in the dry run before anyone decides to save.
+ *
+ * @param int $pattern_id Pattern post ID.
+ * @return int
+ */
+function wpmcp_pattern_usage_count( $pattern_id ) {
+	return count( wpmcp_pattern_usage_ids( $pattern_id ) );
 }
 
 /**

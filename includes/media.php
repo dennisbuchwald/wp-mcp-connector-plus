@@ -268,16 +268,20 @@ function wpmcp_media_usage( array $ids ) {
 
 	// In the markup: the class the editor writes, and the file URL for
 	// anything hand-written or built by a page builder.
+	// The SQL only narrows the rows down: LIKE has no word boundary, so
+	// 'wp-image-1' also finds wp-image-12. The exact test is made below.
 	$clauses = array();
 	$values  = array();
+	$paths   = array();
 	foreach ( $ids as $id ) {
 		$clauses[] = 'post_content LIKE %s';
 		$values[]  = '%' . $wpdb->esc_like( 'wp-image-' . $id ) . '%';
 
-		$url = wp_get_attachment_url( $id );
-		if ( $url ) {
+		$url          = wp_get_attachment_url( $id );
+		$paths[ $id ] = $url ? wpmcp_url_path( $url ) : '';
+		if ( '' !== $paths[ $id ] ) {
 			$clauses[] = 'post_content LIKE %s';
-			$values[]  = '%' . $wpdb->esc_like( wpmcp_url_path( $url ) ) . '%';
+			$values[]  = '%' . $wpdb->esc_like( $paths[ $id ] ) . '%';
 		}
 	}
 
@@ -291,9 +295,10 @@ function wpmcp_media_usage( array $ids ) {
 
 	foreach ( $rows as $row ) {
 		foreach ( $ids as $id ) {
-			$url  = wp_get_attachment_url( $id );
-			$path = $url ? wpmcp_url_path( $url ) : '';
-			$hit  = false !== strpos( $row->post_content, 'wp-image-' . $id )
+			$path = $paths[ $id ];
+			// The class ends where the number ends: wp-image-1 is not
+			// wp-image-12.
+			$hit = preg_match( '/\bwp-image-' . $id . '(?![0-9])/', $row->post_content )
 				|| ( '' !== $path && false !== strpos( $row->post_content, $path ) );
 
 			if ( $hit && ! in_array( (int) $row->ID, $usage[ $id ], true ) ) {
