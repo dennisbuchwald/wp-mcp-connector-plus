@@ -7,7 +7,9 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [0.19.0] - 2026-10-02
+
+Sicherheits- und Qualitaetsrelease nach einem Komplettaudit. Enthaelt den Hotfix 0.18.3 (der nie einzeln veroeffentlicht wurde) samt zwei Korrekturen daran. Vor dem Update den Abschnitt "Zu beachten" lesen: Der Agent braucht jetzt HTTPS, erreicht nur noch seinen MCP-Endpunkt, und die Werkzeugliste haengt nur noch an der Zugriffsstufe.
 
 ### Sicherheit
 
@@ -129,7 +131,7 @@ Ab hier gibt es eine Vertragsversion: `site-info` meldet `contractVersion` (eine
 
 ---
 
-## [0.18.3] - 2026-10-01
+## [0.18.3] - 2026-10-01 (nicht einzeln veroeffentlicht, enthalten in 0.19.0)
 
 Sicherheits-Hotfix. Bitte zeitnah einspielen.
 
