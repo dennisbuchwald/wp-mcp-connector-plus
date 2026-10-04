@@ -42,7 +42,6 @@ function get_post_types( $a = array(), $o = 'names' ) {
 }
 function get_post_type_object( $t ) { return null; }
 function human_time_diff( $a, $b = 0 ) { return (int) ( ( $b - $a ) / 60 ) . ' Minuten'; }
-function wpmcp_allowed_post_types() { return array( 'page' ); }
 // sync_role_capabilities falls through to this when there is no role, so
 // it is where a "the capabilities were pulled along" check can sit.
 function wpmcp_register_role() { ++$GLOBALS['synced']; }

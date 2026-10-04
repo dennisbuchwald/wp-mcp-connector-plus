@@ -15,48 +15,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Post types the connector may touch.
- *
- * @return string[]
- */
-function wpmcp_allowed_post_types() {
-	// Public is the whole test. Requiring show_ui as well used to hide any
-	// post type a plugin registers in code without an admin screen — a
-	// site-wide search then reported nothing and looked right doing it.
-	$types = array();
-	foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
-		// Media has its own tools; an attachment holds no block tree.
-		if ( in_array( $type->name, array( 'attachment' ), true ) ) {
-			continue;
-		}
-		$types[] = $type->name;
-	}
-
-	// A page is not public in the post-type sense but is always in scope.
-	if ( ! in_array( 'page', $types, true ) && post_type_exists( 'page' ) ) {
-		$types[] = 'page';
-	}
-
-	// Synced patterns are not a public post type, so they need saying so.
-	if ( 'none' !== wpmcp_pattern_access() ) {
-		$types[] = 'wp_block';
-	}
-
-	// What the site owner ticked under Tools > MCP Connector.
-	$types = array_merge( $types, wpmcp_extra_post_types() );
-
-	/**
-	 * Post types the connector may touch.
-	 *
-	 * The settings screen covers the ordinary case; this is for anything a
-	 * project decides in code.
-	 *
-	 * @param string[] $types Post type slugs.
-	 */
-	return array_values( array_unique( apply_filters( 'wpmcp_allowed_post_types', $types ) ) );
-}
-
-/**
  * Resolve and permission-check a post for reading.
  *
  * @param int $post_id Post ID.

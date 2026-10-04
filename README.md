@@ -750,6 +750,7 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 
 - `auth.php`: the AI role, application passwords for the agent only, the fence around the MCP route.
 - `access.php`: access levels, work sessions, the capabilities the agent holds per check, role upkeep.
+- `post-types.php`: which post types are in scope; loaded with `access.php`, because the settings screen needs it where the tools never load.
 - `audit.php`: the log table, writing entries, retention.
 - `preview.php`: signed, time-limited preview links for drafts.
 - `editor.php`: the stamp on pages the agent saved and the notice in the block editor.
@@ -763,7 +764,7 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 - `validate.php`: the validation pipeline every write passes (structure, nesting, roundtrip, render).
 - `catalog.php`: `blocks-catalog` and `blocks-describe`, the playbook.
 - `content.php`: loads the content files below, nothing else.
-- `content-access.php`: which posts may be read and which written (types, statuses, live edit, edit lock).
+- `content-access.php`: which posts may be read and which written (statuses, live edit, edit lock).
 - `content-read.php`: `content-list`, `content-read`, `content-preview`.
 - `content-write.php`: `content-write`: plan, check, save, verify, placement, cache purge after a save.
 - `content-create.php`: `content-create`, `content-duplicate`, `content-batch`.

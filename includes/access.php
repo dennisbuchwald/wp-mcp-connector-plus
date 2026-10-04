@@ -23,6 +23,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// The settings screen needs the scope on requests where the tools never
+// load, so it lives in a file of its own that is always there.
+require_once __DIR__ . '/post-types.php';
+
 /**
  * Access levels, widest last.
  *

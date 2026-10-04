@@ -7,6 +7,18 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.19.1] - 2026-10-04
+
+### Behoben
+
+- **Der Tab "Access" unter Werkzeuge > MCP Connector endete mit einem fatalen Fehler** ("Call to undefined function wpmcp_allowed_post_types()"), live auf hhs.hn. Die Liste der waehlbaren Post-Types braucht den Bereich des Connectors, und der lag bei den Werkzeugdateien, die nur laden, wenn die Abilities API startet. In 0.18.2 hat die Statustabelle auf derselben Seite die Abilities gezaehlt und die Dateien dabei nebenbei geladen; seit die Einstellungen in 0.19.0 einen eigenen Tab haben, tat das niemand mehr. Die Funktion liegt jetzt in `includes/post-types.php`, die immer mit `access.php` geladen wird. Website und Agent waren nicht betroffen, nur dieser Tab.
+
+### Tests
+
+- **Neu: `tests/load-boundaries.php`.** Liest den Code statt ihn auszufuehren: Welche Dateien laedt das Plugin spaet, welche Funktionen stehen darin, und ruft eine immer geladene Datei eine davon ohne `function_exists` auf. Die anderen Tests laden alle Dateien vorab und konnten diese Fehlerklasse nicht sehen. Der Test schlug gegen 0.19.0 fehl.
+
+---
+
 ## [0.19.0] - 2026-10-02
 
 Sicherheits- und Qualitaetsrelease nach einem Komplettaudit. Enthaelt den Hotfix 0.18.3 (der nie einzeln veroeffentlicht wurde) samt zwei Korrekturen daran. Vor dem Update den Abschnitt "Zu beachten" lesen: Der Agent braucht jetzt HTTPS, erreicht nur noch seinen MCP-Endpunkt, und die Werkzeugliste haengt nur noch an der Zugriffsstufe.
