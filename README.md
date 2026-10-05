@@ -413,7 +413,16 @@ not enough:
   kind already on the page is *preserved*: WordPress saves the whole page
   on every write, so without this, editing one block would destroy the
   structured data in another. The agent can add none of it and can destroy
-  none of it. The one exception is **structured data**: a
+  none of it. That holds inside a block the agent changes, too: a
+  fragment kses would remove (an attribute such as GenerateBlocks'
+  `style="background-color:rgba(0, 0, 0, 0)"` on a highlight, which
+  kses strips because `rgba()` is not among the CSS functions it lets
+  through, or a whole iframe) may stay when the stored page already holds
+  the same text on the same element, as often as the page will hold it
+  after the change. Passing a highlight through `patch_html` unchanged
+  works; a new one, one differing by a character, or a copy in a second
+  place is refused, and the refusal quotes each fragment and says whether
+  it was already in that block. The one exception is **structured data**: a
   `<script type="application/ld+json">` holding valid JSON is not code, and
   is accepted. A `<` inside the data is re-encoded as `\u003C`, which closes
   the only way out of the tag; another type, an extra attribute or content
@@ -806,7 +815,7 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 - `content-write.php`: `content-write`: plan, check, save, verify, placement, cache purge after a save.
 - `content-create.php`: `content-create`, `content-duplicate`, `content-batch`.
 - `revisions.php`: `content-revisions`, `content-restore`.
-- `markup-guard.php`: what kses may skip (unchanged blocks, safe JSON-LD) and the unfiltered_html grant.
+- `markup-guard.php`: what kses may skip (unchanged blocks, fragments already stored, safe JSON-LD) and the unfiltered_html grant.
 - `save-errors.php`: explaining a save WordPress or a plugin refused.
 - `meta.php`: readable and writable post meta (SEO fields, theme elements).
 - `site-info.php`: `site-info`.

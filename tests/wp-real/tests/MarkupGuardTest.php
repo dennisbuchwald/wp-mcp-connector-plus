@@ -16,6 +16,10 @@ class MarkupGuardTest extends WPMCP_Real_TestCase {
 	const PARAGRAPH = '<!-- wp:paragraph --><p>Ganz normaler Text</p><!-- /wp:paragraph -->';
 	const EMBED     = '<!-- wp:html --><iframe src="https://player.example/1"></iframe><!-- /wp:html -->';
 
+	// GenerateBlocks' inline highlight, as stored on dbw-media.de.
+	const MARK      = '<mark style="background-color:rgba(0, 0, 0, 0)" class="has-inline-color has-accent-color">Website</mark>';
+	const HIGHLIGHT = '<!-- wp:heading --><h2 class="wp-block-heading">Eine <mark style="background-color:rgba(0, 0, 0, 0)" class="has-inline-color has-accent-color">Website</mark> fuer dich</h2><!-- /wp:heading -->';
+
 	public function set_up() {
 		parent::set_up();
 		$this->set_level( 'draft' );
@@ -162,6 +166,156 @@ class MarkupGuardTest extends WPMCP_Real_TestCase {
 
 		$this->assertTrue( $this->refused( $result ), $this->explain( $result ) );
 		$this->assertSame( $before, $this->stored( $id ) );
+	}
+
+	/**
+	 * Why kses takes the GenerateBlocks inline highlight apart at all.
+	 *
+	 * safecss_filter_attr() allows background-color, but after the
+	 * property check it refuses any declaration whose value still holds
+	 * "(" once the functions it knows are taken out: var(), calc(), min(),
+	 * max(), minmax(), clamp() and repeat(). rgb() and rgba() are not on
+	 * that list (only inside a gradient), so the whole declaration goes,
+	 * spaces or not, and the attribute with it.
+	 */
+	public function test_kses_strips_rgba_in_a_style_attribute() {
+		$this->assertSame( '', safecss_filter_attr( 'background-color:rgba(0, 0, 0, 0)' ) );
+		$this->assertSame( '', safecss_filter_attr( 'background-color:rgba(0,0,0,0)' ), 'not the spaces' );
+		$this->assertSame( '', safecss_filter_attr( 'color:rgb(1,2,3)' ), 'rgb() alike' );
+		$this->assertSame( 'background-color:#000', safecss_filter_attr( 'background-color:#000' ), 'the property itself is allowed' );
+		$this->assertSame( 'background-color:var(--x)', safecss_filter_attr( 'background-color:var(--x)' ), 'a known function is' );
+		$this->assertSame( 'background-image:linear-gradient(rgba(0,0,0,0),#fff)', safecss_filter_attr( 'background-image:linear-gradient(rgba(0,0,0,0),#fff)' ), 'and rgba() inside a gradient is' );
+
+		$this->assertSame(
+			'<mark class="has-inline-color has-accent-color">Website</mark>',
+			wp_kses_post( '<mark style="background-color:rgba(0, 0, 0, 0)" class="has-inline-color has-accent-color">Website</mark>' ),
+			'so the attribute goes and the element stays'
+		);
+	}
+
+	/**
+	 * The field report: a patch_html around a highlight that was already
+	 * in the heading, passed through unchanged.
+	 */
+	public function test_markup_already_in_the_block_may_stay_when_the_block_changes() {
+		$id = $this->page( self::HIGHLIGHT . self::PARAGRAPH );
+
+		$this->act_as( $this->agent() );
+		$result = $this->execute(
+			'wpmcp/content-write',
+			array(
+				'post_id' => $id,
+				'dry_run' => false,
+				'ops'     => array(
+					array(
+						'op'      => 'patch_html',
+						'path'    => '0',
+						'find'    => 'Eine ' . self::MARK . ' fuer dich',
+						'replace' => 'Deine neue ' . self::MARK . ' fuer Handwerker',
+					),
+				),
+			)
+		);
+
+		$this->assertFalse( $this->refused( $result ), $this->explain( $result ) );
+		$stored = $this->stored( $id );
+		$this->assertStringContainsString( 'Deine neue ' . self::MARK . ' fuer Handwerker', $stored, 'the highlight keeps its style' );
+		$this->assertStringContainsString( 'style="background-color:rgba(0, 0, 0, 0)"', implode( ' ', $result['warnings'] ), 'and the answer says it was preserved' );
+	}
+
+	public function test_a_new_style_kses_strips_is_still_refused() {
+		$id     = $this->page( self::HIGHLIGHT . self::PARAGRAPH );
+		$before = $this->stored( $id );
+
+		$this->act_as( $this->agent() );
+		$result = $this->patch( $id, 'Eine ' . self::MARK, 'Eine <mark style="background-color:rgba(255, 0, 0, 1)" class="has-inline-color">Seite</mark>' );
+
+		$this->assertTrue( $this->refused( $result ), $this->explain( $result ) );
+		$message = $this->errors_of( $result );
+		$this->assertStringContainsString( 'style="background-color:rgba(255, 0, 0, 1)"', $message, 'the message quotes the fragment' );
+		$this->assertStringContainsString( 'new', $message );
+		$this->assertSame( $before, $this->stored( $id ) );
+	}
+
+	public function test_a_new_event_handler_next_to_an_existing_style_is_refused() {
+		$id     = $this->page( self::HIGHLIGHT . self::PARAGRAPH );
+		$before = $this->stored( $id );
+
+		$this->act_as( $this->agent() );
+		$result = $this->patch( $id, 'fuer dich', 'fuer dich <img src="x" onerror="alert(1)">' );
+
+		$this->assertTrue( $this->refused( $result ), $this->explain( $result ) );
+		$this->assertStringContainsString( 'onerror="alert(1)"', $this->errors_of( $result ) );
+		$this->assertSame( $before, $this->stored( $id ) );
+	}
+
+	public function test_copying_an_existing_fragment_to_more_places_is_refused() {
+		$id     = $this->page( self::HIGHLIGHT . self::PARAGRAPH );
+		$before = $this->stored( $id );
+
+		$this->act_as( $this->agent() );
+
+		// Twice in the same block.
+		$result = $this->patch( $id, 'fuer dich', 'fuer dich und ' . self::MARK );
+		$this->assertTrue( $this->refused( $result ), $this->explain( $result ) );
+		$this->assertStringContainsString( 'already in this block', $this->errors_of( $result ) );
+		$this->assertSame( $before, $this->stored( $id ) );
+
+		// Once more in another block, the first one left in place.
+		$result = $this->execute(
+			'wpmcp/content-write',
+			array(
+				'post_id' => $id,
+				'dry_run' => false,
+				'ops'     => array(
+					array(
+						'op'      => 'patch_html',
+						'path'    => '1',
+						'find'    => 'Ganz normaler Text',
+						'replace' => 'Ganz normaler ' . self::MARK,
+					),
+				),
+			)
+		);
+		$this->assertTrue( $this->refused( $result ), $this->explain( $result ) );
+		$this->assertSame( $before, $this->stored( $id ) );
+	}
+
+	/**
+	 * The refusal's messages, without the rest of the answer (which
+	 * quotes the patched block and would match anything in it).
+	 *
+	 * @param mixed $result Ability result.
+	 * @return string
+	 */
+	private function errors_of( $result ) {
+		return is_wp_error( $result ) ? $result->get_error_message() : implode( ' ', (array) ( $result['errors'] ?? array() ) );
+	}
+
+	/**
+	 * One patch_html on block 0 of a page, for real.
+	 *
+	 * @param int    $id      Post ID.
+	 * @param string $find    Text to find.
+	 * @param string $replace Replacement.
+	 * @return mixed
+	 */
+	private function patch( $id, $find, $replace ) {
+		return $this->execute(
+			'wpmcp/content-write',
+			array(
+				'post_id' => $id,
+				'dry_run' => false,
+				'ops'     => array(
+					array(
+						'op'      => 'patch_html',
+						'path'    => '0',
+						'find'    => $find,
+						'replace' => $replace,
+					),
+				),
+			)
+		);
 	}
 
 	/**

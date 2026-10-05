@@ -73,9 +73,16 @@ function wpmcp_kses_impact( $before, $after, array $also_known = array() ) {
 		}
 	}
 
+	$kept     = array();
 	$unstable = ( $filtered !== $after )
-		? wpmcp_unstable_blocks( (string) $after, array_merge( array( (string) $before ), $also_known ) )
+		? wpmcp_unstable_blocks( (string) $after, array_merge( array( (string) $before ), $also_known ), $kept )
 		: array();
+
+	// Fragments a changed block keeps from the stored page are named with
+	// the rest of what is preserved, in their own words.
+	foreach ( $kept as $text ) {
+		$affected[] = $text;
+	}
 
 	return array(
 		'alters'     => ( $filtered !== $after ),
@@ -98,12 +105,28 @@ function wpmcp_kses_impact( $before, $after, array $also_known = array() ) {
  * in one block from destroying the JSON-LD or the video embed in another.
  *
  * Every other block is the agent's, and it must come out of wp_kses_post
- * exactly as it went in. Then skipping the filter changes nothing about
- * it, and the save can go past the filter for the sake of the blocks that
- * need it. Anything kses would remove or rewrite is refused instead, and
- * named by its path. Asking kses itself, rather than keeping a list of
- * what it removes, is the point: every list so far had holes, and kses is
- * by definition what WordPress would have done.
+ * exactly as it went in, with one exception (since 0.19.2): what kses
+ * would remove from it may stay if it was already stored. Then skipping
+ * the filter adds nothing to the page that was not there, and the save
+ * can go past the filter for the sake of the blocks that need it.
+ * Anything else kses would remove or rewrite is refused, and named by
+ * its path and in its own words. Asking kses itself, rather than keeping
+ * a list of what it removes, is the point: every list so far had holes,
+ * and kses is by definition what WordPress would have done.
+ *
+ * The exception exists because a block is edited, not rewritten: a
+ * heading with a GenerateBlocks highlight (a style kses strips, see
+ * tests/wp-real MarkupGuardTest) could not have one word changed, because
+ * the highlight came back with the change. It is decided by
+ * wpmcp_kses_removals(), which takes the block apart into the fragments
+ * kses objects to, and is accepted only when
+ *
+ * - those fragments are all kses objects to: with them taken out, kses
+ *   leaves the rest alone (otherwise the block is refused as before), and
+ * - each of them occurs in the stored page at least as often as in the
+ *   whole page after the change, counted as a multiset. A fragment moved
+ *   stays, a fragment copied to a second place is refused, as is one that
+ *   differs by a single character.
  *
  * A changed container is judged by its own markup only (the opening and
  * closing wrapper, its comment delimiter); its children are judged on
@@ -114,10 +137,15 @@ function wpmcp_kses_impact( $before, $after, array $also_known = array() ) {
  * is taken out before the comparison, as everywhere else in the plugin.
  *
  * @param string   $after   Content about to be written.
- * @param string[] $sources Content whose blocks count as already stored.
- * @return array<int, array{path: string, constructs: string[], stored: string}>
+ * @param string[] $sources Content whose blocks count as already stored;
+ *                          the first is the post as stored now.
+ * @param string[] $kept    Receives the fragments changed blocks keep
+ *                          from the stored page (by reference).
+ * @return array<int, array{path: string, constructs: string[], stored: string, fragments: array}>
  */
-function wpmcp_unstable_blocks( $after, array $sources ) {
+function wpmcp_unstable_blocks( $after, array $sources, &$kept = null ) {
+	$kept = array();
+
 	if ( ! function_exists( 'wp_kses_post' ) ) {
 		return array();
 	}
@@ -129,10 +157,231 @@ function wpmcp_unstable_blocks( $after, array $sources ) {
 		}
 	}
 
-	$found = array();
-	wpmcp_find_unstable_blocks( parse_blocks( (string) $after ), $known, '', $found );
+	$after_blocks = parse_blocks( (string) $after );
 
-	return $found;
+	$found = array();
+	wpmcp_find_unstable_blocks( $after_blocks, $known, '', $found );
+
+	if ( empty( $found ) ) {
+		return $found;
+	}
+
+	// What the stored page holds of what kses removes, and what the page
+	// would hold after the change, every block counted, untouched ones too.
+	$budget = array();
+	foreach ( $sources as $source ) {
+		$counts = wpmcp_count_kses_removals( parse_blocks( (string) $source ) );
+		foreach ( $counts as $key => $count ) {
+			$budget[ $key ] = max( $budget[ $key ] ?? 0, $count );
+		}
+	}
+	$usage = wpmcp_count_kses_removals( $after_blocks );
+
+	$stored_blocks = '' === (string) ( $sources[0] ?? '' ) ? array() : parse_blocks( (string) $sources[0] );
+
+	$refused = array();
+	foreach ( $found as $block ) {
+		$ok = $block['explained'] && ! empty( $block['fragments'] );
+		foreach ( $block['fragments'] as $key => &$fragment ) {
+			$fragment['before'] = $budget[ $key ] ?? 0;
+			$fragment['after']  = $usage[ $key ] ?? 0;
+			$fragment['inThis'] = wpmcp_fragment_in_stored_block( $stored_blocks, $block['path'], $block['name'], $key );
+			if ( $fragment['after'] > $fragment['before'] ) {
+				$ok = false;
+			}
+		}
+		unset( $fragment );
+
+		if ( $ok ) {
+			foreach ( $block['fragments'] as $fragment ) {
+				$kept[] = $fragment['text'];
+			}
+			continue;
+		}
+		$refused[] = $block;
+	}
+
+	$kept = array_values( array_unique( $kept ) );
+
+	return $refused;
+}
+
+/**
+ * The markup of one block without its children: the delimiter with its
+ * attributes and the wrapper chunks in order, safe JSON-LD taken out.
+ *
+ * Safe JSON-LD comes out of the inner markup before the delimiter goes
+ * around it. kses parses and reserializes block markup
+ * (filter_block_content), and a block left empty by the strip comes back
+ * in the void form "<!-- wp:html /-->", which read as a change: every
+ * Custom HTML block holding structured data, the usual place for it, was
+ * refused.
+ *
+ * @param array $block Parsed block.
+ * @return string
+ */
+function wpmcp_block_own_markup( array $block ) {
+	if ( null === $block['blockName'] ) {
+		return wpmcp_strip_safe_jsonld( (string) ( $block['innerHTML'] ?? '' ) );
+	}
+
+	return wpmcp_strip_safe_jsonld(
+		get_comment_delimited_block_content(
+			$block['blockName'],
+			is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array(),
+			wpmcp_strip_safe_jsonld( wpmcp_inner_html_from_content( (array) ( $block['innerContent'] ?? array() ) ) )
+		)
+	);
+}
+
+/**
+ * Is this markup what kses would store, give or take the rewrites that
+ * change nothing (see wpmcp_kses_equivalent())?
+ *
+ * @param string $html Markup.
+ * @return bool
+ */
+function wpmcp_kses_stable( $html ) {
+	$filtered = wp_kses_post( $html );
+
+	return $filtered === $html || $filtered === wpmcp_kses_equivalent( $html );
+}
+
+/**
+ * Take a piece of markup apart into what kses would remove from it.
+ *
+ * Three kinds of fragment, each identified by its exact text:
+ *
+ * - script, style and iframe as whole elements, content included: their
+ *   content is what they do, so a changed one is a different one;
+ * - the tag of any other element kses does not allow at all (an svg,
+ *   a meta), attributes included;
+ * - an attribute kses removes or changes on an element it allows
+ *   (onerror="...", a style it cannot vouch for, a javascript: href),
+ *   keyed with its element, so the same handler on another element is
+ *   another fragment.
+ *
+ * Each tag and each attribute is asked of kses on its own. Whether that
+ * found everything is then asked of kses as well: with the fragments taken
+ * out, the rest has to come back unchanged ("explained"). If it does not,
+ * kses objects to something these pieces do not capture, and the caller
+ * treats the block as before 0.19.2.
+ *
+ * @param string $html Markup, as wpmcp_block_own_markup() gives it.
+ * @return array { fragments: array<string, array{text: string, count: int}>, explained: bool }
+ */
+function wpmcp_kses_removals( $html ) {
+	$fragments = array();
+	$add       = function ( $key, $text ) use ( &$fragments ) {
+		if ( ! isset( $fragments[ $key ] ) ) {
+			$fragments[ $key ] = array(
+				'text'  => $text,
+				'count' => 0,
+			);
+		}
+		++$fragments[ $key ]['count'];
+	};
+
+	$rest = (string) preg_replace_callback(
+		'#<(script|style|iframe)\b[^>]*>.*?</\1\s*>#is',
+		function ( $m ) use ( $add ) {
+			if ( wpmcp_kses_stable( $m[0] ) ) {
+				return $m[0];
+			}
+			$add( $m[0], $m[0] );
+			return '';
+		},
+		(string) $html
+	);
+
+	$rest = (string) preg_replace_callback(
+		'#<(/?)([a-zA-Z][a-zA-Z0-9:-]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>#',
+		function ( $tag ) use ( $add ) {
+			if ( wpmcp_kses_stable( $tag[0] ) ) {
+				return $tag[0];
+			}
+
+			$name = strtolower( $tag[2] );
+
+			// The element itself is not allowed: the whole tag goes.
+			if ( '/' === $tag[1] || '' === wp_kses_post( '<' . $tag[2] . '>' ) ) {
+				$add( $tag[0], $tag[0] );
+				return '';
+			}
+
+			$attrs = (string) preg_replace_callback(
+				'#[\s/]+([^\s"\'>/=]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s"\'>]+))?#',
+				function ( $attr ) use ( $add, $tag, $name ) {
+					$text = ltrim( $attr[0], " \t\n\r\f/" );
+					if ( wpmcp_kses_stable( '<' . $tag[2] . ' ' . $text . '>' ) ) {
+						return $attr[0];
+					}
+					$add( '<' . $name . ' ' . $text, $text );
+					return '';
+				},
+				$tag[3]
+			);
+
+			return '<' . $tag[2] . $attrs . '>';
+		},
+		$rest
+	);
+
+	return array(
+		'fragments' => $fragments,
+		'explained' => wpmcp_kses_stable( $rest ),
+	);
+}
+
+/**
+ * How often each fragment kses would remove occurs in a block list, every
+ * block counted by its own markup.
+ *
+ * @param array $blocks Parsed blocks.
+ * @param array $counts Running counts, for recursion.
+ * @return array<string, int>
+ */
+function wpmcp_count_kses_removals( array $blocks, array $counts = array() ) {
+	foreach ( $blocks as $block ) {
+		if ( null === $block['blockName'] && '' === trim( (string) ( $block['innerHTML'] ?? '' ) ) ) {
+			continue;
+		}
+
+		$own = wpmcp_block_own_markup( $block );
+		if ( ! wpmcp_kses_stable( $own ) ) {
+			foreach ( wpmcp_kses_removals( $own )['fragments'] as $key => $fragment ) {
+				$counts[ $key ] = ( $counts[ $key ] ?? 0 ) + $fragment['count'];
+			}
+		}
+
+		if ( null !== $block['blockName'] && ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+			$counts = wpmcp_count_kses_removals( $block['innerBlocks'], $counts );
+		}
+	}
+
+	return $counts;
+}
+
+/**
+ * Was this fragment in the block at the same path before the change?
+ *
+ * For the message only: "already in this block" tells the agent it passed
+ * through something that was there, rather than writing something new.
+ *
+ * @param array  $stored Parsed blocks of the stored post.
+ * @param string $path   Path of the changed block.
+ * @param string $name   Its block name, null for freeform.
+ * @param string $key    Fragment key.
+ * @return bool
+ */
+function wpmcp_fragment_in_stored_block( array $stored, $path, $name, $key ) {
+	$segments = wpmcp_path_parse( $path );
+	$block    = ( null === $segments || empty( $stored ) ) ? null : wpmcp_blocks_at_path( $stored, $segments );
+	if ( null === $block || $block['blockName'] !== $name ) {
+		return false;
+	}
+
+	return isset( wpmcp_kses_removals( wpmcp_block_own_markup( $block ) )['fragments'][ $key ] );
 }
 
 /**
@@ -186,31 +435,20 @@ function wpmcp_find_unstable_blocks( array $blocks, array $known, $prefix, array
 			continue;
 		}
 
-		if ( ! $freeform ) {
-			// The block's own markup without its children: the delimiter
-			// with its attributes, and the wrapper chunks in order.
-			//
-			// Safe JSON-LD comes out of the inner markup before the
-			// delimiter goes around it. kses parses and reserializes block
-			// markup (filter_block_content), and a block left empty by the
-			// strip comes back in the void form "<!-- wp:html /-->", which
-			// read as a change: every Custom HTML block holding structured
-			// data, the usual place for it, was refused.
-			$own = get_comment_delimited_block_content(
-				$block['blockName'],
-				is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array(),
-				wpmcp_strip_safe_jsonld( wpmcp_inner_html_from_content( (array) ( $block['innerContent'] ?? array() ) ) )
-			);
-		}
-
-		$checked  = wpmcp_strip_safe_jsonld( $own );
+		// The block's own markup without its children, see
+		// wpmcp_block_own_markup().
+		$checked  = wpmcp_block_own_markup( $block );
 		$filtered = wp_kses_post( $checked );
 
 		if ( $filtered !== $checked && $filtered !== wpmcp_kses_equivalent( $checked ) ) {
-			$found[] = array(
+			$removals = wpmcp_kses_removals( $checked );
+			$found[]  = array(
 				'path'       => $path,
+				'name'       => $block['blockName'],
 				'constructs' => wpmcp_kses_losses( $checked, $filtered ),
 				'stored'     => $filtered,
+				'fragments'  => $removals['fragments'],
+				'explained'  => $removals['explained'],
 			);
 		}
 
@@ -337,12 +575,52 @@ function wpmcp_unstable_summary( array $blocks ) {
 	$parts = array();
 
 	foreach ( $blocks as $block ) {
-		$parts[] = empty( $block['constructs'] )
-			? sprintf( 'block %s (only rewritten; WordPress would store it as: %s)', $block['path'], wpmcp_shorten( $block['stored'], 120 ) )
-			: sprintf( 'block %s (%s)', $block['path'], implode( ', ', $block['constructs'] ) );
+		if ( empty( $block['constructs'] ) && empty( $block['fragments'] ) ) {
+			$parts[] = sprintf( 'block %s (only rewritten; WordPress would store it as: %s)', $block['path'], wpmcp_shorten( $block['stored'], 120 ) );
+			continue;
+		}
+
+		$part = sprintf( 'block %s (%s)', $block['path'], implode( ', ', $block['constructs'] ) );
+
+		// Each fragment in its own words, and whether it was there before:
+		// a highlight passed through reads very differently from a style
+		// the agent wrote.
+		$said = array();
+		foreach ( (array) ( $block['fragments'] ?? array() ) as $fragment ) {
+			$said[] = wpmcp_shorten( $fragment['text'], 160 ) . ' ' . wpmcp_fragment_status( $fragment );
+		}
+		if ( ! empty( $said ) ) {
+			$part .= ': ' . implode( '; ', $said );
+		}
+		if ( isset( $block['explained'] ) && ! $block['explained'] ) {
+			$part .= sprintf( '. WordPress would also change more of this block; it would store it as: %s', wpmcp_shorten( $block['stored'], 120 ) );
+		}
+
+		$parts[] = $part;
 	}
 
 	return implode( '; ', $parts );
+}
+
+/**
+ * Whether a fragment of a refused block was there before, in words.
+ *
+ * @param array $fragment { before, after, inThis }.
+ * @return string
+ */
+function wpmcp_fragment_status( array $fragment ) {
+	$before = (int) ( $fragment['before'] ?? 0 );
+	$after  = (int) ( $fragment['after'] ?? 0 );
+	$where  = empty( $fragment['inThis'] ) ? 'already on the page' : 'already in this block before the change';
+
+	if ( 0 === $before ) {
+		return '(new: not in the stored page)';
+	}
+	if ( $after > $before ) {
+		return sprintf( '(%s, but the page would have it %d times where it had it %d)', $where, $after, $before );
+	}
+
+	return sprintf( '(%s, may stay)', $where );
 }
 
 /**
@@ -357,7 +635,7 @@ function wpmcp_filtered_markup_error( array $impact ) {
 		: implode( ', ', $impact['added'] );
 
 	return sprintf(
-		'This change adds markup WordPress will not store from an agent account: %s. Event handlers, javascript: URLs, inline scripts, iframes, embeds and forms cannot be written this way; structured data can, as <script type="application/ld+json"> holding valid JSON. Remove it, or have a human add it in the editor. A block that only needs rewriting goes through when sent exactly as WordPress would store it. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
+		'This change adds markup WordPress will not store from an agent account: %s. Event handlers, javascript: URLs, inline scripts, iframes, embeds and forms cannot be written this way; structured data can, as <script type="application/ld+json"> holding valid JSON. Markup of that kind already stored may be passed through unchanged, as often as it was there; what is new may not. Remove it, or have a human add it in the editor. A block that only needs rewriting goes through when sent exactly as WordPress would store it. To repair content of this kind through the connector, a developer can open the door deliberately with the wpmcp_allow_filtered_markup filter.',
 		$where
 	);
 }

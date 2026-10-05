@@ -374,6 +374,55 @@ if ( ! function_exists( 'wpmcp_without_kses' ) ) {
 	check( ! kses_active(), 'ein Filter, der nicht da war, wird nicht hinzugefuegt' );
 }
 
+echo "\n\033[1mWas schon im Block stand, darf bleiben (0.19.2)\033[0m\n";
+
+// The field report: a heading whose highlight carries a style kses
+// strips. The agent changed the text around it and passed the highlight
+// through untouched, and was refused as if it had written the style. A
+// changed block may now hold what kses would remove, as long as every
+// such fragment was already stored and none occurs more often after.
+$tracked = '<!-- wp:paragraph --><p>Alt <img src="a.jpg" onerror="track()"> Ende</p><!-- /wp:paragraph -->';
+
+page( 50, $tracked . $para );
+$w = write( 50, array( $p( '<p>Neu <img src="a.jpg" onerror="track()"> Ende</p>' ), $plain ) );
+check( ! refused( $w ), 'ein unveraendert durchgereichtes Fragment geht durch', message_of( $w['result'] ) );
+check( false !== strpos( $w['stored'], '<p>Neu <img src="a.jpg" onerror="track()"> Ende</p>' ), 'und bleibt erhalten', $w['stored'] );
+check( false !== strpos( implode( ' ', (array) ( $w['result']['warnings'] ?? array() ) ), 'onerror="track()"' ), 'die Warnung nennt es als bestehend', implode( ' | ', (array) ( $w['result']['warnings'] ?? array() ) ) );
+
+page( 51, $tracked . $para );
+$w   = write( 51, array( $p( '<p>Neu <img src="a.jpg" onerror="track()"> <img src="b.jpg" onerror="steal()"></p>' ), $plain ) );
+$msg = message_of( $w['result'] );
+check( refused( $w ), 'ein neues Fragment daneben wird abgelehnt', $w['stored'] );
+check( false !== strpos( $msg, 'onerror="steal()"' ), 'die Meldung zitiert es woertlich', $msg );
+check( false !== strpos( $msg, 'new' ), 'und sagt, dass es neu ist', $msg );
+
+page( 52, $tracked . $para );
+$w   = write( 52, array( $p( '<p>Neu <img src="a.jpg" onerror="track()"> <img src="a.jpg" onerror="track()"></p>' ), $plain ) );
+$msg = message_of( $w['result'] );
+check( refused( $w ), 'ein bestehendes Fragment zu verdoppeln wird abgelehnt', $w['stored'] );
+check( false !== strpos( $msg, 'already in this block' ) && false !== strpos( $msg, '2 times' ), 'mit Hinweis, dass es schon da war und nun doppelt waere', $msg );
+
+page( 53, $tracked . $para );
+$w = write( 53, array( $p( '<p>Alt <img src="a.jpg" onerror="track()"> Ende</p>' ), $p( '<p>Kopie <img src="a.jpg" onerror="track()"></p>' ) ) );
+check( refused( $w ), 'ebenso eine Kopie in einen anderen Block', message_of( $w['result'] ) );
+
+page( 54, $tracked . $para );
+$w = write( 54, array( $p( '<p>Neu <a href="#" onerror="track()">x</a></p>' ), $plain ) );
+check( refused( $w ), 'dasselbe Attribut an einem anderen Element ist ein anderes Fragment', message_of( $w['result'] ) );
+
+page( 55, $tracked . $para );
+$w = write( 55, array( $p( '<p>Ohne Bild</p>' ), $p( '<p>Ganz normaler Text <img src="a.jpg" onerror="track()"></p>' ) ) );
+check( ! refused( $w ), 'verschoben statt kopiert: die Zahl bleibt gleich', message_of( $w['result'] ) );
+
+// Whole elements keep their own rule: a changed script is a new script.
+$frame = '<!-- wp:html --><iframe src="https://player.test/1"></iframe><!-- /wp:html -->';
+page( 56, $frame );
+$w = write( 56, array( array( 'name' => 'core/html', 'html' => '<p>Video:</p><iframe src="https://player.test/1"></iframe>' ) ) );
+check( ! refused( $w ), 'ein bestehendes iframe in einem geaenderten Block bleibt', message_of( $w['result'] ) );
+page( 57, $frame );
+$w = write( 57, array( array( 'name' => 'core/html', 'html' => '<iframe src="https://player.test/2"></iframe>' ) ) );
+check( refused( $w ), 'ein geaendertes iframe ist neu', message_of( $w['result'] ) );
+
 echo "\n\033[1mWiederherstellen einer Revision\033[0m\n";
 
 // A revision a person saved is a state the post already held, so its
