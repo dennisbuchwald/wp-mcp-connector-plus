@@ -191,6 +191,7 @@ class WP_Block_Type {
 	public $ancestor;
 	public $allowed_blocks;
 	public $supports    = array();
+	public $render_callback;
 
 	public function __construct( $name, array $args = array() ) {
 		$this->name = $name;
@@ -466,6 +467,19 @@ $registry->register(
 		'attributes' => array(),
 	)
 );
+
+/*
+ * Every dbw-base block renders on the server from its render.php, which
+ * WordPress turns into a render callback; core/group does not have one.
+ * The wrapper check tells the two apart by exactly that, so the stand-ins
+ * carry it too.
+ */
+foreach ( $registry->get_all_registered() as $wpmcp_type ) {
+	if ( 0 === strpos( $wpmcp_type->name, 'dbw-base/' ) ) {
+		$wpmcp_type->render_callback = '__return_true';
+	}
+}
+unset( $wpmcp_type );
 
 /*
  * Register this kit's open containers the way a real theme or plugin would.

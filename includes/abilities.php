@@ -331,7 +331,7 @@ function wpmcp_ability_definitions() {
 					),
 					'tree'    => array(
 						'type'        => array( 'array', 'string' ),
-						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html".',
+						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html". A container whose wrapper element is saved in the markup carries it as "htmlTemplate", as content-read returns it. Sent without one, the wrapper of core/group and of a GenerateBlocks element is generated from attrs and reported in wrapperGenerated; another such container is refused with wpmcp_wrapper_missing and a template to send.',
 					),
 					'dry_run' => array(
 						'type'        => 'boolean',

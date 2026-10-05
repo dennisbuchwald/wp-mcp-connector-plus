@@ -139,6 +139,7 @@ add_action( 'wp_abilities_api_categories_init', 'wpmcp_register_category' );
 function wpmcp_load_abilities() {
 	require_once WPMCP_DIR . 'includes/schema.php';
 	require_once WPMCP_DIR . 'includes/tree.php';
+	require_once WPMCP_DIR . 'includes/wrappers.php';
 	require_once WPMCP_DIR . 'includes/validate.php';
 	require_once WPMCP_DIR . 'includes/catalog.php';
 	require_once WPMCP_DIR . 'includes/content.php';

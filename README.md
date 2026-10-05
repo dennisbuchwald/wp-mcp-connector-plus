@@ -377,6 +377,7 @@ carry a code an agent can branch on:
 | `wpmcp_upload_type` | `media-upload`: not a JPEG, PNG or WebP by its contents. |
 | `wpmcp_user_exists` | Setup (admin): a user with that name exists with another role. |
 | `wpmcp_validation_failed` | The write was understood and refused; `errors` says why, per block path. |
+| `wpmcp_wrapper_missing` | A container was sent with `innerBlocks` but without `html` or `htmlTemplate`, and its wrapper element is part of the saved markup; the message proposes the `htmlTemplate` to send. As the `code` of a refusal (`tree`) or of an error (`ops`). |
 | `wpmcp_wrong_revision` | The revision belongs to another post. |
 | `wpmcp_xmlrpc` | The agent account tried XML-RPC. |
 
@@ -464,6 +465,41 @@ working from a stale reading; several mean it cannot know which one it is
 about to change. Both are refused rather than guessed at — and
 `content-search` returns the surrounding text verbatim, which is what makes
 a unique anchor easy to pick.
+
+**Containers sent without their markup.** A block's saved form is its
+children interleaved with the markup its save function writes around
+them, which the tree carries as `htmlTemplate`. A node with `innerBlocks`
+and neither `html` nor `htmlTemplate` used to be saved as its children
+alone: right for a block that renders on the server and saves only its
+children (the dbw-base kit), and silent loss of the wrapper and its
+classes for everything else, `core/group`, `core/columns`,
+`core/buttons` and GenerateBlocks 2's `element` among them. Now such a
+node is decided on evidence, in this order:
+
+1. The same block, children only, is already stored on the page: it is
+   kept as it is.
+2. `core/group` and `generateblocks/element` (GenerateBlocks 2): the
+   wrapper is generated from the attributes exactly as the block editor
+   saves it, and reported per path in `wrapperGenerated` and as a
+   warning. Attributes that change the wrapper in ways not reproduced
+   here (colours, spacing and other styles on a group, styles without a
+   `uniqueId`, unusual HTML attributes on an element) are refused
+   instead.
+3. A saved instance of the block type with children, on the page or on
+   one of the three newest published posts holding it, shows whether
+   there is markup around the children.
+4. Without one, a block with a render callback is taken to save its
+   children only, said in a warning; a block without is saved statically
+   by WordPress, which for a container means a wrapper, and is refused.
+
+A refusal carries `wpmcp_wrapper_missing` and proposes an `htmlTemplate`,
+copied from an existing instance with the node's `className` in place of
+its own, or built from the tag and classes. The shape is always
+`["\n<tag class=\"...\">", null, "\n\n", null, "</tag>\n"]`: one `null`
+per child. A render callback alone proves nothing: GenerateBlocks
+registers one for its element that only adds CSS, and `core/cover`,
+`core/list` and `core/media-text` keep their wrapper in the post content
+although they have one.
 
 Reading a page also reports **structured data that lost its wrapper** —
 JSON-LD sitting in the markup with no `<script>` around it, which renders
@@ -761,6 +797,7 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 
 - `schema.php`: attribute checks against `block.json`.
 - `tree.php`: block arrays to the JSON tree and back, paths, patch operations.
+- `wrappers.php`: containers sent without their markup: kept, generated (core/group, GenerateBlocks element), children only, or refused.
 - `validate.php`: the validation pipeline every write passes (structure, nesting, roundtrip, render).
 - `catalog.php`: `blocks-catalog` and `blocks-describe`, the playbook.
 - `content.php`: loads the content files below, nothing else.
@@ -813,7 +850,8 @@ thing it would on a live site.
 A shim answers what its author thought WordPress answers. Where that is
 the whole question, `tests/wp-real` asks WordPress itself: WordPress core
 (pinned, 6.9.8) on the SQLite Database Integration drop-in (pinned, 3.0.2,
-so no MySQL server is needed), with the WordPress PHPUnit test library of
+so no MySQL server is needed), with GenerateBlocks (pinned, 2.4.1) active
+as on the customer sites, with the WordPress PHPUnit test library of
 the same version (`wp-phpunit/wp-phpunit`), PHPUnit 9.6 and the PHPUnit
 Polyfills. `setup.sh` downloads and checks them into the git-ignored
 `tests/wp-real/.cache`; they never touch the plugin's own `vendor/`, which
@@ -828,9 +866,11 @@ stored role holds, application passwords under real filter priorities, the
 REST fence on a request that arrives with a real application password,
 which abilities exist at each level and who may run them, slashing of
 content, attributes and meta down to the stored bytes, the preview gate in
-the real main query, update and uninstall on a real database, and
-`content-create` and the post lock. Its first run found four bugs the
-shims had passed (see the changelog).
+the real main query, update and uninstall on a real database,
+`content-create` and the post lock, and how GenerateBlocks and core
+register their containers and what a write without a template stores and
+renders. Its first run found four bugs the shims had passed (see the
+changelog).
 
 `run-all.sh` runs it once `setup.sh` has been run, or with `WPMCP_REAL=1`,
 and says it skipped it otherwise. CI runs it as a second job on PHP 8.1 and
@@ -887,6 +927,12 @@ Each suite exists because of a specific failure:
 - **jsonld** — every SEO article carries structured data, and it could not
   be written. Checks that it now can, byte-identical when it is safe, and
   that each way of smuggling a script inside it is still refused.
+- **wrappers** — a GenerateBlocks section with three cards went live as a
+  loose heading, a paragraph and three more headings, after a dry run
+  that said ok: the containers had been sent without their markup, and
+  the wrappers were dropped. Pins every decision of the wrapper check, and
+  the generated wrappers byte for byte against what the block editor
+  itself saved for the same attributes.
 - **create-and-batch** — a 75-block dry run said "ok" without looking at
   the tree. Also that a batch with one bad item saves nothing.
 - **run-integration** — loads real `block.json` files and checks the

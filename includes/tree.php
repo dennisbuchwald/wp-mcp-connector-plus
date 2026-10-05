@@ -13,6 +13,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/wrappers.php';
+
 /**
  * Whether a parsed block is one a path can point at.
  *
@@ -101,12 +103,23 @@ function wpmcp_blocks_to_tree( array $blocks, array $prefix = array(), $include_
 /**
  * Convert the compact tree back into WordPress block arrays.
  *
- * @param array  $nodes  Tree nodes.
- * @param string $prefix Path prefix for error messages.
- * @param array  $errors Collected errors (by reference).
+ * A container sent without its markup goes through the wrapper check
+ * (includes/wrappers.php): kept, generated, children only, or refused.
+ * Without a context the check still runs, with nothing stored to compare
+ * against.
+ *
+ * @param array       $nodes   Tree nodes.
+ * @param string      $prefix  Path prefix for error messages.
+ * @param array       $errors  Collected errors (by reference).
+ * @param object|null $context See wpmcp_wrapper_context(); collects what
+ *                             was generated and what is missing.
  * @return array Blocks ready for serialize_blocks().
  */
-function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
+function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors, $context = null ) {
+	if ( null === $context ) {
+		$context = wpmcp_wrapper_context();
+	}
+
 	$blocks = array();
 
 	foreach ( array_values( $nodes ) as $i => $node ) {
@@ -145,11 +158,17 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors ) {
 
 		$children = array();
 		if ( ! empty( $node['innerBlocks'] ) && is_array( $node['innerBlocks'] ) ) {
-			$children = wpmcp_tree_to_blocks( $node['innerBlocks'], $path, $errors );
+			$children = wpmcp_tree_to_blocks( $node['innerBlocks'], $path, $errors, $context );
 		}
 
 		$html     = (string) ( $node['html'] ?? '' );
 		$template = ( isset( $node['htmlTemplate'] ) && is_array( $node['htmlTemplate'] ) ) ? $node['htmlTemplate'] : null;
+
+		// Children and nothing else: until 0.19.1 that was always saved as
+		// the children alone, and a static wrapper went missing in silence.
+		if ( ! empty( $children ) && '' === trim( $html ) && null === $template ) {
+			$template = wpmcp_resolve_wrapper( $name, $attrs, $children, $path, $context, $errors );
+		}
 
 		$inner_content = wpmcp_build_inner_content( $children, $html, $template, $path, $errors );
 
@@ -496,11 +515,17 @@ function wpmcp_blocks_at_path( array $blocks, array $path ) {
  * looks at that moment. Deepest-first ordering is the caller's job when
  * mixing removals — the summary reports what happened either way.
  *
- * @param array $blocks Parsed blocks (by value).
- * @param array $ops    List of ops: { op, path, block?, blocks?, attrs?, to? }.
+ * @param array       $blocks  Parsed blocks (by value).
+ * @param array       $ops     List of ops: { op, path, block?, blocks?, attrs?, to? }.
+ * @param object|null $context See wpmcp_wrapper_context(), for the blocks
+ *                             an insert or replace brings in.
  * @return array|\WP_Error { blocks: array, summary: array }
  */
-function wpmcp_apply_ops( array $blocks, array $ops ) {
+function wpmcp_apply_ops( array $blocks, array $ops, $context = null ) {
+	if ( null === $context ) {
+		$context = wpmcp_wrapper_context( $blocks );
+	}
+
 	$summary = array(
 		'inserted' => 0,
 		'replaced' => 0,
@@ -531,10 +556,14 @@ function wpmcp_apply_ops( array $blocks, array $ops ) {
 				if ( ! is_array( $nodes ) ) {
 					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (%s): "block" or "blocks" required.', $n, $replace ? 'replace' : 'insert' ) );
 				}
-				$errors = array();
-				$new    = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors );
+				$errors  = array();
+				$missing = count( $context->missing );
+				$new     = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors, $context );
 				if ( ! empty( $errors ) ) {
-					return new \WP_Error( 'wpmcp_bad_block', implode( ' ', $errors ) );
+					return new \WP_Error(
+						count( $context->missing ) > $missing ? 'wpmcp_wrapper_missing' : 'wpmcp_bad_block',
+						implode( ' ', $errors )
+					);
 				}
 				$result = wpmcp_splice( $blocks, $path, $new, $replace ? 1 : 0 );
 				if ( is_wp_error( $result ) ) {

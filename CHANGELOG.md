@@ -7,6 +7,23 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.19.2] - 2026-10-05
+
+Drei Befunde aus dem Einsatz auf dbw-media.de (Bericht in `docs/field-reports/2026-10-05-dbw-media.md`).
+
+### Behoben
+
+- **Container ohne `htmlTemplate` verloren still ihre Huelle.** Ein Knoten mit `innerBlocks`, aber ohne `html` und ohne `htmlTemplate` wurde als reine Folge seiner Kinder gespeichert. Fuer die Bloecke des dbw-base-Kits stimmt das (sie rendern auf dem Server und speichern nur ihre Kinder), fuer jeden Block mit statischer Huelle nicht: auf dbw-media.de ging eine GenerateBlocks-Sektion mit drei Karten als lose Ueberschriften und Absaetze live, auf hhs.hn rutschten die Klassen einer `core/group` aufs erste Kind. Der Probelauf sagte jedes Mal ok. Jetzt entscheidet `includes/wrappers.php` nach Belegen, in dieser Reihenfolge: (1) derselbe Block steht unveraendert schon so auf der Seite, dann bleibt er; (2) fuer `core/group` und `generateblocks/element` (GenerateBlocks 2) wird die Huelle aus den Attributen erzeugt, genau so, wie der Block-Editor sie speichert, und je Pfad in `wrapperGenerated` und als Warnung gemeldet; (3) eine gespeicherte Instanz desselben Blocktyps mit Kindern, auf der Seite selbst oder in einem der drei neuesten veroeffentlichten Beitraege, zeigt, ob um die Kinder Markup steht; (4) ohne Instanz gilt ein Block mit Render-Callback als "nur Kinder" (mit Warnung, nie still), ein Block ohne als statisch mit Huelle. Fehlt eine Huelle, lehnt der Probelauf mit dem neuen Code `wpmcp_wrapper_missing` ab, nennt den Pfad und schlaegt ein konkretes `htmlTemplate` vor: von einer vorhandenen Instanz mit der Klasse des Knotens, sonst aus Tag und Klassen.
+- **Was erzeugt wird, ist gegen den Editor selbst geprueft.** Die erwarteten Huellen in `tests/wrappers.php` hat der Block-Editor geschrieben: die JavaScript-Pakete von WordPress 6.9.8 und das Editor-Skript von GenerateBlocks 2.4.1, in jsdom geladen, `createBlock()` und `serialize()`. Dabei gefunden: GenerateBlocks registriert fuer `element` einen Render-Callback, der nur das CSS anhaengt; die Huelle selbst steht im gespeicherten Markup (Klassen aus `globalClasses`, `gb-element-<uniqueId>` nur mit `styles`, dann `className`, danach `htmlAttributes` in ihrer Reihenfolge, keine `wp-block-*`-Klasse, ohne `tagName` gar kein Element). `core/group` speichert `wp-block-group`, dann `align*`, dann `className` und den Anker als `id`; das Layout schreibt nichts ins Markup, seine Klassen kommen erst beim Rendern. Was darueber hinaus die Huelle veraendert (Farben, Abstaende, `ariaLabel` an der Gruppe, Styles ohne `uniqueId`, Boolean- oder SVG-Attribute am Element), wird nicht nachgebaut, sondern abgelehnt. Ein Render-Callback allein beweist also nichts: auch `core/cover`, `core/list` und `core/media-text` haben einen und behalten ihre Huelle im Inhalt.
+
+### Tests
+
+- **Neu: `tests/wrappers.php`** mit allen Entscheidungen und den Editor-Ausgaben als Referenz. Schlug gegen 0.19.1 mit 52 Pruefungen fehl.
+- **Die Schicht gegen echtes WordPress laeuft jetzt mit GenerateBlocks 2.4.1** (gepinnt mit SHA-256 in `tests/wp-real/setup.sh`, aktiv wie auf den Kundenseiten). Neu `WrapperTest`: wie GenerateBlocks und WordPress ihre Container registrieren, die Sektion aus dem Bericht ohne Templates (gespeichert und gerendert mit allen Klassen), `core/group`, die Ablehnung von `core/columns` und `core/buttons` mit Vorschlag aus einer veroeffentlichten Seite, und ein dynamischer Block, der weiter ohne Template geht. Fuenf der sechs Tests schlugen gegen 0.19.1 fehl.
+- Die Platzhalter der dbw-base-Bloecke in den Tests ohne WordPress haben jetzt einen Render-Callback, wie ihr `render.php` ihn auf einer echten Seite erzeugt.
+
+---
+
 ## [0.19.1] - 2026-10-04
 
 ### Behoben

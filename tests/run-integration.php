@@ -54,6 +54,8 @@ foreach ( scandir( $blocks_dir ) as $entry ) {
 			'ancestor'       => $json['ancestor'] ?? null,
 			'allowed_blocks' => $json['allowedBlocks'] ?? null,
 			'supports'       => $json['supports'] ?? array(),
+			// register_block_type_from_metadata() turns "render" into one.
+			'render_callback' => isset( $json['render'] ) ? '__return_true' : null,
 		)
 	);
 	++$loaded;

@@ -16,6 +16,10 @@
 #   PHPUnit 9.6 and the PHPUnit Polyfills it requires, from
 #   tests/wp-real/composer.json. They install into .cache/vendor: the
 #   plugin's own vendor/ ships to customers and must not carry them.
+# - GenerateBlocks, at an exact version. Its element block keeps its
+#   wrapper in the saved markup although it has a render callback, which
+#   is the case the wrapper check in tree.php has to get right, and
+#   customer sites run it. Active in every test, as on those sites.
 #
 # The plugin is linked into wp-content/plugins under its real slug and
 # activated the way WordPress activates it (see bootstrap.php).
@@ -41,11 +45,13 @@ WP_VERSION="6.9.8"
 WP_SHA256="34d8ee108fd6eeaf068a24e50d6807226b38f2eeeb371b3c5f4694a333a93b43"
 SQLITE_VERSION="3.0.2"
 SQLITE_SHA256="1602e75577ad9b3a7e3e4a6a44a81b9541cdee2124d48928faf61c6fd3cd4f74"
+GB_VERSION="2.4.1"
+GB_SHA256="d270935aa81900889c8487c636e9a0f49e4cc655caebf3e4870e0b2b45c978b9"
 
 DOWNLOADS="$CACHE/downloads"
 WP_DIR="$CACHE/wordpress"
 STAMP="$WP_DIR/.wpmcp-setup"
-WANT="wordpress=$WP_VERSION sqlite=$SQLITE_VERSION"
+WANT="wordpress=$WP_VERSION sqlite=$SQLITE_VERSION generateblocks=$GB_VERSION"
 
 # digest <bits> <file>
 digest() {
@@ -79,6 +85,7 @@ mkdir -p "$DOWNLOADS"
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
 	wp_zip="$DOWNLOADS/wordpress-$WP_VERSION.zip"
 	sqlite_zip="$DOWNLOADS/sqlite-database-integration.$SQLITE_VERSION.zip"
+	gb_zip="$DOWNLOADS/generateblocks.$GB_VERSION.zip"
 
 	fetch "https://downloads.wordpress.org/release/wordpress-$WP_VERSION.zip" "$wp_zip" "$WP_SHA256"
 	official_sha1="$(curl -fsSL --retry 3 "https://downloads.wordpress.org/release/wordpress-$WP_VERSION.zip.sha1" | tr -d '[:space:]')"
@@ -88,10 +95,12 @@ if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
 		exit 1
 	fi
 	fetch "https://downloads.wordpress.org/plugin/sqlite-database-integration.$SQLITE_VERSION.zip" "$sqlite_zip" "$SQLITE_SHA256"
+	fetch "https://downloads.wordpress.org/plugin/generateblocks.$GB_VERSION.zip" "$gb_zip" "$GB_SHA256"
 
 	rm -rf "$WP_DIR"
 	unzip -q "$wp_zip" -d "$CACHE"
 	unzip -q "$sqlite_zip" -d "$WP_DIR/wp-content/plugins"
+	unzip -q "$gb_zip" -d "$WP_DIR/wp-content/plugins"
 
 	# The drop-in finds its implementation next to itself when the
 	# placeholder path does not exist, so only the plugin slug is filled in.
@@ -108,4 +117,4 @@ mkdir -p "$CACHE/db"
 
 composer --working-dir="$HERE" install --no-interaction --no-progress --quiet
 
-"$PHP" -r 'echo "Real-WordPress tests ready: WordPress ", $argv[1], ", SQLite integration ", $argv[2], ", PHP ", PHP_VERSION, "\n";' "$WP_VERSION" "$SQLITE_VERSION"
+"$PHP" -r 'echo "Real-WordPress tests ready: WordPress ", $argv[1], ", SQLite integration ", $argv[2], ", GenerateBlocks ", $argv[3], ", PHP ", PHP_VERSION, "\n";' "$WP_VERSION" "$SQLITE_VERSION" "$GB_VERSION"

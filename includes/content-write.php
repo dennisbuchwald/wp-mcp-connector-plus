@@ -312,15 +312,22 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 	$op_summary = array();
 	$confirm    = array();
 
+	// What the wrapper check may compare against: this post as stored, and
+	// through its ID the published rest of the site (includes/wrappers.php).
+	$wrappers = wpmcp_wrapper_context( $before_blocks, (int) $post->ID );
+
 	if ( ! $has_tree && ! $has_ops ) {
 		$blocks = $before_blocks;
 	} elseif ( $has_tree ) {
 		$errors = array();
-		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors );
+		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors, $wrappers );
 		if ( ! empty( $errors ) ) {
+			$refusal = array( 'ok' => false );
+			if ( ! empty( $wrappers->missing ) ) {
+				$refusal['code'] = 'wpmcp_wrapper_missing';
+			}
 			return array(
-				'response'      => array(
-					'ok'       => false,
+				'response'      => $refusal + array(
 					'dryRun'   => $dry_run,
 					'errors'   => $errors,
 					'warnings' => array(),
@@ -333,7 +340,7 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 			);
 		}
 	} else {
-		$applied = wpmcp_apply_ops( $before_blocks, $args['ops'] );
+		$applied = wpmcp_apply_ops( $before_blocks, $args['ops'], $wrappers );
 		if ( is_wp_error( $applied ) ) {
 			return $applied;
 		}
@@ -360,6 +367,18 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 	}
 
 	$warnings = $validation['warnings'];
+
+	// A container sent without its markup either had it generated or is
+	// saved as its children only; both are said, neither happens silently.
+	foreach ( $wrappers->generated as $generated ) {
+		$warnings[] = sprintf(
+			'%s: "%s" was sent without "htmlTemplate"; its wrapper was generated from its attributes the way the block editor saves it: %s. Send "htmlTemplate" to set it yourself.',
+			$generated['path'],
+			$generated['block'],
+			trim( (string) $generated['template'][0] )
+		);
+	}
+	$warnings = array_merge( $warnings, $wrappers->notes );
 
 	if ( 'wp_block' === $post->post_type && $post->ID ) {
 		$uses = wpmcp_pattern_usage_count( $post->ID );
@@ -413,6 +432,12 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 		'errors'   => $errors,
 		'warnings' => $warnings,
 	);
+
+	// Which wrappers were generated, per path, with the template used: the
+	// same thing the agent would have sent, to check or to send next time.
+	if ( ! empty( $wrappers->generated ) ) {
+		$response['wrapperGenerated'] = $wrappers->generated;
+	}
 
 	// What each patched block reads now, so checking a text change does
 	// not take a second call.
