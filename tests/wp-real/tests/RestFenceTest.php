@@ -78,6 +78,39 @@ class RestFenceTest extends WPMCP_Real_TestCase {
 		$this->assertSame( 'WP MCP Connector Plus', $response['body']['result']['serverInfo']['name'] ?? null, wp_json_encode( $response['body'] ) );
 	}
 
+	/**
+	 * Why site-info tells the agent to reconnect after the level was
+	 * raised, rather than the server telling the client: the bundled
+	 * mcp-adapter (0.6.1) says it will not send tool list changes, and has
+	 * no stream to send them over. If a later adapter does, this test is
+	 * the one that should fail first.
+	 */
+	public function test_the_adapter_cannot_tell_a_client_its_tool_list_changed() {
+		$response = $this->serve(
+			'/wpmcp/v1/mcp',
+			$this->agent,
+			$this->agent_password,
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'initialize',
+				'params'  => array(
+					'protocolVersion' => '2025-06-18',
+					'capabilities'    => new stdClass(),
+					'clientInfo'      => array(
+						'name'    => 'wp-real-test',
+						'version' => '1',
+					),
+				),
+			)
+		);
+		$this->assertFalse( $response['body']['result']['capabilities']['tools']['listChanged'] ?? null, wp_json_encode( $response['body'] ) );
+
+		// GET is the stream a server sends notifications over.
+		$response = $this->serve( '/wpmcp/v1/mcp', $this->agent, $this->agent_password );
+		$this->assertSame( 405, $response['status'], wp_json_encode( $response['body'] ) );
+	}
+
 	public function test_a_spelling_wordpress_still_routes_is_judged_the_same() {
 		$response = $this->serve( '/wpmcp/v1/mcp/', $this->agent, $this->agent_password, array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'ping' ) );
 		$this->assertNotSame( 'wpmcp_rest_scope', $response['body']['code'] ?? null, 'trailing slash' );

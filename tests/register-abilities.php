@@ -278,6 +278,16 @@ check( ! array_intersect( array( 'content-batch', 'content-create', 'media-updat
 check( false === strpos( $info['capabilities']['explains'], 'never possible' ), 'ohne Sitzung: kein "Publishing is never possible"' );
 check( false !== strpos( $info['capabilities']['explains'], 'work session' ), 'sondern der Hinweis auf die Arbeitssitzung' );
 
+// A client loads the tool list once, when it connects. Raised from read
+// only during a session, the level showed up here with its write tools
+// while the client still offered none, and nothing said why (field
+// report dbw-media.de, 05.10.2026).
+check(
+	false !== strpos( $info['capabilities']['explains'], 'If your client loaded its tool list before the access level was raised, reload the MCP connection (Claude Code: /mcp, then reconnect) to get the write tools.' ),
+	'mit Schreibwerkzeugen: wie ein Client sie bekommt, der vorher verbunden war',
+	$info['capabilities']['explains']
+);
+
 $GLOBALS['options']['wpmcp_work_session_until'] = time() + 600;
 $info = wpmcp_site_info();
 check( false !== strpos( $info['capabilities']['explains'], 'work until the work session ends' ), 'in einer Sitzung: Veroeffentlichen geht', $info['capabilities']['explains'] );
@@ -287,6 +297,8 @@ $GLOBALS['options']['wpmcp_access_level'] = 'read';
 $info = wpmcp_site_info();
 check( array() === $info['capabilities']['write'], 'Lesestufe mit Sitzung: keine Schreibwerkzeuge' );
 check( false !== strpos( $info['capabilities']['explains'], 'Read only' ), 'und es heisst die eingestellte Stufe', $info['capabilities']['explains'] );
+check( false !== strpos( $info['capabilities']['explains'], 'reconnect' ), 'und dass ein verbundener Client nach dem Hochsetzen neu verbinden muss', $info['capabilities']['explains'] );
+check( false === strpos( $info['capabilities']['explains'], 'to get the write tools' ), 'aber nicht, dass es Schreibwerkzeuge gibt' );
 unset( $GLOBALS['options']['wpmcp_work_session_until'] );
 $GLOBALS['options']['wpmcp_access_level'] = 'draft';
 

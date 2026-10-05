@@ -148,6 +148,23 @@ function wpmcp_site_info() {
 	 * level the write tools are not registered at all. A flag without a
 	 * tool behind it is worse than no flag: it cost a real session a
 	 * reconnect cycle and a wrong conclusion.
+	 *
+	 * The tool list is the client's, though, not ours: it is read once,
+	 * when the connection is made. A level raised afterwards shows up here
+	 * with its write tools while the client still offers none (field
+	 * report dbw-media.de, 05.10.2026), so "explains" says how to get them.
+	 *
+	 * Telling the client instead was looked into. MCP has the means,
+	 * capabilities.tools.listChanged and a notifications/tools/list_changed
+	 * the server sends; vendor/wordpress/mcp-adapter 0.6.1 has neither. Its
+	 * initialize answer sets listChanged to false on purpose ("only
+	 * advertised if implemented end-to-end"), a GET on the endpoint, the
+	 * stream a server would send notifications over, answers 405 (SSE "not
+	 * yet implemented"), and every POST is answered as plain JSON in that
+	 * one request. The level is changed in wp-admin, in a request no client
+	 * is listening to. Advertising listChanged through the
+	 * mcp_adapter_initialize_response filter would therefore promise a
+	 * notification that can never arrive.
 	 */
 	$available = wpmcp_ability_names();
 	$writing   = wpmcp_write_ability_names();
@@ -172,12 +189,12 @@ function wpmcp_site_info() {
 		'write'       => array_map( 'wpmcp_short_ability_name', $write_tools ),
 		'explains'    => empty( $write_tools )
 			? sprintf(
-				'This site is set to "%s". No write tools are registered — writing is not disabled, it is absent. Nothing you send can change content until the site owner raises the access level%s.',
+				'This site is set to "%s". No write tools are registered — writing is not disabled, it is absent. Nothing you send can change content until the site owner raises the access level%s. A client that is already connected gets the write tools only after it reconnects (Claude Code: /mcp, then reconnect): it reads the tool list once, when it connects.',
 				$levels[ wpmcp_configured_access_level() ]['label'],
 				$session ? ' (a work session does not add tools on a read-only site)' : ''
 			)
 			: sprintf(
-				'This site is set to "%s". %s %s',
+				'This site is set to "%s". %s %s If your client loaded its tool list before the access level was raised, reload the MCP connection (Claude Code: /mcp, then reconnect) to get the write tools.',
 				$levels[ $level ]['label'],
 				wpmcp_live_edit_enabled()
 					? 'Drafts and published pages may be edited.'

@@ -220,6 +220,15 @@ included. Nothing in this plugin can reach past that.
 Editing the database with WP-CLI gets past it because WP-CLI runs without
 a user, so none of these checks happen at all — a way around, not a fix.
 
+**Raised the access level, but the agent still offers only read tools.**
+A client reads the tool list once, when it connects, so a level raised
+during a session reaches it only after a reconnect (Claude Code: `/mcp`,
+then reconnect). `site-info` already reports the new level and its write
+tools, and its `capabilities.explains` says this too. The server cannot
+tell the client itself: the bundled mcp-adapter advertises
+`tools.listChanged: false` and has no stream (GET answers 405) to send a
+`notifications/tools/list_changed` over.
+
 **A fatal error naming `vendor/autoload_packages.php` in another plugin**
 (Jetpack, WooCommerce, Germanized). That file belongs to the Jetpack
 autoloader, which this plugin does not use — but the mcp-adapter depends on
@@ -267,6 +276,8 @@ registered, so the agent never sees them. The list depends on the level
 the site owner set and on nothing else: a work session widens what the
 write tools may do (publish, upload, edit published pages), never which
 tools there are, because a connected client keeps the list it was given.
+After raising the level, reconnect the client; `site-info` says so in
+`capabilities.explains`.
 
 | Ability | What it does |
 |---|---|
