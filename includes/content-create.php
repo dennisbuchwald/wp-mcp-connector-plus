@@ -247,6 +247,12 @@ function wpmcp_create_content( array $args ) {
 
 		$report['errors']   = $plan['errors'];
 		$report['warnings'] = $plan['response']['warnings'] ?? array();
+		if ( ! empty( $plan['response']['code'] ) ) {
+			$report['code'] = $plan['response']['code'];
+		}
+		if ( ! empty( $plan['response']['wrapperGenerated'] ) ) {
+			$report['wrapperGenerated'] = $plan['response']['wrapperGenerated'];
+		}
 		if ( isset( $content['tree'] ) && isset( $plan['after_count'] ) ) {
 			$report['blocks'] = $plan['after_count'];
 		}
@@ -457,6 +463,9 @@ function wpmcp_batch_item( $index, $post_id, $result, $saving = false ) {
 	}
 	$item['errors']   = array_values( (array) ( $result['errors'] ?? array() ) );
 	$item['warnings'] = array_values( (array) ( $result['warnings'] ?? array() ) );
+	if ( ! empty( $result['wrapperGenerated'] ) ) {
+		$item['wrapperGenerated'] = $result['wrapperGenerated'];
+	}
 
 	if ( $saving && $ok ) {
 		$item['revisionId'] = $result['revisionId'] ?? 0;

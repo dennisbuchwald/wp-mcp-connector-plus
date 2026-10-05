@@ -69,6 +69,28 @@ check( ! is_wp_error( $r ) && false === $r['ok'], 'ein ausfuehrbares Script nich
 $r = wpmcp_create_content( array( 'title' => 'X', 'meta' => array( 'erfundener_schluessel' => 'x' ) ) );
 check( ! is_wp_error( $r ) && false === $r['ok'], 'auch die Meta wird im Probelauf geprueft' );
 
+echo "\n\033[1mcontent-create und content-batch sagen, was mit Huellen geschah\033[0m\n";
+
+// The wrapper check reports in the write answer; create and batch build
+// their own answers and have to carry it on.
+$group = array(
+	'name'        => 'core/group',
+	'attrs'       => array( 'className' => 'intro' ),
+	'innerBlocks' => array( array( 'name' => 'core/paragraph', 'html' => '<p>x</p>' ) ),
+);
+$r = wpmcp_create_content( array( 'title' => 'G', 'tree' => array( $group ) ) );
+check( ! is_wp_error( $r ) && true === $r['ok'], 'eine core/group ohne htmlTemplate besteht', is_wp_error( $r ) ? '' : wp_json_encode( $r['errors'] ) );
+check( ! is_wp_error( $r ) && '0' === ( $r['wrapperGenerated'][0]['path'] ?? null ), 'und content-create meldet die erzeugte Huelle', is_wp_error( $r ) ? '' : wp_json_encode( $r ) );
+
+\WP_Block_Type_Registry::get_instance()->register( 'core/columns', array( 'attributes' => array() ) );
+$r = wpmcp_create_content( array( 'title' => 'C', 'tree' => array( array( 'name' => 'core/columns', 'innerBlocks' => array( array( 'name' => 'core/paragraph', 'html' => '<p>x</p>' ) ) ) ) ) );
+check( ! is_wp_error( $r ) && false === $r['ok'] && 'wpmcp_wrapper_missing' === ( $r['code'] ?? null ), 'eine fehlende Huelle traegt in content-create ihren Code', is_wp_error( $r ) ? '' : wp_json_encode( $r ) );
+
+$item = wpmcp_batch_item( 0, 5, array( 'ok' => true, 'errors' => array(), 'warnings' => array(), 'wrapperGenerated' => array( array( 'path' => '0', 'block' => 'core/group', 'template' => array() ) ) ) );
+check( '0' === ( $item['wrapperGenerated'][0]['path'] ?? null ), 'ein Batch-Posten reicht wrapperGenerated weiter', wp_json_encode( $item ) );
+$item = wpmcp_batch_item( 0, 5, array( 'ok' => false, 'code' => 'wpmcp_wrapper_missing', 'errors' => array( 'x' ), 'warnings' => array() ) );
+check( 'wpmcp_wrapper_missing' === ( $item['code'] ?? null ), 'und den Code einer fehlenden Huelle' );
+
 echo "\n\033[1mBatch: nichts wird gespeichert, solange ein Posten scheitert\033[0m\n";
 
 check( is_wp_error( wpmcp_batch_write( array( 'items' => array() ) ) ), 'eine leere Liste ist ein Fehler' );
