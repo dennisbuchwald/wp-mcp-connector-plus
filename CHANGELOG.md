@@ -7,6 +7,33 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [0.20.1] - 2026-10-07
+
+Drei Befunde aus dem Einsatz auf staging.maxport.ch (Elementor 4.3.4, Pro 4.3.1).
+
+### Behoben
+
+- **`elementor-write` lehnte Ueberschrift, Text-Editor, Button und neun weitere Widgets ab, mit "Elementor does not know these element types".** Das las sich wie ein Fehler im Connector. Die Ursache ist eine Einstellung der Seite: Unter Elementor > Element Manager sind dort 85 von 86 Widgets abgeschaltet, nur "HTML" ist an. Elementor speichert das in der Option `elementor_disabled_elements` (Modul `ElementManager` im freien Elementor, nicht in Pro) und registriert abgeschaltete Widgets gar nicht (`elementor/widgets/is_widget_enabled`). Die Ablehnung bleibt richtig, ein abgeschaltetes Widget wuerde nicht gerendert und beim Speichern verworfen. Die Meldung unterscheidet jetzt: "deactivated under Elementor > Element Manager" (eine Einstellung fuer die ganze Seite, die ein Mensch entscheidet) oder unbekannt (Plugin fehlt). Beide nennen die Widgets, die es gibt (bis zu 20 Namen), und bei hoechstens drei, wie man damit baut. Ob die Registrierung im REST- und MCP-Aufruf vollstaendig ist, war die zweite Vermutung: Sie ist es, ein Test schickt die Ueberschrift ueber den echten MCP-Endpunkt.
+- **Ein `core/shortcode` mit `attrs.text` und ohne `html` wurde als leerer Block gespeichert, Probelauf und Validierung sagten ok.** WordPress und der Editor lesen `text` aus dem Markup (`source: raw`), nie aus dem Block-Kommentar, und dorthin hatte der Connector es geschrieben. Dasselbe galt fuer jedes Attribut mit `source` in der block.json (html, text, rich-text, raw, attribute, query, children): Inhalt eines Absatzes, `url` und `alt` eines Bildes, Text eines Buttons. Neu in `includes/sourced.php`: Solche Attribute kommen nie in den Kommentar. Ist das Attribut das ganze Markup des Blocks (`source` raw oder html ohne Selektor: `core/shortcode`, `core/html`, `core/freeform`), wird das Markup daraus gemacht und je Pfad in `markupGenerated` gemeldet. Sonst lehnt schon der Probelauf mit dem neuen Code `wpmcp_sourced_attribute` ab, nennt Attribut und Selektor und zeigt das Markup, das zu senden ist, wo seine Form bekannt ist (`<p>...</p>`, `<hN class="wp-block-heading">...</hN>` nach `level`, figure mit img, Listenpunkt, Button, Code). `set_attrs` auf ein solches Attribut wird mit demselben Code abgelehnt und verweist auf `patch_html`; `null` raeumt einen Rest im Kommentar weiter auf. Mit `html` gilt das Markup, und die Antwort sagt, dass das Attribut nicht gespeichert wurde. Die Quellen sind gegen die block.json von WordPress 6.9.8 geprueft.
+- **`content-list` mit `status: "any"` wurde abgelehnt.** `any` steht jetzt in `content-list` (`status`) und `content-search` (`post_status`) fuer alle auflistbaren Status (publish, draft, pending, future, private), weiter eingeschraenkt auf das, was das Konto je Post-Type lesen darf (`wpmcp_list_visibility`). Papierkorb, `inherit` und `auto-draft` bleiben draussen, `any,trash` wird abgelehnt.
+
+### Neu
+
+- **`elementor-read` (Gliederung) und `site-info.elementor` nennen die Widgets der Seite:** `availableWidgets` (Anzahl, Namen bei hoechstens 20) und `disabledByElementManager` (Anzahl). Gezaehlt wird, was Element Manager auflistet, also ohne die versteckten Basis-Widgets; das HTML-Widget zaehlt mit, obwohl es sich vor Konten ohne `unfiltered_html` versteckt, denn gespeichert wird mit diesem Recht fuer den einen Aufruf. Sind hoechstens drei Widgets an, erklaert ein `hint`, wie man dort baut: ein neuer Abschnitt ist ein Container mit einem HTML-Widget, zuerst das HTML-Widget eines aehnlichen Abschnitts lesen (`elementor-read` mit `element_id`) und dessen Klassen und Markup weiterverwenden, keine neuen Klassennamen oder Inline-Styles erfinden. So bleibt es auf maxport.ch (Entscheidung des Seitenbetreibers).
+
+### API
+
+- `contractVersion` bleibt 1. Neu sind der Fehlercode `wpmcp_sourced_attribute`, das Feld `markupGenerated` (`content-write`, `content-create`, `content-batch`), die Felder `availableWidgets`, `disabledByElementManager` und `hint` in `elementor-read` und `site-info.elementor` sowie der Wert `any` fuer Status. Ein Knoten mit Attribut aus dem Markup und ohne `html`, den 0.20.0 leer gespeichert hat, wird jetzt erzeugt oder abgelehnt.
+
+### Tests
+
+- **Neu: `tests/sourced-attributes.php`** (21 Pruefungen, Definitionen wie in WordPress 6.9.8): Shortcode und HTML aus dem Attribut, nichts im Kommentar, Ablehnung von Absatz, Ueberschrift und Bild mit vorgeschlagenem Markup, verschachtelt, mit `html`, `insert` und `set_attrs`. Gegen 0.20.0 schlugen 18 fehl. `tests/create-and-batch.php` prueft `markupGenerated` und den Code in `content-create` und `content-batch` (3 Pruefungen, alle rot ohne die Weitergabe).
+- **Neu gegen echtes WordPress: `SourcedAttributesTest`** (die echten block.json-Quellen, Shortcode gespeichert und gerendert, Absatz ueber `tree`, `insert` und `set_attrs` abgelehnt, nichts gespeichert); zwei der drei Tests schlugen gegen 0.20.0 fehl.
+- **Neu in der Elementor-Suite: `ElementorWidgetsTest`.** Die Option, wie Elementor sie anwendet; eine Ueberschrift ueber den echten MCP-Endpunkt (Anwendungspasswort, REST-Zaun, `initialize`, `tools/call`), angenommen wenn das Widget an ist, und abgelehnt mit der neuen Meldung, wenn nur HTML an ist; ein unbekannter Typ; `elementor-read` und `site-info`; und die Arbeit auf einer Seite nur mit HTML-Widget von Anfang bis Ende: Container mit HTML-Widget einfuegen, Abschnitt ohne Skript verdoppeln, H2 zu H3 per `patch_html`, FAQ mit JSON-LD per `set_html` (byte-gleich gespeichert und gerendert). Drei Tests schlugen gegen 0.20.0 fehl; der Ablauf mit nur HTML lief schon. `serve()` aus `RestFenceTest` liegt jetzt in der Basisklasse, mit `mcp_call()` daneben.
+- **`tests/content-access.php` und `tests/search-scale.php`:** `any` stand bisher in der Liste der abgelehnten Status. Es steht jetzt in eigenen Pruefungen (auf Lese-, Entwurfs- und Vollstufe, auch in einer Liste), `any,trash` neu in der Liste der abgelehnten; 7 davon schlugen gegen 0.20.0 fehl.
+
+---
+
 ## [0.20.0] - 2026-10-07
 
 Elementor. Der erste Kunde auf Elementor (staging.maxport.ch: Elementor 4.3.4, Pro 4.3.1, hello-elementor, Rank Math) hat 26 Seiten, jede aus Containern mit je einem HTML-Widget, in dem der ganze Abschnitt als rohes Markup steht, teils mit Skripten fuer Navigation, Bewertungen und Slider. Fuer eine redaktionelle SEO-Ueberarbeitung dort konnte der Connector bisher nichts tun: `content-read` las die Klartext-Kopie in `post_content`, und was `content-write` dort schrieb, sah nie jemand und ueberschrieb Elementor beim naechsten Speichern.
