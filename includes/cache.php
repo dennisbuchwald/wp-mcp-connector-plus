@@ -68,9 +68,20 @@ function wpmcp_purge_caches( $post_id ) {
 		$handled = true;
 	}
 
-	if ( $handled ) {
+	$siteground = wpmcp_purge_siteground( (int) $post_id );
+	$failed     = false;
+	if ( null !== $siteground ) {
+		$notes[] = $siteground['note'];
+		if ( $siteground['ok'] ) {
+			$handled = true;
+		} else {
+			$failed = true;
+		}
+	}
+
+	if ( $handled && ! $failed ) {
 		$page = 'purged';
-	} elseif ( wpmcp_page_cache_suspected() ) {
+	} elseif ( $failed || wpmcp_page_cache_suspected() ) {
 		$page    = 'present but not clearable from here';
 		$notes[] = 'A page cache appears active but exposes no purge hook this plugin knows. Verify against the live URL with a cache buster, or clear it by hand.';
 	}
@@ -79,6 +90,89 @@ function wpmcp_purge_caches( $post_id ) {
 		'object' => $object,
 		'page'   => $page,
 		'notes'  => $notes,
+	);
+}
+
+/**
+ * Clear SiteGround's caches for one post, through Speed Optimizer.
+ *
+ * On staging.maxport.ch every save stayed invisible until the cache was
+ * cleared by hand: Speed Optimizer (sg-cachepress) was active and this
+ * function did not know it. Its purge clears the plugin's file cache and,
+ * on SiteGround, the server's dynamic cache in the same call. Names as in
+ * sg-cachepress 7.8.4, newest first:
+ *
+ * - SiteGround_Optimizer\Supercacher\Supercacher::purge_cache_request(
+ *   $url, $include_child_paths ), what the plugin's own save hook runs.
+ *   Per URL: the post with what sits below it, its parents, and the home
+ *   page on its own (with child paths, the home URL would be everything).
+ * - sg_cachepress_purge_cache( $url ), the public function since 5.0.
+ *   It clears a URL with everything below it, so the home URL would
+ *   clear the whole site; it is left out there.
+ * - sg_cachepress_purge_everything(), when nothing finer exists.
+ *
+ * A post that is not public has no page in any cache: nothing is
+ * cleared, the whole site least of all.
+ *
+ * @param int $post_id Post ID.
+ * @return array{ok: bool, note: string}|null Null without Speed Optimizer.
+ */
+function wpmcp_purge_siteground( $post_id ) {
+	$class  = 'SiteGround_Optimizer\\Supercacher\\Supercacher';
+	$by_url = class_exists( $class ) && method_exists( $class, 'purge_cache_request' );
+	$helper = function_exists( 'sg_cachepress_purge_cache' );
+	$all    = function_exists( 'sg_cachepress_purge_everything' );
+
+	if ( ! $by_url && ! $helper && ! $all ) {
+		return null;
+	}
+
+	if ( 'publish' !== get_post_status( $post_id ) ) {
+		return array(
+			'ok'   => true,
+			'note' => 'SiteGround Speed Optimizer: the post is not public, so no cached page of it exists; nothing cleared.',
+		);
+	}
+
+	if ( ! $by_url && ! $helper ) {
+		sg_cachepress_purge_everything();
+		return array(
+			'ok'   => true,
+			'note' => 'Cleared the whole cache via SiteGround Speed Optimizer (this version offers no purge by URL).',
+		);
+	}
+
+	// The post with what sits below it, then its parents.
+	$urls = array( (string) get_permalink( $post_id ) => true );
+	foreach ( get_post_ancestors( $post_id ) as $ancestor ) {
+		$urls[ (string) get_permalink( $ancestor ) ] = true;
+	}
+	if ( $by_url ) {
+		// The home page alone, as Speed Optimizer does after a save.
+		$urls[ (string) get_home_url( null, '/' ) ] = false;
+	}
+
+	$failed = array();
+	foreach ( $urls as $url => $children ) {
+		if ( '' === $url ) {
+			continue;
+		}
+		$ok = $by_url ? call_user_func( array( $class, 'purge_cache_request' ), $url, $children ) : sg_cachepress_purge_cache( $url );
+		if ( false === $ok ) {
+			$failed[] = $url;
+		}
+	}
+
+	if ( ! empty( $failed ) ) {
+		return array(
+			'ok'   => false,
+			'note' => sprintf( 'SiteGround Speed Optimizer failed to clear %s (see the PHP error log). The page may still be served from cache; verify with content-fetch-live or clear it in Speed Optimizer.', implode( ', ', $failed ) ),
+		);
+	}
+
+	return array(
+		'ok'   => true,
+		'note' => sprintf( 'Cleared via SiteGround Speed Optimizer (%d URLs, with SiteGround\'s dynamic cache).', count( $urls ) ),
 	);
 }
 

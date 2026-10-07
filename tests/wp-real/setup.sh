@@ -26,6 +26,11 @@
 #   every string for accounts without unfiltered_html, revisions, the
 #   per-post CSS file) is what the Elementor tools have to get right.
 #   Elementor Pro is not on wordpress.org and is not needed for that.
+# - SiteGround Speed Optimizer (sg-cachepress), at an exact version. Only
+#   the SiteGround suite activates it (phpunit-siteground.xml.dist): its
+#   purge API is what clears the caches of a SiteGround site after a
+#   write. Off SiteGround it clears its own file cache, which the suite
+#   watches.
 #
 # The plugin is linked into wp-content/plugins under its real slug and
 # activated the way WordPress activates it (see bootstrap.php).
@@ -55,11 +60,13 @@ GB_VERSION="2.4.1"
 GB_SHA256="d270935aa81900889c8487c636e9a0f49e4cc655caebf3e4870e0b2b45c978b9"
 ELEMENTOR_VERSION="4.3.4"
 ELEMENTOR_SHA256="1b67ddd3acca7b245ac0b7e42e4f8ef958e01602d629e8919874b90607cdc12e"
+SG_VERSION="7.8.4"
+SG_SHA256="0ac46affb9a46e83a7264f4571bb7d2712c603f328b13243ff18414fb9b471d0"
 
 DOWNLOADS="$CACHE/downloads"
 WP_DIR="$CACHE/wordpress"
 STAMP="$WP_DIR/.wpmcp-setup"
-WANT="wordpress=$WP_VERSION sqlite=$SQLITE_VERSION generateblocks=$GB_VERSION elementor=$ELEMENTOR_VERSION"
+WANT="wordpress=$WP_VERSION sqlite=$SQLITE_VERSION generateblocks=$GB_VERSION elementor=$ELEMENTOR_VERSION sg-cachepress=$SG_VERSION"
 
 # digest <bits> <file>
 digest() {
@@ -95,6 +102,7 @@ if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
 	sqlite_zip="$DOWNLOADS/sqlite-database-integration.$SQLITE_VERSION.zip"
 	gb_zip="$DOWNLOADS/generateblocks.$GB_VERSION.zip"
 	elementor_zip="$DOWNLOADS/elementor.$ELEMENTOR_VERSION.zip"
+	sg_zip="$DOWNLOADS/sg-cachepress.$SG_VERSION.zip"
 
 	fetch "https://downloads.wordpress.org/release/wordpress-$WP_VERSION.zip" "$wp_zip" "$WP_SHA256"
 	official_sha1="$(curl -fsSL --retry 3 "https://downloads.wordpress.org/release/wordpress-$WP_VERSION.zip.sha1" | tr -d '[:space:]')"
@@ -106,12 +114,14 @@ if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
 	fetch "https://downloads.wordpress.org/plugin/sqlite-database-integration.$SQLITE_VERSION.zip" "$sqlite_zip" "$SQLITE_SHA256"
 	fetch "https://downloads.wordpress.org/plugin/generateblocks.$GB_VERSION.zip" "$gb_zip" "$GB_SHA256"
 	fetch "https://downloads.wordpress.org/plugin/elementor.$ELEMENTOR_VERSION.zip" "$elementor_zip" "$ELEMENTOR_SHA256"
+	fetch "https://downloads.wordpress.org/plugin/sg-cachepress.$SG_VERSION.zip" "$sg_zip" "$SG_SHA256"
 
 	rm -rf "$WP_DIR"
 	unzip -q "$wp_zip" -d "$CACHE"
 	unzip -q "$sqlite_zip" -d "$WP_DIR/wp-content/plugins"
 	unzip -q "$gb_zip" -d "$WP_DIR/wp-content/plugins"
 	unzip -q "$elementor_zip" -d "$WP_DIR/wp-content/plugins"
+	unzip -q "$sg_zip" -d "$WP_DIR/wp-content/plugins"
 
 	# The drop-in finds its implementation next to itself when the
 	# placeholder path does not exist, so only the plugin slug is filled in.
@@ -128,4 +138,4 @@ mkdir -p "$CACHE/db"
 
 composer --working-dir="$HERE" install --no-interaction --no-progress --quiet
 
-"$PHP" -r 'echo "Real-WordPress tests ready: WordPress ", $argv[1], ", SQLite integration ", $argv[2], ", GenerateBlocks ", $argv[3], ", Elementor ", $argv[4], ", PHP ", PHP_VERSION, "\n";' "$WP_VERSION" "$SQLITE_VERSION" "$GB_VERSION" "$ELEMENTOR_VERSION"
+"$PHP" -r 'echo "Real-WordPress tests ready: WordPress ", $argv[1], ", SQLite integration ", $argv[2], ", GenerateBlocks ", $argv[3], ", Elementor ", $argv[4], ", Speed Optimizer ", $argv[5], ", PHP ", PHP_VERSION, "\n";' "$WP_VERSION" "$SQLITE_VERSION" "$GB_VERSION" "$ELEMENTOR_VERSION" "$SG_VERSION"

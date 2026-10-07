@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+	The SiteGround suite of the real-WordPress layer: the same WordPress,
+	with SiteGround Speed Optimizer active as well. Run through run.sh.
+-->
+<phpunit
+	bootstrap="bootstrap.php"
+	backupGlobals="false"
+	cacheResult="false"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	convertErrorsToExceptions="true"
+	convertNoticesToExceptions="true"
+	convertWarningsToExceptions="true"
+	convertDeprecationsToExceptions="true"
+	failOnRisky="true"
+	failOnWarning="true"
+>
+	<php>
+		<env name="WPMCP_REAL_SITEGROUND" value="1" force="true"/>
+	</php>
+	<testsuites>
+		<testsuite name="real-wordpress-siteground">
+			<directory suffix="Test.php">siteground</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

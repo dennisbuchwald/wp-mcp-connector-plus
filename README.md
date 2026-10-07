@@ -408,6 +408,28 @@ carry a code an agent can branch on:
 | `wpmcp_wrong_revision` | The revision belongs to another post. |
 | `wpmcp_xmlrpc` | The agent account tried XML-RPC. |
 
+## Caches after a write
+
+After every saved write (`content-write`, `content-batch`, `content-create`
+with content, `content-restore`, `elementor-write`) the connector clears
+what it can for that post and reports it as `cache`: `object` (the post in
+the object cache), `page` (`purged`, `present but not clearable from here`
+or `no page cache detected`) and `notes`, one per cache. A dry run clears
+nothing. Page caches it clears:
+
+| Cache | How |
+|---|---|
+| WP Rocket (and AccelerateWP, which is WP Rocket) | `rocket_clean_post()` |
+| W3 Total Cache | `w3tc_flush_post()` |
+| WP Super Cache | `wp_cache_post_change()` |
+| WP Fastest Cache | `wpfc_clear_post_cache_by_id()` |
+| LiteSpeed Cache | the `litespeed_purge_post` action |
+| SiteGround Speed Optimizer, and through it SiteGround's server-level dynamic cache | `SiteGround_Optimizer\Supercacher\Supercacher::purge_cache_request()` for the post's URL with what sits below it, its parents' URLs and the home page alone; with an older version `sg_cachepress_purge_cache()` per URL, or `sg_cachepress_purge_everything()`. Only for a published post: a draft has no cached page. A failure is reported with the URL. |
+| Anything else | the `wpmcp_purge_post_cache` action, for a cache to hook into |
+
+A page cache the connector cannot clear is reported as `present but not
+clearable from here`; `content-fetch-live` then says what a visitor gets.
+
 ## How a write is validated
 
 Every write — dry run and real — passes the same five stages:
@@ -1031,6 +1053,7 @@ the whole question, `tests/wp-real` asks WordPress itself: WordPress core
 (pinned, 6.9.8) on the SQLite Database Integration drop-in (pinned, 3.0.2,
 so no MySQL server is needed), with GenerateBlocks (pinned, 2.4.1) active
 as on the customer sites, Elementor (pinned, 4.3.4) for its own suite,
+SiteGround Speed Optimizer (pinned, 7.8.4) for its own suite,
 with the WordPress PHPUnit test library of
 the same version (`wp-phpunit/wp-phpunit`), PHPUnit 9.6 and the PHPUnit
 Polyfills. `setup.sh` downloads and checks them into the git-ignored
@@ -1057,9 +1080,17 @@ runs in a second PHPUnit process with Elementor active as well, since a
 plugin cannot be deactivated again inside one. Pages are stored as
 Elementor stores them, the agent works on them through the abilities, and
 what Elementor stored, renders and keeps in its revisions is read back
-from Elementor. `run.sh` runs both suites. Elementor 4.3.4 raises PHP 8.4
+from Elementor. Elementor 4.3.4 raises PHP 8.4
 deprecations from its own files and one warning from its content
 sanitizer; the bootstrap drops exactly those, by folder and text.
+
+The SiteGround suite (`tests/wp-real/siteground`,
+`phpunit-siteground.xml.dist`) runs in a third process with Speed
+Optimizer active and its file cache on: a cached copy of a page lies
+where the plugin keeps it, and a write has to make it go. Speed
+Optimizer loads its translations too early for WordPress 6.7+; the
+bootstrap drops that one notice, for its text domain only. `run.sh` runs
+all three suites.
 
 `run-all.sh` runs it once `setup.sh` has been run, or with `WPMCP_REAL=1`,
 and says it skipped it otherwise. CI runs it as a second job on PHP 8.1 and
@@ -1131,6 +1162,16 @@ Each suite exists because of a specific failure:
   own save would strip every script on the page for the agent account.
   Pins the element operations, the ids, the outline and the rule that
   replaces kses there, without WordPress or Elementor.
+- **unknown-keys** — a shortcode sent with `attributes` instead of `attrs`
+  was stored empty after a dry run that said ok, and `content-duplicate`
+  dropped a `slug` it did not take. Pins the alias, and that every other
+  key a node, an operation or an Elementor element does not have is
+  refused with the nearest accepted one. Tool arguments and batch items
+  are pinned against the real Abilities API (`UnknownKeysTest`).
+- **page-caches** — on a SiteGround site every save stayed invisible
+  until the cache was cleared by hand. Pins which URLs Speed Optimizer is
+  asked to clear, with each of its three APIs; the SiteGround suite in
+  `tests/wp-real/siteground` watches the plugin itself clear its cache.
 - **create-and-batch** — a 75-block dry run said "ok" without looking at
   the tree. Also that a batch with one bad item saves nothing.
 - **run-integration** — loads real `block.json` files and checks the
