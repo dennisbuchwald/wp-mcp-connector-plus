@@ -323,7 +323,9 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 		$blocks = wpmcp_tree_to_blocks( $args['tree'], '', $errors, $wrappers );
 		if ( ! empty( $errors ) ) {
 			$refusal = array( 'ok' => false );
-			if ( ! empty( $wrappers->missing ) ) {
+			if ( ! empty( $wrappers->unknown ) ) {
+				$refusal['code'] = 'wpmcp_unknown_key';
+			} elseif ( ! empty( $wrappers->missing ) ) {
 				$refusal['code'] = 'wpmcp_wrapper_missing';
 			} elseif ( ! empty( $wrappers->sourced ) ) {
 				$refusal['code'] = 'wpmcp_sourced_attribute';
@@ -761,6 +763,18 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 	);
 
 	return wpmcp_debug_attach( $response, $timer );
+}
+
+/**
+ * The arguments content-write takes, and with it each content-batch item.
+ *
+ * In the order of the content-write input schema; UnknownKeysTest keeps
+ * the two the same.
+ *
+ * @return string[]
+ */
+function wpmcp_write_argument_names() {
+	return array( 'post_id', 'meta', 'ops', 'tree', 'dry_run', 'slug', 'parent', 'status', 'expected_modified' );
 }
 
 /**

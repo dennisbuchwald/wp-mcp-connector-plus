@@ -401,6 +401,32 @@ function wpmcp_elementor_atomic_ids( array $elements ) {
 }
 
 /**
+ * The keys of an element the agent inserts.
+ *
+ * @return string[]
+ */
+function wpmcp_elementor_element_keys() {
+	return array( 'elType', 'widgetType', 'settings', 'elements' );
+}
+
+/**
+ * The keys each elementor-write operation takes.
+ *
+ * @return array<string, string[]>
+ */
+function wpmcp_elementor_op_keys() {
+	return array(
+		'patch_html'   => array( 'op', 'id', 'find', 'replace', 'all', 'setting' ),
+		'set_html'     => array( 'op', 'id', 'html' ),
+		'set_settings' => array( 'op', 'id', 'settings' ),
+		'insert'       => array( 'op', 'element', 'elements', 'before', 'after', 'inside' ),
+		'duplicate'    => array( 'op', 'id' ),
+		'move'         => array( 'op', 'id', 'before', 'after', 'inside' ),
+		'remove'       => array( 'op', 'id' ),
+	);
+}
+
+/**
  * Turn an element as the agent sends it into one Elementor stores.
  *
  * Ids are always generated: an id the agent makes up could collide with
@@ -423,6 +449,21 @@ function wpmcp_elementor_build_element( $spec, $where, array &$taken ) {
 	if ( wpmcp_elementor_is_atomic( $spec ) ) {
 		return new \WP_Error( 'wpmcp_elementor_atomic', sprintf( '%s: "%s" is an element of Elementor\'s Atomic editor, which these tools do not write.', $where, $spec['widgetType'] ?? $type ) );
 	}
+	// What the editor stores besides: "id" and "isInner" are taken as
+	// elementor-read shows them and set anew. Anything else would be
+	// dropped without a word, an element sent with "setting" was an empty
+	// widget.
+	// "path" is where elementor-read found it, decided here by the place.
+	$unknown = wpmcp_unknown_keys( $spec, array_merge( wpmcp_elementor_element_keys(), array( 'id', 'isInner', 'path' ) ) );
+	if ( ! empty( $unknown ) ) {
+		return new \WP_Error(
+			'wpmcp_unknown_key',
+			wpmcp_unknown_keys_text( $where, $unknown, wpmcp_elementor_element_keys(), array( 'children' => 'elements', 'type' => 'elType', 'widget' => 'widgetType' ) )
+				. ( in_array( 'html', $unknown, true ) ? ' The markup of an HTML widget goes in settings.html.' : '' )
+				. ' "id" and "isInner" are accepted and set by the connector.'
+		);
+	}
+
 	$nesting = wpmcp_elementor_nesting();
 	if ( ! isset( $nesting[ $type ] ) || '' === $type ) {
 		return new \WP_Error( 'wpmcp_bad_element', sprintf( '%s: elType "%s" is not one of container, section, column, widget.', $where, $type ) );
@@ -600,6 +641,15 @@ function wpmcp_elementor_apply_ops( array $elements, $ops ) {
 
 		if ( ! in_array( $name, array( 'patch_html', 'set_html', 'set_settings', 'insert', 'duplicate', 'move', 'remove' ), true ) ) {
 			return new \WP_Error( 'wpmcp_bad_op', sprintf( '%s: "op" must be one of patch_html, set_html, set_settings, insert, duplicate, move, remove.', $where ) );
+		}
+
+		$accepted = wpmcp_elementor_op_keys()[ $name ];
+		$unknown  = wpmcp_unknown_keys( $op, $accepted );
+		if ( ! empty( $unknown ) ) {
+			return new \WP_Error(
+				'wpmcp_unknown_key',
+				wpmcp_unknown_keys_text( $where, $unknown, $accepted, array( 'element_id' => 'id', 'elementId' => 'id', 'target' => 'inside', 'markup' => 'html' ) )
+			);
 		}
 
 		if ( 'insert' === $name ) {

@@ -393,6 +393,8 @@ carry a code an agent can branch on:
 | `wpmcp_sourced_attribute` | An attribute the block reads from its markup (block.json `source`: `core/paragraph` content, `core/image` url and alt ...) was sent in `attrs` without `html`; it would have been lost. The message names where it belongs and shows the markup to send. As the `code` of a refusal (`tree`) or of an error (`ops`, also `set_attrs`). |
 | `wpmcp_stale` | `expected_modified` no longer matches: someone else saved in between. |
 | `wpmcp_unfiltered_html_unavailable` | The site's configuration makes the dynamic-data save impossible, or (`elementor-write`) would make Elementor strip markup the page holds. |
+| `wpmcp_unknown_argument` | The tool was called with an argument it does not take, or a `content-batch` item carries a key `content-write` does not take (until 0.20.2 such an argument was ignored). Nothing ran. The message names the argument, the nearest accepted one and all accepted ones. |
+| `wpmcp_unknown_key` | A tree node, a patch operation, an `elementor-write` operation or an inserted Elementor element carries a key it does not have (until 0.20.2 such a key was ignored). The message names the path or operation, the key, the nearest accepted one and all accepted ones. `attributes` is accepted as another name for `attrs`; both with different values are refused. As the `code` of a refusal (`tree`) or of an error (`ops`). |
 | `wpmcp_unsafe_markup` | `content-restore`: the revision was not saved by a person and holds markup kses would filter. |
 | `wpmcp_upload_failed` | `media-upload`: WordPress could not store the file. |
 | `wpmcp_upload_needs_alt` | `media-upload`: no alt text and not marked decorative. |

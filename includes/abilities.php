@@ -100,7 +100,13 @@ function wpmcp_register_ability( $name, array $args ) {
 	$args['meta'] = wpmcp_ability_meta( $name );
 
 	$execute                  = $args['execute_callback'];
-	$args['execute_callback'] = function ( $input = null ) use ( $execute ) {
+	$accepted                 = array_map( 'strval', array_keys( (array) ( $args['input_schema']['properties'] ?? array() ) ) );
+	$args['execute_callback'] = function ( $input = null ) use ( $execute, $name, $accepted ) {
+		$unknown = wpmcp_unknown_argument_error( $name, $input, $accepted );
+		if ( $unknown ) {
+			return wpmcp_contract_result( $unknown );
+		}
+
 		// Called exactly as the Abilities API would have called the tool:
 		// without an argument when it passes none.
 		$result = null === $input ? call_user_func( $execute ) : call_user_func( $execute, $input );
@@ -108,6 +114,39 @@ function wpmcp_register_ability( $name, array $args ) {
 	};
 
 	return (bool) wp_register_ability( $name, $args );
+}
+
+/**
+ * Refuse an argument the tool does not take.
+ *
+ * The Abilities API validates the input against the schema, and a schema
+ * without additionalProperties lets every other property through: the
+ * tool never saw it, the agent never heard. content-duplicate dropped a
+ * "slug" that way and the copy kept its old one. additionalProperties:
+ * false would make WordPress refuse instead, but in its own words ("slug
+ * is not a valid property of Object"), without a code and without what
+ * the tool takes. So the check is here, where every ability passes, and
+ * names the argument, the nearest accepted one and all of them.
+ *
+ * @param string   $name     Ability name.
+ * @param mixed    $input    Input as the Abilities API passes it.
+ * @param string[] $accepted Properties of the input schema.
+ * @return \WP_Error|null
+ */
+function wpmcp_unknown_argument_error( $name, $input, array $accepted ) {
+	if ( ! is_array( $input ) || empty( $input ) ) {
+		return null;
+	}
+
+	$unknown = wpmcp_unknown_keys( $input, $accepted );
+	if ( empty( $unknown ) ) {
+		return null;
+	}
+
+	return new \WP_Error(
+		'wpmcp_unknown_argument',
+		wpmcp_unknown_keys_text( substr( $name, strlen( 'wpmcp/' ) ), $unknown, $accepted, array( 'id' => 'post_id', 'page_id' => 'post_id', 'page' => 'post_id' ), 'argument' )
+	);
 }
 
 /**
@@ -127,9 +166,12 @@ function wpmcp_ability_definitions() {
 		'wpmcp/site-info' => array(
 			'label'       => __( 'Site info', 'wp-mcp-connector-plus' ),
 			'description' => 'Fingerprint of this website: WordPress/theme/core versions, client name, active feature modules, editable post types, and the design tokens (colour slugs, font sizes, spacing) the design system allows. Call this first in any session — versions and available blocks differ per customer site, so never assume them.',
+			// No "properties" at all: WordPress 6.9 validates an object
+			// against an empty stdClass by indexing it as an array, which
+			// threw on the first argument anyone sent. The MCP adapter
+			// drops an empty list of properties anyway.
 			'input_schema' => array(
-				'type'       => 'object',
-				'properties' => new stdClass(),
+				'type' => 'object',
 			),
 			'execute_callback'    => function () {
 				wpmcp_log( 'wpmcp/site-info' );
@@ -332,7 +374,7 @@ function wpmcp_ability_definitions() {
 					),
 					'tree'    => array(
 						'type'        => array( 'array', 'string' ),
-						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}. Leaf core blocks may carry "html". A container whose wrapper element is saved in the markup carries it as "htmlTemplate", as content-read returns it. Sent without one, the wrapper of core/group and of a GenerateBlocks element is generated from attrs and reported in wrapperGenerated; another such container is refused with wpmcp_wrapper_missing and a template to send. Attributes read from markup (paragraph content, image url) go in "html".',
+						'description' => 'Full replacement tree. Each node: {"name":"core/group","attrs":{...},"innerBlocks":[...]}; "attributes" is accepted for "attrs", any other key is refused (wpmcp_unknown_key). Leaf core blocks may carry "html". A container whose wrapper element is saved in the markup carries it as "htmlTemplate", as content-read returns it. Sent without one, the wrapper of core/group and of a GenerateBlocks element is generated from attrs and reported in wrapperGenerated; another such container is refused with wpmcp_wrapper_missing and a template to send. Attributes read from markup (paragraph content, image url) go in "html".',
 					),
 					'dry_run' => array(
 						'type'        => 'boolean',

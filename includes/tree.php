@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/wrappers.php';
 require_once __DIR__ . '/sourced.php';
+require_once __DIR__ . '/keys.php';
 
 /**
  * Whether a parsed block is one a path can point at.
@@ -131,6 +132,7 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors, $context =
 			continue;
 		}
 
+		$node = wpmcp_check_node_keys( $node, $path, $context, $errors );
 		$name = $node['name'] ?? null;
 
 		// Freeform HTML passthrough (classic content).
@@ -191,6 +193,99 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors, $context =
 	}
 
 	return $blocks;
+}
+
+/**
+ * The keys a tree node may carry.
+ *
+ * "path" is what content-read puts on every node; a node read and sent
+ * back unchanged carries it, and where the node goes is decided by its
+ * position, so it is accepted and has no effect. A node without a name
+ * (freeform HTML) has nothing but its markup.
+ *
+ * @param bool $named Whether the node names a block.
+ * @return string[]
+ */
+function wpmcp_node_keys( $named = true ) {
+	return $named
+		? array( 'name', 'attrs', 'innerBlocks', 'html', 'htmlTemplate', 'path' )
+		: array( 'name', 'html', 'path' );
+}
+
+/**
+ * Mix-ups seen or to be expected in a tree node, sent => meant.
+ *
+ * @return array<string, string>
+ */
+function wpmcp_node_key_hints() {
+	return array(
+		'blockName'    => 'name',
+		'type'         => 'name',
+		'children'     => 'innerBlocks',
+		'blocks'       => 'innerBlocks',
+		'innerHTML'    => 'html',
+		'content'      => 'html',
+		'markup'       => 'html',
+		'innerContent' => 'htmlTemplate',
+		'template'     => 'htmlTemplate',
+		'props'        => 'attrs',
+	);
+}
+
+/**
+ * Resolve "attributes" and refuse what a node does not have.
+ *
+ * Until 0.20.2 a key the connector did not read was dropped without a
+ * word: a shortcode sent with "attributes" went in empty, a group sent
+ * with "children" lost them. Each finding goes to $errors with the path,
+ * and to $context->unknown, which gives the refusal its code
+ * (wpmcp_unknown_key).
+ *
+ * @param array  $node    Node as sent.
+ * @param string $path    Its path.
+ * @param object $context See wpmcp_wrapper_context().
+ * @param array  $errors  Errors (by reference).
+ * @return array The node, "attributes" moved to "attrs".
+ */
+function wpmcp_check_node_keys( array $node, $path, $context, array &$errors ) {
+	list( $node, $conflict ) = wpmcp_attrs_alias( $node, $path );
+	if ( '' !== $conflict ) {
+		$errors[]           = $conflict;
+		$context->unknown[] = array(
+			'path' => $path,
+			'keys' => array( 'attributes' ),
+		);
+	}
+
+	$named   = null !== ( $node['name'] ?? null );
+	$allowed = wpmcp_node_keys( $named );
+	$unknown = wpmcp_unknown_keys( $node, $allowed );
+	if ( ! empty( $unknown ) ) {
+		$listed             = array_values( array_diff( $allowed, array( 'path' ) ) );
+		$errors[]           = wpmcp_unknown_keys_text( $path, $unknown, $listed, wpmcp_node_key_hints() ) . ( $named ? ' "attributes" is accepted as another name for "attrs".' : ' A node without "name" is freeform HTML and holds nothing but "html".' );
+		$context->unknown[] = array(
+			'path' => $path,
+			'keys' => $unknown,
+		);
+	}
+
+	return $node;
+}
+
+/**
+ * The keys each patch operation takes.
+ *
+ * @return array<string, string[]>
+ */
+function wpmcp_op_keys() {
+	return array(
+		'insert'     => array( 'op', 'path', 'block', 'blocks' ),
+		'replace'    => array( 'op', 'path', 'block', 'blocks' ),
+		'remove'     => array( 'op', 'path' ),
+		'set_attrs'  => array( 'op', 'path', 'attrs' ),
+		'patch_html' => array( 'op', 'path', 'find', 'replace' ),
+		'move'       => array( 'op', 'path', 'to' ),
+	);
 }
 
 /**
@@ -549,6 +644,24 @@ function wpmcp_apply_ops( array $blocks, array $ops, $context = null ) {
 		}
 
 		$kind = $op['op'] ?? '';
+
+		// "attributes" for "attrs", and nothing an operation does not read:
+		// a key it does not know would otherwise be dropped in silence.
+		$keys = wpmcp_op_keys();
+		if ( is_string( $kind ) && isset( $keys[ $kind ] ) ) {
+			list( $op, $conflict ) = 'set_attrs' === $kind ? wpmcp_attrs_alias( $op, sprintf( 'Operation %d (set_attrs)', $n ) ) : array( $op, '' );
+			if ( '' !== $conflict ) {
+				return new \WP_Error( 'wpmcp_unknown_key', $conflict );
+			}
+			$unknown = wpmcp_unknown_keys( $op, $keys[ $kind ] );
+			if ( ! empty( $unknown ) ) {
+				return new \WP_Error(
+					'wpmcp_unknown_key',
+					wpmcp_unknown_keys_text( sprintf( 'Operation %d (%s)', $n, $kind ), $unknown, $keys[ $kind ], array( 'target' => 'to', 'element' => 'block', 'search' => 'find', 'with' => 'replace' ) )
+				);
+			}
+		}
+
 		$path = wpmcp_path_parse( $op['path'] ?? '' );
 
 		if ( null === $path ) {
@@ -568,10 +681,13 @@ function wpmcp_apply_ops( array $blocks, array $ops, $context = null ) {
 				$errors  = array();
 				$missing = count( $context->missing );
 				$sourced = count( $context->sourced );
+				$unknown = count( $context->unknown );
 				$new     = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors, $context );
 				if ( ! empty( $errors ) ) {
 					$code = 'wpmcp_bad_block';
-					if ( count( $context->missing ) > $missing ) {
+					if ( count( $context->unknown ) > $unknown ) {
+						$code = 'wpmcp_unknown_key';
+					} elseif ( count( $context->missing ) > $missing ) {
 						$code = 'wpmcp_wrapper_missing';
 					} elseif ( count( $context->sourced ) > $sourced ) {
 						$code = 'wpmcp_sourced_attribute';

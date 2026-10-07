@@ -66,6 +66,8 @@ function wpmcp_wrapper_context( array $stored = array(), $post_id = 0 ) {
 		// live in the markup (includes/sourced.php).
 		'markup'    => array(),
 		'sourced'   => array(),
+		// Nodes with keys the connector does not read (tree.php).
+		'unknown'   => array(),
 	);
 }
 

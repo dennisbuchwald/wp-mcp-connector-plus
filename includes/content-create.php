@@ -564,6 +564,25 @@ function wpmcp_batch_write( array $args ) {
 			continue;
 		}
 
+		// An item is what content-write takes. A key it does not take was
+		// dropped without a word, and a dry_run of its own was overruled
+		// by the batch's in the same silence.
+		$unknown = wpmcp_unknown_keys( $item, wpmcp_write_argument_names() );
+		if ( ! empty( $unknown ) ) {
+			$checks[] = wpmcp_batch_item( $i, (int) $item['post_id'], new \WP_Error( 'wpmcp_unknown_argument', wpmcp_unknown_keys_text( sprintf( 'Item %d', $i ), $unknown, wpmcp_write_argument_names(), array( 'id' => 'post_id' ), 'argument' ) ) );
+			$all_ok   = false;
+			continue;
+		}
+		if ( array_key_exists( 'dry_run', $item ) && wpmcp_is_dry_run( $item ) !== $dry_run ) {
+			$checks[] = wpmcp_batch_item(
+				$i,
+				(int) $item['post_id'],
+				new \WP_Error( 'wpmcp_bad_request', sprintf( 'Item %d: "dry_run" is %s here and %s for the batch. The batch decides for every item; leave it out of the items.', $i, wpmcp_is_dry_run( $item ) ? 'true' : 'false', $dry_run ? 'true' : 'false' ) )
+			);
+			$all_ok = false;
+			continue;
+		}
+
 		$target = get_post( (int) $item['post_id'] );
 		if ( $target && in_array( $target->post_type, wpmcp_embedded_post_types(), true ) ) {
 			$reuse = false;
