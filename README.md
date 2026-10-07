@@ -559,6 +559,9 @@ accordingly:
   same, and `content-restore` refuse them with `wpmcp_elementor_page`.
   SEO meta, slug, parent and status are not content and still go through
   `content-write`.
+- `content-duplicate` copies the element data byte for byte, scripts
+  included (Elementor would otherwise run kses over it for the agent
+  account), and leaves out Elementor's caches of the original.
 
 **Reading.** `elementor-read` returns every element with its id, path and
 type. An HTML widget comes with an outline of what it says: headings with

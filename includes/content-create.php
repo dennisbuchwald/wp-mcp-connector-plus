@@ -95,12 +95,35 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 
 	// Meta, minus WordPress bookkeeping.
 	$skip = array( '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date' );
+
+	// An Elementor page is its meta. Elementor runs kses over
+	// _elementor_data written by an account without unfiltered_html (its
+	// REST meta sanitizer), so the copy lost every script the original
+	// had, the way duplicating once lost a page's JSON-LD. The copy is the
+	// original's own data, nothing the agent wrote, so it is stored with
+	// the capability for that copy only. Elementor's caches of the
+	// original (CSS file, assets, element cache, screenshot) are not
+	// copied: they describe the original and are built again for the copy.
+	$elementor = wpmcp_elementor_built( $post );
+	if ( $elementor ) {
+		$skip = array_merge( $skip, array( '_elementor_css', '_elementor_page_assets', '_elementor_element_cache', '_elementor_screenshot', '_elementor_controls_usage' ) );
+	}
+
 	foreach ( get_post_meta( $post->ID ) as $key => $values ) {
 		if ( in_array( $key, $skip, true ) ) {
 			continue;
 		}
-		foreach ( $values as $value ) {
-			add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+		$release = ( $elementor && 0 === strpos( $key, '_elementor' ) && ! wpmcp_unfiltered_html_blocker() )
+			? wpmcp_grant_caps_for_request( array( 'unfiltered_html' ) )
+			: null;
+		try {
+			foreach ( $values as $value ) {
+				add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+			}
+		} finally {
+			if ( $release ) {
+				$release();
+			}
 		}
 	}
 
