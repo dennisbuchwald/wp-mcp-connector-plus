@@ -33,7 +33,7 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
 
 		$items[] = array(
 			'id'         => (int) $revision->ID,
-			'date'       => $revision->post_modified_gmt,
+			'date'       => wpmcp_modified_stamp( $revision ),
 			'author'     => $author ? $author->display_name : null,
 			'autosave'   => wp_is_post_autosave( $revision ) ? true : false,
 			'blockCount' => wpmcp_count_blocks_in_markup( $revision->post_content ),
@@ -44,7 +44,7 @@ function wpmcp_list_revisions( $post_id, $limit = 15 ) {
 		'postId'    => $post->ID,
 		'title'     => get_the_title( $post ),
 		'current'   => array(
-			'modified'   => $post->post_modified_gmt,
+			'modified'   => wpmcp_modified_stamp( $post ),
 			'blockCount' => wpmcp_count_blocks_in_markup( $post->post_content ),
 		),
 		'revisions' => $items,
@@ -149,7 +149,7 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		'dryRun'     => (bool) $dry_run,
 		'postId'     => $post->ID,
 		'revisionId' => (int) $revision_id,
-		'revisionAt' => $revision->post_modified_gmt,
+		'revisionAt' => wpmcp_modified_stamp( $revision ),
 		'diff'       => $diff,
 		'warnings'   => $locked ? array( $locked->get_error_message() . ' The real restore will be refused until then.' ) : array(),
 	);

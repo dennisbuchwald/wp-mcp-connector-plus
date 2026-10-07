@@ -140,7 +140,7 @@ function wpmcp_after_save( $post, array &$response ) {
 	// protection it exists for.
 	$fresh = get_post( $post->ID );
 	if ( $fresh ) {
-		$response['modified']  = $fresh->post_modified_gmt;
+		$response['modified']  = wpmcp_modified_stamp( $fresh );
 		$response['nextWrite'] = 'Pass this "modified" value as expected_modified on your next write to this page.';
 	}
 
@@ -532,14 +532,14 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 	// a human may have saved the same page. Without this the human's work
 	// disappears silently.
 	$expected_modified = isset( $args['expected_modified'] ) ? trim( (string) $args['expected_modified'] ) : '';
-	if ( '' !== $expected_modified && $expected_modified !== $post->post_modified_gmt ) {
+	if ( '' !== $expected_modified && ! wpmcp_modified_matches( $post, $expected_modified ) ) {
 		return new \WP_Error(
 			'wpmcp_stale',
 			sprintf(
 				'Post %d changed after you read it (read: %s, now: %s). Someone edited it in the meantime. Read it again and redo the change on the current version.',
 				$post->ID,
 				$expected_modified,
-				$post->post_modified_gmt
+				wpmcp_modified_stamp( $post )
 			)
 		);
 	}

@@ -420,13 +420,22 @@ function wpmcp_ability_definitions() {
 						'type'        => 'string',
 						'description' => 'Title for the copy. Defaults to the original plus " (Copy)", translated.',
 					),
+					'slug'    => array(
+						'type'        => 'string',
+						'description' => 'Slug for the copy. Made unique the way publishing would; the answer reports the one it got. Without it the draft has none until it is published (slugOnPublish says which it will be).',
+					),
+					'parent'  => array(
+						'type'        => 'integer',
+						'description' => 'ID of the page the copy sits under, 0 for none. Defaults to the original\'s parent. Same post type, no loops.',
+					),
 				),
 				'required'   => array( 'post_id' ),
 			),
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_duplicate_post(
 					(int) ( $input['post_id'] ?? 0 ),
-					(string) ( $input['title'] ?? '' )
+					(string) ( $input['title'] ?? '' ),
+					array_intersect_key( $input, array_flip( array( 'slug', 'parent' ) ) )
 				);
 			},
 		),

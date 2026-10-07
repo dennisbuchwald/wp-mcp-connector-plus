@@ -299,3 +299,44 @@ function wpmcp_elementor_page_error( $post, $what ) {
 		)
 	);
 }
+
+/**
+ * The "modified" a tool reports for a post, and expected_modified takes.
+ *
+ * post_modified_gmt, except where WordPress leaves it at zero: a draft
+ * that has never been updated. wp_insert_post() copies post_date_gmt
+ * into it, and a draft's post_date_gmt stays 0000-00-00 00:00:00 until
+ * it is published. A duplicate on staging.maxport.ch reported exactly
+ * that, which reads like a broken post. The local time WordPress did
+ * store is converted instead; the first update writes a real GMT time.
+ *
+ * @param \WP_Post|object $post Post.
+ * @return string
+ */
+function wpmcp_modified_stamp( $post ) {
+	$gmt = (string) ( $post->post_modified_gmt ?? '' );
+	if ( '' !== $gmt && '0000-00-00 00:00:00' !== $gmt ) {
+		return $gmt;
+	}
+
+	$local = (string) ( $post->post_modified ?? '' );
+	if ( '' === $local || '0000-00-00 00:00:00' === $local ) {
+		return $gmt;
+	}
+
+	return get_gmt_from_date( $local );
+}
+
+/**
+ * Does expected_modified still describe the post?
+ *
+ * The stamp, or the raw zero a client may have kept from 0.20.1 or
+ * earlier, as long as it is still what the database holds.
+ *
+ * @param \WP_Post|object $post     Post.
+ * @param string          $expected As sent.
+ * @return bool
+ */
+function wpmcp_modified_matches( $post, $expected ) {
+	return $expected === wpmcp_modified_stamp( $post ) || $expected === (string) ( $post->post_modified_gmt ?? '' );
+}

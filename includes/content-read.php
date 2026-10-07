@@ -238,7 +238,7 @@ function wpmcp_list_content( array $args ) {
 			'slug'     => $post->post_name,
 			'url'      => get_permalink( $post ),
 			'parent'   => $post->post_parent,
-			'modified' => $post->post_modified_gmt,
+			'modified' => wpmcp_modified_stamp( $post ),
 			'blocks'   => wpmcp_count_blocks_in_markup( $post->post_content ),
 		);
 		if ( wpmcp_elementor_built( $post ) ) {
@@ -286,7 +286,7 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 		'mode'       => $mode,
 		// Hand this back in content-write to be told if someone edited the
 		// page in the meantime, instead of silently overwriting them.
-		'modified'   => $post->post_modified_gmt,
+		'modified'   => wpmcp_modified_stamp( $post ),
 	);
 
 	if ( $with_meta ) {

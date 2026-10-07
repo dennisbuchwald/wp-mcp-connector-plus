@@ -39,11 +39,19 @@ function wpmcp_copy_title( $original, $title = '' ) {
  * Extracted from the core's duplicate-post.php, which is bound to $_GET
  * and wp_die() and cannot be called programmatically.
  *
+ * Slug and parent for the copy were asked for on staging.maxport.ch and
+ * silently dropped, since the tool did not take them: the copy kept the
+ * original's parent and no slug. They are checked before anything is
+ * inserted, the parent as content-write checks it (wpmcp_check_parent),
+ * and the slug is made unique the way WordPress will make it on
+ * publishing, so the slug reported is the slug the page gets.
+ *
  * @param int    $post_id Source post ID.
  * @param string $title   Optional new title.
+ * @param array  $place   Optional { slug?: string, parent?: int }.
  * @return array|\WP_Error
  */
-function wpmcp_duplicate_post( $post_id, $title = '' ) {
+function wpmcp_duplicate_post( $post_id, $title = '', array $place = array() ) {
 	$post = wpmcp_get_readable_post( $post_id );
 	if ( is_wp_error( $post ) ) {
 		return $post;
@@ -64,6 +72,40 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 
 	$new_title = wpmcp_copy_title( $post->post_title, $title );
 
+	// Where the copy goes, decided before it exists.
+	$parent = (int) $post->post_parent;
+	if ( isset( $place['parent'] ) && null !== $place['parent'] ) {
+		$parent = (int) $place['parent'];
+		$check  = wpmcp_check_parent(
+			(object) array(
+				'ID'          => 0,
+				'post_type'   => $post->post_type,
+				'post_parent' => 0,
+			),
+			$parent
+		);
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
+	}
+
+	$slug     = '';
+	$notes    = array();
+	$asked    = isset( $place['slug'] ) ? (string) $place['slug'] : '';
+	if ( '' !== trim( $asked ) ) {
+		$slug = sanitize_title( $asked );
+		if ( '' === $slug ) {
+			return new \WP_Error( 'wpmcp_bad_request', sprintf( '"%s" leaves nothing usable as a slug.', $asked ) );
+		}
+		// A draft keeps whatever slug it is given; publishing would then
+		// rename a taken one. Made unique now, the slug reported stays.
+		$unique = wp_unique_post_slug( $slug, 0, 'publish', $post->post_type, $parent );
+		if ( $unique !== $slug ) {
+			$notes[] = sprintf( 'The slug "%s" is taken at that place, so the copy got "%s".', $slug, $unique );
+			$slug    = $unique;
+		}
+	}
+
 	$new_id = wpmcp_insert_post_preserving(
 		wp_slash(
 			array(
@@ -71,7 +113,8 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 				'post_content'   => $post->post_content,
 				'post_excerpt'   => $post->post_excerpt,
 				'post_type'      => $post->post_type,
-				'post_parent'    => $post->post_parent,
+				'post_name'      => $slug,
+				'post_parent'    => $parent,
 				'menu_order'     => $post->menu_order,
 				'comment_status' => $post->comment_status,
 				'ping_status'    => $post->ping_status,
@@ -138,19 +181,33 @@ function wpmcp_duplicate_post( $post_id, $title = '' ) {
 		)
 	);
 
+	$copy   = get_post( (int) $new_id );
 	$result = array(
 		'ok'       => true,
 		'id'       => (int) $new_id,
 		'sourceId' => $post->ID,
 		'title'    => $new_title,
 		'status'   => 'draft',
+		'slug'     => (string) $copy->post_name,
+		'parent'   => (int) $copy->post_parent,
+		// Pass as expected_modified on the first write to the copy.
+		'modified' => wpmcp_modified_stamp( $copy ),
 		'preview'  => wpmcp_preview_url( (int) $new_id ),
 		'message'  => 'Created as a draft. A human publishes it.',
 	);
 
+	// A draft without a slug gets one only when it is published, from its
+	// title; say which, so an empty slug does not read as a fault.
+	if ( '' === $result['slug'] ) {
+		$result['slugOnPublish'] = wp_unique_post_slug( sanitize_title( $new_title ), (int) $new_id, 'publish', $post->post_type, $parent );
+	}
+
 	if ( ! empty( $stored_warnings ) ) {
-		$result['warnings']       = $stored_warnings;
 		$result['contentAltered'] = true;
+	}
+	$warnings = array_merge( $notes, $stored_warnings );
+	if ( ! empty( $warnings ) ) {
+		$result['warnings'] = $warnings;
 	}
 
 	return $result;
@@ -351,7 +408,7 @@ function wpmcp_create_content( array $args ) {
 			)
 		);
 
-		$result['modified']  = $created->post_modified_gmt;
+		$result['modified']  = wpmcp_modified_stamp( $created );
 		$result['nextWrite'] = 'Pass this "modified" value as expected_modified when you write the content.';
 		if ( 'publish' === $status ) {
 			wpmcp_publish_created( (int) $post_id, $result );

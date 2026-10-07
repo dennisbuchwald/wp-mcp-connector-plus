@@ -77,7 +77,7 @@ function wpmcp_elementor_read( array $args ) {
 		'elementorVersion' => (string) get_post_meta( $post->ID, '_elementor_version', true ),
 		'elementCount'     => wpmcp_elementor_count_all( $elements ),
 		// Hand this to elementor-write as expected_modified.
-		'modified'         => $post->post_modified_gmt,
+		'modified'         => wpmcp_modified_stamp( $post ),
 	);
 
 	$atomic = wpmcp_elementor_atomic_ids( $elements );
@@ -335,14 +335,14 @@ function wpmcp_elementor_write( array $args ) {
 	}
 
 	$expected = isset( $args['expected_modified'] ) ? trim( (string) $args['expected_modified'] ) : '';
-	if ( '' !== $expected && $expected !== $post->post_modified_gmt ) {
+	if ( '' !== $expected && ! wpmcp_modified_matches( $post, $expected ) ) {
 		return new \WP_Error(
 			'wpmcp_stale',
 			sprintf(
 				'Post %d changed after you read it (read: %s, now: %s). Someone edited it in the meantime. Read it again with elementor-read and redo the change on the current version.',
 				$post->ID,
 				$expected,
-				$post->post_modified_gmt
+				wpmcp_modified_stamp( $post )
 			)
 		);
 	}

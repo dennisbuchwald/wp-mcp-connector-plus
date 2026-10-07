@@ -89,7 +89,8 @@ class ElementorWriteTest extends WPMCP_Real_Elementor_TestCase {
 		$this->assertIsArray( $read, $this->explain( $read ) );
 		$this->assertSame( 'elementor', $read['builtWith'] );
 		$this->assertSame( 6, $read['elementCount'] );
-		$this->assertSame( get_post( $id )->post_modified_gmt, $read['modified'] );
+		$this->assertSame( wpmcp_modified_stamp( get_post( $id ) ), $read['modified'] );
+		$this->assertNotSame( '0000-00-00 00:00:00', $read['modified'], 'a draft reports a real time too' );
 
 		$hero = $read['outline'][0]['elements'][0];
 		$this->assertSame( 'b000001', $hero['id'] );
