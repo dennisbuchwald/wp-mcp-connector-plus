@@ -207,6 +207,127 @@ function wpmcp_unstable_blocks( $after, array $sources, &$kept = null ) {
 }
 
 /**
+ * The same rule as wpmcp_unstable_blocks(), for markup that is not a block.
+ *
+ * Elementor keeps a page as a tree of elements whose settings are
+ * strings, and an HTML widget's "html" setting is a whole piece of raw
+ * markup. Elementor runs kses over every one of those strings for an
+ * account without unfiltered_html, the whole page on every save, so an
+ * edit next to a slider script would destroy the script. The answer is
+ * the one blocks get: skip the filter for the save, and in its place
+ * judge every string the change touched.
+ *
+ * A unit is one string, keyed by where it sits ("a1b2c3d:html"). One that
+ * is unchanged at its key is not the agent's doing and is not judged. A
+ * changed or new one must come out of kses unchanged, or may keep what
+ * kses would remove only if the stored page already holds each such
+ * fragment at least as often as the page will after the change, every
+ * unit counted. So an existing script stays when the text around it is
+ * edited, and is refused when copied into a second widget, changed by a
+ * character, or written new. Safe JSON-LD is taken out first, as for
+ * blocks.
+ *
+ * Identity is by key, not by text anywhere on the page: a duplicated
+ * widget gets new ids, so its copy of a script is a second script and is
+ * counted as one.
+ *
+ * @param array<string, string> $after  Units after the change, key => markup.
+ * @param array<string, string> $before Units as stored, key => markup.
+ * @param string[]              $kept   Receives the fragments changed units
+ *                                      keep from the stored page (by reference).
+ * @return array<int, array{path: string, constructs: string[], stored: string, fragments: array, explained: bool}>
+ */
+function wpmcp_unstable_strings( array $after, array $before, &$kept = null ) {
+	$kept = array();
+
+	if ( ! function_exists( 'wp_kses_post' ) ) {
+		return array();
+	}
+
+	$found = array();
+	foreach ( $after as $key => $html ) {
+		$html = (string) $html;
+		if ( isset( $before[ $key ] ) && (string) $before[ $key ] === $html ) {
+			continue;
+		}
+
+		$checked  = wpmcp_strip_safe_jsonld( $html );
+		$filtered = wp_kses_post( $checked );
+		if ( $filtered === $checked || $filtered === wpmcp_kses_equivalent( $checked ) ) {
+			continue;
+		}
+
+		$removals = wpmcp_kses_removals( $checked );
+		$found[]  = array(
+			'path'       => (string) $key,
+			'constructs' => wpmcp_kses_losses( $checked, $filtered ),
+			'stored'     => $filtered,
+			'fragments'  => $removals['fragments'],
+			'explained'  => $removals['explained'],
+		);
+	}
+
+	if ( empty( $found ) ) {
+		return $found;
+	}
+
+	$budget = wpmcp_count_kses_removals_in( $before );
+	$usage  = wpmcp_count_kses_removals_in( $after );
+
+	$refused = array();
+	foreach ( $found as $unit ) {
+		$ok        = $unit['explained'] && ! empty( $unit['fragments'] );
+		$was_there = isset( $before[ $unit['path'] ] )
+			? wpmcp_kses_removals( wpmcp_strip_safe_jsonld( (string) $before[ $unit['path'] ] ) )['fragments']
+			: array();
+
+		foreach ( $unit['fragments'] as $fragment_key => &$fragment ) {
+			$fragment['before'] = $budget[ $fragment_key ] ?? 0;
+			$fragment['after']  = $usage[ $fragment_key ] ?? 0;
+			$fragment['inThis'] = isset( $was_there[ $fragment_key ] );
+			if ( $fragment['after'] > $fragment['before'] ) {
+				$ok = false;
+			}
+		}
+		unset( $fragment );
+
+		if ( $ok ) {
+			foreach ( $unit['fragments'] as $fragment ) {
+				$kept[] = $fragment['text'];
+			}
+			continue;
+		}
+		$refused[] = $unit;
+	}
+
+	$kept = array_values( array_unique( $kept ) );
+
+	return $refused;
+}
+
+/**
+ * How often each fragment kses would remove occurs in a set of strings.
+ *
+ * @param array<string, string> $units Key => markup.
+ * @return array<string, int>
+ */
+function wpmcp_count_kses_removals_in( array $units ) {
+	$counts = array();
+
+	foreach ( $units as $html ) {
+		$html = wpmcp_strip_safe_jsonld( (string) $html );
+		if ( '' === trim( $html ) || wpmcp_kses_stable( $html ) ) {
+			continue;
+		}
+		foreach ( wpmcp_kses_removals( $html )['fragments'] as $key => $fragment ) {
+			$counts[ $key ] = ( $counts[ $key ] ?? 0 ) + $fragment['count'];
+		}
+	}
+
+	return $counts;
+}
+
+/**
  * The markup of one block without its children: the delimiter with its
  * attributes and the wrapper chunks in order, safe JSON-LD taken out.
  *
@@ -568,19 +689,21 @@ function wpmcp_markup_inventory( $html ) {
 /**
  * The refused blocks as one line: path and what kses would remove.
  *
- * @param array $blocks Result of wpmcp_unstable_blocks().
+ * @param array  $blocks Result of wpmcp_unstable_blocks() or wpmcp_unstable_strings().
+ * @param string $noun   What a path names: "block", or "element" for the
+ *                       Elementor tools, whose paths are element settings.
  * @return string
  */
-function wpmcp_unstable_summary( array $blocks ) {
+function wpmcp_unstable_summary( array $blocks, $noun = 'block' ) {
 	$parts = array();
 
 	foreach ( $blocks as $block ) {
 		if ( empty( $block['constructs'] ) && empty( $block['fragments'] ) ) {
-			$parts[] = sprintf( 'block %s (only rewritten; WordPress would store it as: %s)', $block['path'], wpmcp_shorten( $block['stored'], 120 ) );
+			$parts[] = sprintf( '%s %s (only rewritten; WordPress would store it as: %s)', $noun, $block['path'], wpmcp_shorten( $block['stored'], 120 ) );
 			continue;
 		}
 
-		$part = sprintf( 'block %s (%s)', $block['path'], implode( ', ', $block['constructs'] ) );
+		$part = sprintf( '%s %s (%s)', $noun, $block['path'], implode( ', ', $block['constructs'] ) );
 
 		// Each fragment in its own words, and whether it was there before:
 		// a highlight passed through reads very differently from a style
