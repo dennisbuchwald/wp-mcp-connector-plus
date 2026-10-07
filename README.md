@@ -668,6 +668,20 @@ makes a setting render something else at view time. Where the site makes
 save that would make Elementor strip anything is refused with
 `wpmcp_unfiltered_html_unavailable`.
 
+**CSS is judged as CSS.** A setting Elementor registered as a code control
+in CSS (Elementor Pro's Custom CSS, `custom_css`), and any setting named
+`custom_css` where Elementor cannot be asked, is printed into a style
+sheet, not into the page. kses was the wrong judge there: it read the
+`<svg` of `url("data:image/svg+xml,<svg ...></svg>")` as a tag and the
+background was refused. Such a setting is now checked for what can do
+harm in CSS, after resolving CSS escapes (`\6a avascript:`) and removing
+comments, and each finding is quoted: `</style` in any case (also
+`<\/style`), `<!--`, `-->`, `<script`, `expression(`, `javascript:`,
+`vbscript:`, `behavior:`, `-moz-binding`, `@import`, and a `data:` URL
+that is not an image (allowed: `image/svg+xml`, png, jpeg, gif, webp,
+avif). A general `</` is not refused, because an SVG data URL closes its
+own tags. CSS a change did not touch is left as stored.
+
 Everything else is as for blocks: `expected_modified`, `wpmcp_locked`
 while a person has the page open (Elementor's editor holds the same post
 lock), published pages only at the *Drafts and published pages* level or
@@ -1172,6 +1186,10 @@ Each suite exists because of a specific failure:
   until the cache was cleared by hand. Pins which URLs Speed Optimizer is
   asked to clear, with each of its three APIs; the SiteGround suite in
   `tests/wp-real/siteground` watches the plugin itself clear its cache.
+- **elementor-css** — an SVG background in a widget's Custom CSS was
+  refused as markup. Pins that CSS settings are judged as CSS: image data
+  URLs pass, raw and percent-encoded, and every way CSS can run code,
+  load something or end its style sheet is refused, escapes included.
 - **create-and-batch** — a 75-block dry run said "ok" without looking at
   the tree. Also that a batch with one bad item saves nothing.
 - **run-integration** — loads real `block.json` files and checks the

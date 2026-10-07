@@ -45,6 +45,137 @@ function wpmcp_elementor_runs_code_scheme( $value ) {
 }
 
 /**
+ * Settings of an element that hold CSS, as unit keys ("a1b2c3d:custom_css").
+ *
+ * A CSS setting is printed into a style sheet, never into the page as
+ * markup, so kses is the wrong judge for it: it read the "<svg" of an
+ * SVG data URL as a tag, and the background image was refused. A setting
+ * is CSS when Elementor registered it as a code control in CSS (Elementor
+ * Pro's custom_css is one), and by its name, custom_css, where the
+ * controls cannot be asked: Pro is what registers it, and a page saved
+ * with Pro keeps it after Pro is gone.
+ *
+ * @param array $elements Element list.
+ * @return array<string, bool>
+ */
+function wpmcp_elementor_css_units( array $elements ) {
+	$units = array();
+	foreach ( $elements as $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+		$id       = (string) ( $element['id'] ?? '' );
+		$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+		$controls = array();
+		if ( ! empty( $settings ) && class_exists( '\\Elementor\\Plugin' ) && isset( \Elementor\Plugin::$instance ) && function_exists( 'wpmcp_elementor_type_of' ) ) {
+			$type     = wpmcp_elementor_type_of( $element );
+			$controls = $type ? (array) $type->get_controls() : array();
+		}
+		foreach ( $settings as $key => $value ) {
+			if ( ! is_string( $value ) ) {
+				continue;
+			}
+			$control = $controls[ $key ] ?? null;
+			$is_css  = is_array( $control )
+				? ( 'code' === ( $control['type'] ?? '' ) && 'css' === strtolower( (string) ( $control['language'] ?? '' ) ) )
+				: false;
+			if ( $is_css || 'custom_css' === (string) $key ) {
+				$units[ $id . ':' . $key ] = true;
+			}
+		}
+		if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+			$units += wpmcp_elementor_css_units( $element['elements'] );
+		}
+	}
+	return $units;
+}
+
+/**
+ * CSS with its escapes resolved and its comments removed: what the
+ * browser's tokenizer works with. "\6a avascript:" is "javascript:",
+ * "expr/ * * /ession(" (without the spaces) is "expression(".
+ *
+ * @param string $css CSS.
+ * @return string
+ */
+function wpmcp_css_plain( $css ) {
+	$css = (string) preg_replace( '#/\*.*?(\*/|$)#s', '', (string) $css );
+	$css = (string) preg_replace_callback(
+		'/\\\\([0-9a-fA-F]{1,6})[ \t\n\r\f]?|\\\\([^\n0-9a-fA-F])/',
+		function ( $m ) {
+			if ( isset( $m[2] ) && '' !== $m[2] ) {
+				return $m[2];
+			}
+			$code = hexdec( $m[1] );
+			return ( $code > 0 && $code <= 0x10FFFF ) ? (string) mb_chr( (int) $code, 'UTF-8' ) : "\u{FFFD}";
+		},
+		$css
+	);
+	return $css;
+}
+
+/**
+ * What in a piece of CSS could run code, load something, or break out
+ * of the style sheet, each as the fragment found.
+ *
+ * - The end of the surrounding <style> element: "</style" in any case,
+ *   also escaped as "<\/style", and "<!--", "-->", "<script". A general
+ *   "</" is not refused: an SVG data URL closes its own tags ("</svg>"),
+ *   and in a style element only "</style" ends it.
+ * - expression( (old Internet Explorer runs it).
+ * - javascript: and vbscript:, wherever they stand.
+ * - behavior: and -moz-binding (they load code into the page).
+ * - @import (loads a style sheet from anywhere, and with it selectors
+ *   that can read the page out).
+ * - A data: URL that is not an image (image/svg+xml, png, jpeg, gif,
+ *   webp, avif).
+ *
+ * Judged on the CSS as written and on its plain form (escapes resolved,
+ * comments gone), with spaces and control characters dropped for the
+ * keywords.
+ *
+ * @param string $css CSS.
+ * @return string[] Fragments, as found.
+ */
+function wpmcp_css_dangers( $css ) {
+	$css    = (string) $css;
+	$plain  = wpmcp_css_plain( $css );
+	$tight  = strtolower( (string) preg_replace( '/[\x00-\x20]+/', '', $plain ) );
+	$found  = array();
+	$checks = array(
+		'#<\\\\?/\s*style#i' => array( $css, $plain ),
+		'#<!--#'            => array( $css, $plain ),
+		'#-->#'             => array( $css, $plain ),
+		'#<\s*script#i'     => array( $css, $plain ),
+	);
+	foreach ( $checks as $pattern => $texts ) {
+		foreach ( $texts as $text ) {
+			if ( preg_match( $pattern, $text, $m ) ) {
+				$found[] = $m[0];
+				break;
+			}
+		}
+	}
+
+	foreach ( array( 'expression(', 'javascript:', 'vbscript:', 'behavior:', '-moz-binding', '@import' ) as $word ) {
+		if ( false !== strpos( $tight, $word ) ) {
+			$found[] = $word;
+		}
+	}
+
+	$images = array( 'image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/avif' );
+	if ( preg_match_all( '#data:\s*([a-z0-9.+/-]*)#i', $plain, $m ) ) {
+		foreach ( $m[1] as $i => $mime ) {
+			if ( ! in_array( strtolower( $mime ), $images, true ) ) {
+				$found[] = $m[0][ $i ];
+			}
+		}
+	}
+
+	return array_values( array_unique( $found ) );
+}
+
+/**
  * Store structured data safely in every string the change touched.
  *
  * The same normalisation the block path applies (wpmcp_normalize_jsonld):
@@ -113,9 +244,13 @@ function wpmcp_elementor_guard( array $before, array $after, $post = null ) {
 	$before_units = wpmcp_elementor_strings( $before );
 	$after_units  = wpmcp_elementor_strings( $after );
 
+	// CSS is judged as CSS, never by kses (see wpmcp_css_dangers()).
+	$css_units = wpmcp_elementor_css_units( $after ) + wpmcp_elementor_css_units( $before );
+
 	$errors  = array();
 	$dynamic = array();
 	$schemes = array();
+	$css     = array();
 
 	foreach ( $after_units as $key => $value ) {
 		if ( ( $before_units[ $key ] ?? null ) === $value ) {
@@ -124,6 +259,13 @@ function wpmcp_elementor_guard( array $before, array $after, $post = null ) {
 		list( , $setting ) = explode( ':', $key, 2 );
 		if ( '__dynamic__' === $setting || 0 === strpos( $setting, '__dynamic__.' ) ) {
 			$dynamic[] = $key;
+			continue;
+		}
+		if ( isset( $css_units[ $key ] ) ) {
+			$found = wpmcp_css_dangers( $value );
+			if ( ! empty( $found ) ) {
+				$css[] = sprintf( '%s (%s)', $key, implode( ', ', array_map( function ( $f ) { return '"' . $f . '"'; }, $found ) ) );
+			}
 			continue;
 		}
 		if ( false === strpos( $value, '<' ) && wpmcp_elementor_runs_code_scheme( $value ) ) {
@@ -144,13 +286,22 @@ function wpmcp_elementor_guard( array $before, array $after, $post = null ) {
 		);
 	}
 
-	// Only strings with markup are kses's business; see above.
-	$with_markup = function ( $units ) {
+	if ( ! empty( $css ) ) {
+		$errors[] = sprintf(
+			'This CSS could run code, load something from elsewhere or end the style sheet it is printed in: %s. Refused in CSS: "</style", "<!--", "-->", "<script", expression(), javascript: and vbscript:, behavior and -moz-binding, @import, and data: URLs other than images (image/svg+xml, png, jpeg, gif, webp, avif). CSS escapes count as what they stand for. An SVG or other image as a data: URL is fine.',
+			implode( '; ', $css )
+		);
+	}
+
+	// Only strings with markup are kses's business; see above. CSS is not
+	// markup, whatever "<" an SVG data URL holds.
+	$with_markup = function ( $units ) use ( $css_units ) {
 		return array_filter(
 			$units,
-			function ( $value ) {
-				return false !== strpos( (string) $value, '<' );
-			}
+			function ( $value, $key ) use ( $css_units ) {
+				return ! isset( $css_units[ $key ] ) && false !== strpos( (string) $value, '<' );
+			},
+			ARRAY_FILTER_USE_BOTH
 		);
 	};
 
