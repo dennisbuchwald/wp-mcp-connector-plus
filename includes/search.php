@@ -246,7 +246,20 @@ function wpmcp_search_candidate_ids( array $visibility, $needle ) {
 
 	$where = wpmcp_list_where( $visibility );
 	if ( '' !== $needle ) {
-		$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_content LIKE %s", '%' . $wpdb->esc_like( $needle ) . '%' );
+		$like = '%' . $wpdb->esc_like( $needle ) . '%';
+		if ( function_exists( 'wpmcp_elementor_search' ) ) {
+			// Elementor runs (its tools are loaded). An Elementor page holds its markup in _elementor_data; its
+			// post_content is a plain-text copy without links or attributes.
+			// The needle is cut at every character JSON escapes, so it
+			// matches the stored JSON verbatim.
+			$where .= $wpdb->prepare(
+				" AND ( {$wpdb->posts}.post_content LIKE %s OR {$wpdb->posts}.ID IN ( SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_elementor_data' AND meta_value LIKE %s ) )",
+				$like,
+				$like
+			);
+		} else {
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_content LIKE %s", $like );
+		}
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- every value in $where is prepared or escaped.
@@ -327,10 +340,15 @@ function wpmcp_search_list( $value ) {
  * @return array|\WP_Error Hits, or an error when the pattern failed on this post.
  */
 function wpmcp_search_in_post( $post, $query, $is_regex, $context ) {
-	$blocks = parse_blocks( $post->post_content );
-	$hits   = array();
+	$hits = array();
 
-	$failed = wpmcp_search_blocks( $blocks, array(), $query, $is_regex, $context, $hits );
+	// An Elementor page is searched in its elements, not in its
+	// plain-text copy: hits name the element id elementor-write takes.
+	if ( function_exists( 'wpmcp_elementor_search' ) && wpmcp_elementor_built( $post ) ) {
+		$failed = wpmcp_elementor_search( $post->ID, $query, $is_regex, $context, $hits );
+	} else {
+		$failed = wpmcp_search_blocks( parse_blocks( $post->post_content ), array(), $query, $is_regex, $context, $hits );
+	}
 	if ( is_wp_error( $failed ) ) {
 		return new \WP_Error(
 			'wpmcp_bad_regex',

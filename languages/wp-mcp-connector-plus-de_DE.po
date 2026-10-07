@@ -14,111 +14,119 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: includes/abilities.php:127
+#: includes/abilities.php:128
 msgid "Site info"
 msgstr "Website-Info"
 
-#: includes/abilities.php:140
+#: includes/abilities.php:141
 msgid "Block catalog"
 msgstr "Block-Katalog"
 
-#: includes/abilities.php:171
+#: includes/abilities.php:172
 msgid "Block details"
 msgstr "Block-Details"
 
-#: includes/abilities.php:208
+#: includes/abilities.php:209
 msgid "List content"
 msgstr "Inhalte auflisten"
 
-#: includes/abilities.php:248
+#: includes/abilities.php:249
 msgid "Read page as block tree"
 msgstr "Seite als Blockbaum lesen"
 
-#: includes/abilities.php:309
+#: includes/abilities.php:310
 msgid "Write block tree"
 msgstr "Blockbaum schreiben"
 
-#: includes/abilities.php:367
+#: includes/abilities.php:368
 msgid "Duplicate page"
 msgstr "Seite duplizieren"
 
-#: includes/abilities.php:392
+#: includes/abilities.php:393
 msgid "Preview"
 msgstr "Vorschau"
 
-#: includes/abilities.php:424
+#: includes/abilities.php:425
 msgid "Revisions"
 msgstr "Revisionen"
 
-#: includes/abilities.php:451
+#: includes/abilities.php:452
 msgid "Restore revision"
 msgstr "Revision wiederherstellen"
 
-#: includes/abilities.php:482
+#: includes/abilities.php:483
 msgid "Search content"
 msgstr "Inhalte durchsuchen"
 
-#: includes/abilities.php:534
+#: includes/abilities.php:535
 msgid "Fetch delivered page"
 msgstr "Ausgelieferte Seite abrufen"
 
-#: includes/abilities.php:577
+#: includes/abilities.php:578
 msgid "Create page"
 msgstr "Seite anlegen"
 
-#: includes/abilities.php:628
+#: includes/abilities.php:629
 msgid "Browse media library"
 msgstr "Mediathek durchsuchen"
 
-#: includes/abilities.php:664
+#: includes/abilities.php:665
 msgid "Read media item"
 msgstr "Mediendatei lesen"
 
-#: includes/abilities.php:686
+#: includes/abilities.php:687
 msgid "Label media item"
 msgstr "Mediendatei beschriften"
 
-#: includes/abilities.php:720
+#: includes/abilities.php:721
 msgid "Write several pages"
 msgstr "Mehrere Seiten schreiben"
 
-#: includes/abilities.php:744
+#: includes/abilities.php:745
 msgid "Upload image"
 msgstr "Bild hochladen"
 
-#: includes/access.php:34
+#: includes/abilities.php:786
+msgid "Read Elementor page"
+msgstr "Elementor-Seite lesen"
+
+#: includes/abilities.php:813
+msgid "Write Elementor page"
+msgstr "Elementor-Seite schreiben"
+
+#: includes/access.php:38
 msgid "Read only"
 msgstr "Nur lesen"
 
-#: includes/access.php:35
+#: includes/access.php:39
 msgid "The agent can look at the site and explain it. No write tools exist at all. Note: published content only — WordPress requires an editing capability to read drafts, so drafts stay invisible at this level."
 msgstr "Der Agent kann sich die Website ansehen und erklären. Schreibwerkzeuge gibt es gar nicht. Hinweis: nur veröffentlichte Inhalte. WordPress verlangt zum Lesen von Entwürfen ein Bearbeitungsrecht, Entwürfe bleiben auf dieser Stufe also unsichtbar."
 
-#: includes/access.php:38
+#: includes/access.php:42
 msgid "Drafts"
 msgstr "Entwürfe"
 
-#: includes/access.php:39
+#: includes/access.php:43
 msgid "The agent can create new pages, duplicate existing ones and edit drafts. Published pages are read-only to it."
 msgstr "Der Agent kann neue Seiten anlegen, bestehende duplizieren und Entwürfe bearbeiten. Veröffentlichte Seiten kann er nur lesen."
 
-#: includes/access.php:42
+#: includes/access.php:46
 msgid "Drafts and published pages"
 msgstr "Entwürfe und veröffentlichte Seiten"
 
-#: includes/access.php:43
+#: includes/access.php:47
 msgid "As above, and the agent may change published pages directly. Every change still creates a revision."
 msgstr "Wie oben, und der Agent darf veröffentlichte Seiten direkt ändern. Jede Änderung legt weiterhin eine Revision an."
 
-#: includes/access.php:417
+#: includes/access.php:421
 msgid "1 hour"
 msgstr "1 Stunde"
 
-#: includes/access.php:418
+#: includes/access.php:422
 msgid "4 hours"
 msgstr "4 Stunden"
 
-#: includes/access.php:419
+#: includes/access.php:423
 msgid "8 hours"
 msgstr "8 Stunden"
 
@@ -756,7 +764,7 @@ msgstr "Anwendungspasswort"
 msgid "Authorization header"
 msgstr "Authorization-Header"
 
-#: includes/tree.php:354
+#: includes/tree.php:373
 msgid "untitled"
 msgstr "ohne Titel"
 
@@ -770,12 +778,12 @@ msgstr "WP MCP Connector Plus ist inaktiv."
 msgid "It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector."
 msgstr "Er braucht die Abilities API, die mit WordPress 6.9 kommt. Diese Website läuft mit %s, deshalb wurden keine Abilities registriert. Für den Connector WordPress aktualisieren."
 
-#: wp-mcp-connector-plus.php:236
+#: wp-mcp-connector-plus.php:242
 msgid "WP MCP Connector Plus:"
 msgstr "WP MCP Connector Plus:"
 
 #. translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions
-#: wp-mcp-connector-plus.php:239
+#: wp-mcp-connector-plus.php:245
 #, php-format
 msgid "The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1."
 msgstr "Der MCP-Server wurde nicht gestartet. Ein anderes Plugin hat mcp-adapter %1$s geladen, dessen Schnittstelle dieses Plugin nicht bedienen kann (getestet mit %2$s). Die Abilities selbst bleiben über wp-abilities/v1 erreichbar."

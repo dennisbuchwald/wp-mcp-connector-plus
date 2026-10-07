@@ -121,8 +121,9 @@ echo "\n\033[1mWas jede Sitzung im Kontext traegt\033[0m\n";
 $src = file_get_contents( $root . '/includes/abilities.php' );
 preg_match_all( "/^\t\t'(wpmcp\/[a-z-]+)' => array\($/m", $src, $names, PREG_OFFSET_CAPTURE );
 
-$total   = 0;
-$largest = array( 'name' => '', 'len' => 0 );
+$total     = 0;
+$elementor = 0;
+$largest   = array( 'name' => '', 'len' => 0 );
 
 // From the entry in wpmcp_ability_definitions(): the name also appears
 // earlier, in the annotation table, where there is no description to
@@ -132,8 +133,15 @@ foreach ( $names[1] as list( $name, $at ) ) {
 	if ( ! preg_match( "/'description' => '((?:[^'\\\\]|\\\\.)*)'/", $chunk, $d ) ) {
 		continue;
 	}
-	$len    = strlen( stripslashes( $d[1] ) );
-	$total += $len;
+	$len = strlen( stripslashes( $d[1] ) );
+	// The Elementor tools are registered only where Elementor runs
+	// (wpmcp_offered_where_supported), so they have a budget of their own
+	// on top: every other site never carries them.
+	if ( 0 === strpos( $name, 'wpmcp/elementor-' ) ) {
+		$elementor += $len;
+	} else {
+		$total += $len;
+	}
 	if ( $len > $largest['len'] ) {
 		$largest = array( 'name' => $name, 'len' => $len );
 	}
@@ -149,6 +157,11 @@ check(
 	'ueber 11000 Zeichen - pruefen, was sich doppelt'
 );
 check(
+	$elementor > 0 && $elementor < 2500,
+	sprintf( 'dazu auf Elementor-Seiten: %s Zeichen (~%d Tokens)', number_format( $elementor ), (int) ( $elementor / 4 ) ),
+	'ueber 2500 Zeichen fuer zwei Werkzeuge - pruefen, was sich doppelt'
+);
+check(
 	$largest['len'] < 2000,
 	sprintf( 'die laengste ist %s mit %d Zeichen (~%d Tokens)', $largest['name'], $largest['len'], (int) ( $largest['len'] / 4 ) ),
 	'eine Beschreibung ueber 2000 Zeichen erklaert etwas zweimal'
@@ -159,7 +172,7 @@ echo "\n\033[1mJeder Fehlercode ist dokumentiert\033[0m\n";
 // The codes are the part of an answer an agent can branch on, so they are
 // contract. One that exists only in the code is one nobody can rely on.
 $codes = array();
-foreach ( glob( $root . '/includes/*.php' ) as $file ) {
+foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/*/*.php' ) ) as $file ) {
 	$php = file_get_contents( $file );
 	preg_match_all( "/WP_Error\(\s*'(wpmcp_[a-z_]+)'/", $php, $m );
 	$codes = array_merge( $codes, $m[1] );
@@ -241,7 +254,7 @@ if ( is_file( $pot ) && is_file( $po ) ) {
 $xgettext = trim( (string) shell_exec( 'command -v xgettext 2>/dev/null' ) );
 if ( '' !== $xgettext && is_file( $pot ) ) {
 	$fresh = tempnam( sys_get_temp_dir(), 'wpmcp-pot' );
-	$files = array_merge( array( 'wp-mcp-connector-plus.php', 'uninstall.php' ), array_map( function ( $f ) use ( $root ) { return substr( $f, strlen( $root ) + 1 ); }, glob( $root . '/includes/*.php' ) ) );
+	$files = array_merge( array( 'wp-mcp-connector-plus.php', 'uninstall.php' ), array_map( function ( $f ) use ( $root ) { return substr( $f, strlen( $root ) + 1 ); }, array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/*/*.php' ) ) ) );
 	$cmd   = 'cd ' . escapeshellarg( $root ) . ' && ' . escapeshellarg( $xgettext ) . ' --language=PHP --from-code=UTF-8'
 		. ' --keyword=__ --keyword=_e --keyword=esc_html__ --keyword=esc_html_e --keyword=esc_attr__ --keyword=esc_attr_e'
 		. ' --keyword=_x:1,2c --keyword=_n:1,2 --keyword=_nx:1,2,4c --keyword=esc_html_x:1,2c --keyword=esc_attr_x:1,2c --keyword=_n_noop:1,2'

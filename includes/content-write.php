@@ -505,6 +505,14 @@ function wpmcp_write_content( array $args, $checked = null, &$plan_out = null ) 
 		return $target;
 	}
 
+	// Blocks written into an Elementor page are never seen and then lost.
+	// Meta and placement are not content and stay writable.
+	$writes_blocks = ( isset( $args['ops'] ) && '' !== $args['ops'] && array() !== $args['ops'] )
+		|| ( isset( $args['tree'] ) && '' !== $args['tree'] && array() !== $args['tree'] );
+	if ( $writes_blocks && wpmcp_elementor_built( $post ) ) {
+		return wpmcp_elementor_page_error( $post, 'A block write' );
+	}
+
 	// Optimistic locking. The agent reads, thinks, then writes; in between
 	// a human may have saved the same page. Without this the human's work
 	// disappears silently.

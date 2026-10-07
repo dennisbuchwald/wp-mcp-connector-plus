@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/post-types.php';
+require_once __DIR__ . '/builders.php';
 require_once __DIR__ . '/content-access.php';
 require_once __DIR__ . '/content-read.php';
 require_once __DIR__ . '/content-write.php';

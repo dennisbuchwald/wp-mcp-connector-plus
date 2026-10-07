@@ -148,6 +148,11 @@ function wpmcp_load_abilities() {
 	require_once WPMCP_DIR . 'includes/media.php';
 	require_once WPMCP_DIR . 'includes/abilities.php';
 
+	// Elementor pages, only where Elementor runs (wpmcp_elementor_active()).
+	if ( wpmcp_elementor_active() ) {
+		require_once WPMCP_DIR . 'includes/elementor/module.php';
+	}
+
 	wpmcp_register_abilities();
 }
 add_action( 'wp_abilities_api_init', 'wpmcp_load_abilities' );

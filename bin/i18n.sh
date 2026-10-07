@@ -28,7 +28,7 @@ xgettext --language=PHP --from-code=UTF-8 \
 	--msgid-bugs-address="https://github.com/dennisbuchwald/wp-mcp-connector-plus/issues" \
 	--sort-by-file --no-wrap \
 	-o "$POT" \
-	wp-mcp-connector-plus.php uninstall.php includes/*.php
+	wp-mcp-connector-plus.php uninstall.php includes/*.php includes/*/*.php
 
 # A template, not a translation: no creation date, so an unchanged source
 # gives an unchanged file and an empty diff.

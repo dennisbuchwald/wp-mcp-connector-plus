@@ -239,6 +239,17 @@ function wpmcp_site_info() {
 
 	$info['plugins'] = wpmcp_relevant_plugins();
 
+	// Which pages are blocks and which are Elementor decides which tools
+	// apply, page by page; content-list says it per page ("builtWith").
+	if ( wpmcp_elementor_active() ) {
+		$info['elementor'] = array(
+			'version'  => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
+			'pro'      => defined( 'ELEMENTOR_PRO_VERSION' ) ? ELEMENTOR_PRO_VERSION : null,
+			'tools'    => array_map( 'wpmcp_short_ability_name', array_values( array_intersect( array( 'wpmcp/elementor-read', 'wpmcp/elementor-write' ), $available ) ) ),
+			'explains' => 'Elementor runs here. A page built with it (content-list: builtWith "elementor") keeps its content in Elementor\'s element tree: read it with elementor-read and change it with elementor-write, by element id. The block tools refuse to write such a page; SEO meta, slug and status still go through content-write. Pages of Elementor\'s Atomic editor are read-only, and its theme-builder templates (headers, footers) are out of scope unless the site owner adds the "elementor_library" post type.',
+		);
+	}
+
 	if ( function_exists( 'dbw_get_settings' ) ) {
 		$settings = dbw_get_settings();
 		$modules  = array();

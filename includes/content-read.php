@@ -222,6 +222,10 @@ function wpmcp_list_content( array $args ) {
 			'modified' => $post->post_modified_gmt,
 			'blocks'   => wpmcp_count_blocks_in_markup( $post->post_content ),
 		);
+		if ( wpmcp_elementor_built( $post ) ) {
+			$items[ count( $items ) - 1 ]['blocks']    = 0;
+			$items[ count( $items ) - 1 ]['builtWith'] = 'elementor';
+		}
 	}
 
 	return array(
@@ -268,6 +272,17 @@ function wpmcp_read_content( $post_id, $mode = 'outline', $path = '', $include_d
 
 	if ( $with_meta ) {
 		$result['meta'] = wpmcp_read_meta( $post );
+	}
+
+	// post_content of an Elementor page is a plain-text copy for search,
+	// one freeform "block" of it. Read as a block tree it looks like a page
+	// without structure, and a write to it is never seen.
+	if ( wpmcp_elementor_built( $post ) ) {
+		$result['blockCount'] = 0;
+		$result['builtWith']  = 'elementor';
+		$result['explains']   = 'This page is built with Elementor: its content is Elementor\'s element tree, not blocks. Read it with elementor-read and change it with elementor-write. SEO meta (include_meta here, meta in content-write) applies as on any page.';
+		$result[ 'outline' === $mode ? 'outline' : 'tree' ] = array();
+		return $result;
 	}
 
 	if ( 'outline' === $mode ) {
@@ -374,9 +389,17 @@ function wpmcp_render_post_html( $post, $offset = 0 ) {
 	// One render: the check's result is the preview. Rendering again for
 	// the answer doubled the cost of every preview, and a block that
 	// echoes would have printed into the response outside any buffer.
-	$smoke = wpmcp_render_smoke_test( $post->post_content );
-	if ( is_wp_error( $smoke ) ) {
-		return $smoke;
+	// An Elementor page renders from its element data, through Elementor.
+	if ( wpmcp_elementor_built( $post ) && function_exists( 'wpmcp_elementor_render' ) ) {
+		$smoke = array(
+			'html'    => wpmcp_elementor_render( $post->ID ),
+			'notices' => array(),
+		);
+	} else {
+		$smoke = wpmcp_render_smoke_test( $post->post_content );
+		if ( is_wp_error( $smoke ) ) {
+			return $smoke;
+		}
 	}
 
 	$html = do_shortcode( $smoke['html'] );

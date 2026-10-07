@@ -25,7 +25,11 @@ function wpmcp_allowed_post_types() {
 	$types = array();
 	foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
 		// Media has its own tools; an attachment holds no block tree.
-		if ( in_array( $type->name, array( 'attachment' ), true ) ) {
+		// Elementor's template library is public in WordPress's sense, but
+		// its headers, footers and popups land on every page at once, like
+		// a theme's elements: a decision for the settings screen, where it
+		// is offered under "Additional post types", not a default.
+		if ( in_array( $type->name, array( 'attachment', 'elementor_library' ), true ) ) {
 			continue;
 		}
 		$types[] = $type->name;

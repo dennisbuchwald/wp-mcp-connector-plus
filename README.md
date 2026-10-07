@@ -48,8 +48,9 @@ content — subtly malformed markup that looks fine and breaks silently.
 
 - WordPress **6.9 or newer** (the Abilities API lives in core from 6.9)
 - PHP **8.1 or newer**
-- Content made of Gutenberg blocks. Page-builder sites (Elementor, WPBakery)
-  have no block tree for this to work on.
+- Content made of Gutenberg blocks, or classic Elementor pages (Elementor
+  4.3 or newer, containers or sections; see [Elementor](#elementor)). Other
+  page builders (WPBakery, Divi) have no tree for this to work on.
 
 ## Setup
 
@@ -279,6 +280,10 @@ tools there are, because a connected client keeps the list it was given.
 After raising the level, reconnect the client; `site-info` says so in
 `capabilities.explains`.
 
+Where Elementor runs, there is one more of each: `elementor-read` with the
+read tools and `elementor-write` with the write tools. On any other site
+they are not registered.
+
 | Ability | What it does |
 |---|---|
 | `wpmcp/site-info` | Versions, post types, design tokens from `theme.json`. The first call of any session, so nothing has to be guessed. |
@@ -299,6 +304,8 @@ After raising the level, reconnect the client; `site-info` says so in
 | `wpmcp/media-read` | One attachment in the same shape. Takes `id`, or `post_id` like every other tool. |
 | `wpmcp/media-update` | *Write levels only.* Sets alt text or title. No delete, no file replacement. |
 | `wpmcp/media-upload` | *Write levels only, works only in a work session.* A JPEG, PNG or WebP into the media library, alt text required. Outside a session it answers `wpmcp_session_required`. |
+| `wpmcp/elementor-read` | *Only where Elementor runs.* An Elementor page as an outline of its elements (id, path, type) with what each HTML widget says, or one element in full with its markup verbatim. |
+| `wpmcp/elementor-write` | *Only where Elementor runs, write levels only.* Operations by element id (`patch_html`, `set_html`, `set_settings`, `insert`, `duplicate`, `move`, `remove`), saved through Elementor itself. Dry run by default. |
 
 Every ability carries the MCP tool hints (`readOnlyHint`, `destructiveHint`,
 `idempotentHint`, `openWorldHint`), all four set explicitly, because MCP
@@ -349,6 +356,7 @@ carry a code an agent can branch on:
 |---|---|
 | `wpmcp_anchor_not_unique` | `patch_html`: the text to find occurs zero or several times in the block. |
 | `wpmcp_bad_block` | An inserted or replacing block is not a valid block. |
+| `wpmcp_bad_element` | `elementor-write`: an inserted element is malformed (no `elType`, a widget without `widgetType`, a child its type cannot hold). |
 | `wpmcp_bad_op` | A patch operation is malformed or misses a required field. |
 | `wpmcp_bad_parent` | The parent does not exist, is the page itself, another post type or would form a loop. |
 | `wpmcp_bad_path` | A block path is malformed. |
@@ -359,6 +367,10 @@ carry a code an agent can branch on:
 | `wpmcp_bad_upload` | `media-upload`: `data` is not valid base64. |
 | `wpmcp_batch_incomplete` | `content-batch`: a save failed after every dry run passed; the posts before it are saved. |
 | `wpmcp_dynamic_data_blocked` | The page holds dynamic data and the site has not allowed saving it. |
+| `wpmcp_element_not_found` | `elementor-read`, `elementor-write`: no element with that id on the page. |
+| `wpmcp_elementor_atomic` | `elementor-write`: the page holds elements of Elementor's Atomic editor (or one was sent); such pages are read-only here. |
+| `wpmcp_elementor_data_invalid` | The page's stored Elementor data is not valid JSON. |
+| `wpmcp_elementor_page` | `content-write` (with `ops` or `tree`), `content-batch`, `content-restore`: the post is built with Elementor; use `elementor-write`. Meta, slug, parent and status still go through `content-write`. |
 | `wpmcp_forbidden` | The account lacks the WordPress capability for this post or attachment. |
 | `wpmcp_forbidden_type` | The post type is outside the connector's scope. |
 | `wpmcp_live_edit_disabled` | The post is published and the access level keeps published pages read-only. |
@@ -366,6 +378,7 @@ carry a code an agent can branch on:
 | `wpmcp_no_app_passwords` | Setup (admin): application passwords are not available on this site. |
 | `wpmcp_no_permalink` | `content-fetch-live`: the post has no public URL. |
 | `wpmcp_nonce` | Setup (admin): the form's security check failed. |
+| `wpmcp_not_elementor` | `elementor-read`, `elementor-write`: the post is not built with Elementor; use the block tools. |
 | `wpmcp_not_found` | No post or attachment with that ID. |
 | `wpmcp_not_public` | `content-fetch-live`: the post is not public; use `content-preview`. |
 | `wpmcp_password_protected` | The post is password protected; reading it needs the right to edit it. |
@@ -375,10 +388,10 @@ carry a code an agent can branch on:
 | `wpmcp_render_failed` | A block threw while rendering. |
 | `wpmcp_rest_scope` | The agent account called a REST route other than the MCP endpoint. |
 | `wpmcp_runs_code` | The element executes its content as PHP and is not writable. |
-| `wpmcp_save_failed` | WordPress did not save; nothing was changed (for `content-create`: the page was removed again). |
+| `wpmcp_save_failed` | WordPress did not save; nothing was changed (for `content-create`: the page was removed again; for `elementor-write`: Elementor refused the save or stopped with an error). |
 | `wpmcp_session_required` | `media-upload` outside a work session; only the site owner can open one. |
 | `wpmcp_stale` | `expected_modified` no longer matches: someone else saved in between. |
-| `wpmcp_unfiltered_html_unavailable` | The site's configuration makes the dynamic-data save impossible. |
+| `wpmcp_unfiltered_html_unavailable` | The site's configuration makes the dynamic-data save impossible, or (`elementor-write`) would make Elementor strip markup the page holds. |
 | `wpmcp_unsafe_markup` | `content-restore`: the revision was not saved by a person and holds markup kses would filter. |
 | `wpmcp_upload_failed` | `media-upload`: WordPress could not store the file. |
 | `wpmcp_upload_needs_alt` | `media-upload`: no alt text and not marked decorative. |
@@ -526,6 +539,117 @@ JSON-LD sitting in the markup with no `<script>` around it, which renders
 as a wall of text to visitors. It is the fingerprint of a script stripped
 by an earlier unfiltered save, and otherwise only ever gets noticed by
 someone looking at the page.
+
+## Elementor
+
+Classic Elementor pages, built with containers or with sections and
+columns, keep their content in Elementor's own data (`_elementor_data`, a
+JSON tree of elements); `post_content` only holds a plain-text copy for
+search. The block tools see that copy, and what they would write there is
+never shown and is replaced on Elementor's next save. So where Elementor
+runs, the connector has two tools of its own, and the block tools behave
+accordingly:
+
+- `content-list` marks such pages with `builtWith: "elementor"`,
+  `content-read` returns their fields and meta but no outline of the
+  plain-text copy, `content-preview` renders them through Elementor, and
+  `content-search` searches their elements (hits carry `elementId` and
+  `setting` instead of a block path).
+- `content-write` with `ops` or `tree`, `content-batch` items doing the
+  same, and `content-restore` refuse them with `wpmcp_elementor_page`.
+  SEO meta, slug, parent and status are not content and still go through
+  `content-write`.
+
+**Reading.** `elementor-read` returns every element with its id, path and
+type. An HTML widget comes with an outline of what it says: headings with
+their level, the first words of each paragraph, links, images with their
+alt text (`null` when the attribute is missing, `""` when it is empty on
+purpose), and how many scripts, styles, iframes and JSON-LD blocks it
+holds, plus its size. Other widgets bring a short summary (title, text,
+heading size, link, image). With `element_id` the tool returns that one
+element with all its settings, and an HTML widget's markup verbatim, in
+windows of 60000 bytes.
+
+**Writing.** `elementor-write` takes operations by element id, applied in
+order, dry run by default:
+
+```json
+{"post_id": 12, "expected_modified": "2026-10-07 09:12:44", "dry_run": false, "ops": [
+  {"op": "patch_html", "id": "3f2a91c", "find": "<h1>Bootsfuehrerschein", "replace": "<h2>Bootsfuehrerschein"},
+  {"op": "insert", "after": "8c01d2e", "element": {"elType": "container", "elements": [
+    {"elType": "widget", "widgetType": "html", "settings": {"html": "<h2>FAQ</h2>..."}}]}}
+]}
+```
+
+| Operation | Takes | Does |
+|---|---|---|
+| `patch_html` | `id`, `find`, `replace`, `all?`, `setting?` | Replaces text inside an HTML widget's markup (or the text setting named in `setting`). `find` must occur exactly once unless `all` is true. |
+| `set_html` | `id`, `html` | Replaces an HTML widget's markup. |
+| `set_settings` | `id`, `settings` | Merges settings; `null` removes one. Every changed key must be a registered control of the element, with the right type (text, object, number, one of a select's options). |
+| `insert` | `element` or `elements`, `before`, `after` or `inside` | Adds new elements (`{elType, widgetType?, settings?, elements?}`). `inside` takes an id or `"root"` and appends. Ids are generated, seven hex digits like the editor's; ids sent along are ignored. |
+| `duplicate` | `id` | Copies an element with new ids right after the original. |
+| `move` | `id`, `before`, `after` or `inside` | Moves an element; not into itself. |
+| `remove` | `id` | Removes an element and everything in it. |
+
+Nesting follows the editor: the page holds containers or sections, a
+container holds containers and widgets, a section holds columns, a column
+holds widgets and inner sections. `isInner` is set as the editor sets it.
+The answer confirms every operation (with the text around a patch as it
+now reads, and the ids and paths of what was created), and after a real
+write returns `revisionId`, the new `modified` and the cache purge.
+
+**How it is saved.** Through Elementor's own document save, as the editor
+does when a person clicks *Update*: `_elementor_data`, the plain-text copy,
+a revision with the element data on it, and the page's generated CSS file
+and element cache, which Elementor deletes so they are built again on the
+next view. Then the connector purges page caches as after any write.
+
+**What a change may store.** Elementor's answer for an account without
+`unfiltered_html` is to run kses over every string of the page on every
+save. For the agent that would strip the slider script in one widget
+because a heading in another changed. So the save runs with
+`unfiltered_html` granted for that one call, never on the role, and the
+markup guard takes kses's place, string by string: every setting the
+change touched must come out of kses unchanged, or may keep what kses
+would remove only if the stored page already holds it, at least as often.
+Editing the text next to an existing script works; a new script, a
+changed one, an event handler, an iframe or a `javascript:` URL is refused
+with the fragment quoted. A script is identified by where it sits, so
+duplicating a section that carries one is refused too: the page would
+have it twice. JSON-LD holding valid JSON may be written. Plain-text
+settings are not run through kses (it would only turn `&` into `&amp;`
+in a URL), but a `javascript:`, `vbscript:` or `data:` URL in any setting
+is refused, and so is any change to a dynamic tag (`__dynamic__`), which
+makes a setting render something else at view time. Where the site makes
+`unfiltered_html` impossible (`DISALLOW_UNFILTERED_HTML`, multisite), a
+save that would make Elementor strip anything is refused with
+`wpmcp_unfiltered_html_unavailable`.
+
+Everything else is as for blocks: `expected_modified`, `wpmcp_locked`
+while a person has the page open (Elementor's editor holds the same post
+lock), published pages only at the *Drafts and published pages* level or
+in a work session, the activity log.
+
+Elementor rewrites one thing itself: for an account that cannot manage
+the site, its content sanitizer strips every attribute and image from a
+heading widget's title. The dry run says what the title will become, and
+after a save any setting Elementor stored differently is reported.
+
+**Not covered.**
+
+- Pages of Elementor's **Atomic editor** (`e-heading`, `e-flexbox` ...):
+  read, never written (`wpmcp_elementor_atomic`). Their settings are typed
+  props with rules these tools do not know.
+- **Theme-builder templates** (headers, footers, popups in the
+  `elementor_library` post type) are out of scope by default, though
+  WordPress calls the post type public: they land on every page at once.
+  Tick it ("My Templates", `elementor_library`) under *Additional post
+  types* to bring them in; a work session brings them in for its length, like other
+  building-block types.
+- Element types Elementor cannot load (an addon switched off) block the
+  save, because Elementor's save would silently drop them.
+- Page settings (`_elementor_page_settings`), global colours and fonts,
+  Elementor Pro's custom code and display conditions.
 
 ## Safety model
 
@@ -807,6 +931,7 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 - `auth.php`: the AI role, application passwords for the agent only, the fence around the MCP route.
 - `access.php`: access levels, work sessions, the capabilities the agent holds per check, role upkeep.
 - `post-types.php`: which post types are in scope; loaded with `access.php`, because the settings screen needs it where the tools never load.
+- `builders.php`: whether Elementor runs; loaded with `access.php` and with the content tools, because the tool list depends on it.
 - `audit.php`: the log table, writing entries, retention.
 - `preview.php`: signed, time-limited preview links for drafts.
 - `editor.php`: the stamp on pages the agent saved and the notice in the block editor.
@@ -835,6 +960,15 @@ the admin screens only in wp-admin. One line per file in `includes/`:
 - `cache.php`: cache purges and `content-fetch-live`; also loaded alone by the deferred purge cron event.
 - `media.php`: `media-list`, `media-read`, `media-update`, `media-upload`.
 - `abilities.php`: the table of tools (label, description, input schema, callback) and their registration.
+
+**Loaded with the tools, only where Elementor runs** (`includes/elementor/`)
+
+- `module.php`: loads the files below, nothing else.
+- `data.php`: the element tree, ids, paths and operations; no WordPress.
+- `outline.php`: what an HTML widget says (headings, paragraphs, links, images, scripts).
+- `guard.php`: what a change may store, string by string, in place of Elementor's kses.
+- `controls.php`: element types and changed settings checked against Elementor's registered controls.
+- `tools.php`: `elementor-read`, `elementor-write`, the save through Elementor's document, rendering and search.
 
 **wp-admin only**
 
@@ -871,7 +1005,8 @@ A shim answers what its author thought WordPress answers. Where that is
 the whole question, `tests/wp-real` asks WordPress itself: WordPress core
 (pinned, 6.9.8) on the SQLite Database Integration drop-in (pinned, 3.0.2,
 so no MySQL server is needed), with GenerateBlocks (pinned, 2.4.1) active
-as on the customer sites, with the WordPress PHPUnit test library of
+as on the customer sites, Elementor (pinned, 4.3.4) for its own suite,
+with the WordPress PHPUnit test library of
 the same version (`wp-phpunit/wp-phpunit`), PHPUnit 9.6 and the PHPUnit
 Polyfills. `setup.sh` downloads and checks them into the git-ignored
 `tests/wp-real/.cache`; they never touch the plugin's own `vendor/`, which
@@ -891,6 +1026,15 @@ the real main query, update and uninstall on a real database,
 register their containers and what a write without a template stores and
 renders. Its first run found four bugs the shims had passed (see the
 changelog).
+
+The Elementor suite (`tests/wp-real/elementor`, `phpunit-elementor.xml.dist`)
+runs in a second PHPUnit process with Elementor active as well, since a
+plugin cannot be deactivated again inside one. Pages are stored as
+Elementor stores them, the agent works on them through the abilities, and
+what Elementor stored, renders and keeps in its revisions is read back
+from Elementor. `run.sh` runs both suites. Elementor 4.3.4 raises PHP 8.4
+deprecations from its own files and one warning from its content
+sanitizer; the bootstrap drops exactly those, by folder and text.
 
 `run-all.sh` runs it once `setup.sh` has been run, or with `WPMCP_REAL=1`,
 and says it skipped it otherwise. CI runs it as a second job on PHP 8.1 and
@@ -953,6 +1097,11 @@ Each suite exists because of a specific failure:
   the wrappers were dropped. Pins every decision of the wrapper check, and
   the generated wrappers byte for byte against what the block editor
   itself saved for the same attributes.
+- **elementor-data** — the first Elementor customer site keeps every
+  section as one HTML widget, some with a slider script, and Elementor's
+  own save would strip every script on the page for the agent account.
+  Pins the element operations, the ids, the outline and the rule that
+  replaces kses there, without WordPress or Elementor.
 - **create-and-batch** — a 75-block dry run said "ok" without looking at
   the tree. Also that a batch with one bad item saves nothing.
 - **run-integration** — loads real `block.json` files and checks the

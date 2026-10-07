@@ -262,3 +262,40 @@ function wpmcp_grant_caps_for_request( array $caps ) {
 		remove_filter( 'user_has_cap', $grant, 100 );
 	};
 }
+
+/**
+ * Is this post built with Elementor, with Elementor running?
+ *
+ * Elementor marks such a post with `_elementor_edit_mode` = builder and
+ * renders it from `_elementor_data`; post_content then only holds a
+ * plain-text copy for search. Without Elementor running nothing renders
+ * the data, and the page is its post_content again, so the answer is no.
+ *
+ * @param \WP_Post|object $post Post.
+ * @return bool
+ */
+function wpmcp_elementor_built( $post ) {
+	if ( empty( $post->ID ) || ! wpmcp_elementor_active() ) {
+		return false;
+	}
+
+	return 'builder' === get_post_meta( (int) $post->ID, '_elementor_edit_mode', true );
+}
+
+/**
+ * The refusal for a block tool on an Elementor page.
+ *
+ * @param \WP_Post|object $post Post.
+ * @param string          $what What was refused, e.g. "A block write".
+ * @return \WP_Error
+ */
+function wpmcp_elementor_page_error( $post, $what ) {
+	return new \WP_Error(
+		'wpmcp_elementor_page',
+		sprintf(
+			'Post %d is built with Elementor. %s would change post_content, which on this page is only Elementor\'s plain-text copy for search: Elementor renders the page from its own data and writes that copy again on every save, so the change would never be seen and would then be lost. Use elementor-read and elementor-write. SEO meta, slug, parent and status are not content and still go through content-write.',
+			(int) $post->ID,
+			$what
+		)
+	);
+}

@@ -55,6 +55,7 @@ function wpmcp_ability_meta( $name ) {
 		'wpmcp/content-restore'   => array( true, true ),
 		'wpmcp/media-update'      => array( true, true ),
 		'wpmcp/media-upload'      => array( false, false ),
+		'wpmcp/elementor-write'   => array( true, false ),
 	);
 
 	$writes = in_array( $name, wpmcp_write_ability_names(), true );
@@ -777,6 +778,66 @@ function wpmcp_ability_definitions() {
 			),
 			'execute_callback'    => function ( $input ) {
 				return wpmcp_media_upload( is_array( $input ) ? $input : array() );
+			},
+		),
+
+		// Only where Elementor runs: see wpmcp_offered_where_supported().
+		'wpmcp/elementor-read' => array(
+			'label'       => __( 'Read Elementor page', 'wp-mcp-connector-plus' ),
+			'description' => 'Reads from the database. For pages built with Elementor (content-list: builtWith "elementor"), whose content is an element tree, not blocks. Without element_id: an outline of every element with its id, path and type; an HTML widget comes with what it says (headings with level, first words of paragraphs, links, images with alt, scripts present) and its size. With element_id: that element with all its settings, and an HTML widget\'s markup verbatim, in windows of 60000 bytes (offset, nextOffset). Ids are what elementor-write addresses; pass the returned "modified" to it as expected_modified.',
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'post_id'    => array(
+						'type'        => 'integer',
+						'description' => 'The page ID.',
+					),
+					'element_id' => array(
+						'type'        => 'string',
+						'description' => 'One element in full, by its id from the outline.',
+					),
+					'offset'     => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Byte of the HTML widget markup to start at.',
+					),
+				),
+				'required'   => array( 'post_id' ),
+			),
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_elementor_read( is_array( $input ) ? $input : array() );
+			},
+		),
+
+		'wpmcp/elementor-write' => array(
+			'label'       => __( 'Write Elementor page', 'wp-mcp-connector-plus' ),
+			'description' => 'Changes an Elementor page by element id, saved through Elementor itself (revision, plain-text copy, CSS rebuilt). Dry run by default; pass dry_run: false to save. "ops", applied in order: patch_html {id, find, replace, all?, setting?} changes text inside an HTML widget ("setting" names another text setting, e.g. "title"); find must occur exactly once unless all: true. set_html {id, html}. set_settings {id, settings} merges settings, null removes one; keys and types are checked against the widget\'s controls. insert {element or elements, before|after|inside} adds {elType, widgetType?, settings?, elements?}; inside takes an id or "root"; ids are generated. duplicate {id}, move {id, before|after|inside}, remove {id}. Changed markup is judged like content-write: scripts, event handlers, iframes and javascript: URLs cannot be added; ones already in a widget stay when the text around them changes, but are not copied. Dynamic tags are not writable. The answer confirms each operation and returns "modified" for the next write.',
+			'input_schema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'post_id'           => array(
+						'type'        => 'integer',
+						'description' => 'The page ID.',
+					),
+					'ops'               => array(
+						// As content-write: a large argument may arrive as text.
+						'type'        => array( 'array', 'string' ),
+						'description' => 'Operations, e.g. [{"op":"patch_html","id":"a1b2c3d","find":"<h2>Old","replace":"<h2>New"}].',
+					),
+					'dry_run'           => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Validate without saving. Defaults to true — pass false to write.',
+					),
+					'expected_modified' => array(
+						'type'        => 'string',
+						'description' => 'The "modified" value from elementor-read. Refused if the page changed since.',
+					),
+				),
+				'required'   => array( 'post_id', 'ops' ),
+			),
+			'execute_callback'    => function ( $input ) {
+				return wpmcp_elementor_write( is_array( $input ) ? $input : array() );
 			},
 		),
 	);

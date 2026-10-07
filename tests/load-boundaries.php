@@ -56,14 +56,25 @@ function code_only( $file ) {
 }
 
 // The lazy set is what the plugin itself says it loads late: everything
-// wpmcp_load_abilities() requires, plus what content.php pulls in.
+// wpmcp_load_abilities() requires, plus what those files pull in in turn
+// (content.php its siblings, elementor/module.php the Elementor files).
+// Paths are relative to includes/.
 $main = code_only( $root . '/wp-mcp-connector-plus.php' );
 preg_match( '/function\s+wpmcp_load_abilities\s*\(\)\s*\{(.*?)\n\}/s', $main, $loader );
 check( ! empty( $loader[1] ), 'wpmcp_load_abilities() gefunden' );
-preg_match_all( "#includes/([\w.-]+\.php)#", $loader[1] ?? '', $m );
+preg_match_all( "#includes/([\w.-]+(?:/[\w.-]+)*\.php)#", $loader[1] ?? '', $m );
 $lazy = $m[1];
-preg_match_all( "#__DIR__\s*\.\s*'/([\w.-]+\.php)'#", code_only( $root . '/includes/content.php' ), $m );
-$lazy = array_values( array_unique( array_merge( $lazy, $m[1] ) ) );
+for ( $i = 0; $i < count( $lazy ); $i++ ) {
+	$dir = dirname( $lazy[ $i ] );
+	preg_match_all( "#__DIR__\s*\.\s*'/([\w.-]+\.php)'#", code_only( $root . '/includes/' . $lazy[ $i ] ), $m );
+	foreach ( $m[1] as $required ) {
+		$rel = ( '.' === $dir ? '' : $dir . '/' ) . $required;
+		if ( ! in_array( $rel, $lazy, true ) ) {
+			$lazy[] = $rel;
+		}
+	}
+}
+check( in_array( 'elementor/tools.php', $lazy, true ), 'die Elementor-Dateien zaehlen als spaet geladen' );
 
 // A file an always-loaded file requires at load time is always loaded too,
 // even when content.php names it again (post-types.php through access.php).
@@ -97,7 +108,13 @@ foreach ( $always as $rel ) {
 	// Inside the main file, the loader and the cron handler require the
 	// file they call right before calling it.
 	if ( 'wp-mcp-connector-plus.php' === $rel ) {
-		$code = preg_replace( '/function\s+\w+\s*\([^)]*\)\s*\{[^{}]*require_once[^{}]*\}/s', '', $code );
+		$code = preg_replace_callback(
+			'/function\s+\w+\s*\([^)]*\)\s*(\{(?:[^{}]++|(?1))*\})/s',
+			function ( $fn ) {
+				return false === strpos( $fn[0], 'require_once' ) ? $fn[0] : '';
+			},
+			$code
+		);
 	}
 
 	preg_match_all( '/(?<![\w>$:])(wpmcp_\w+)\s*\(/', $code, $m, PREG_OFFSET_CAPTURE );

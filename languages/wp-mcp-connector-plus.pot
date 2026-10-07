@@ -16,111 +16,119 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: includes/abilities.php:127
+#: includes/abilities.php:128
 msgid "Site info"
 msgstr ""
 
-#: includes/abilities.php:140
+#: includes/abilities.php:141
 msgid "Block catalog"
 msgstr ""
 
-#: includes/abilities.php:171
+#: includes/abilities.php:172
 msgid "Block details"
 msgstr ""
 
-#: includes/abilities.php:208
+#: includes/abilities.php:209
 msgid "List content"
 msgstr ""
 
-#: includes/abilities.php:248
+#: includes/abilities.php:249
 msgid "Read page as block tree"
 msgstr ""
 
-#: includes/abilities.php:309
+#: includes/abilities.php:310
 msgid "Write block tree"
 msgstr ""
 
-#: includes/abilities.php:367
+#: includes/abilities.php:368
 msgid "Duplicate page"
 msgstr ""
 
-#: includes/abilities.php:392
+#: includes/abilities.php:393
 msgid "Preview"
 msgstr ""
 
-#: includes/abilities.php:424
+#: includes/abilities.php:425
 msgid "Revisions"
 msgstr ""
 
-#: includes/abilities.php:451
+#: includes/abilities.php:452
 msgid "Restore revision"
 msgstr ""
 
-#: includes/abilities.php:482
+#: includes/abilities.php:483
 msgid "Search content"
 msgstr ""
 
-#: includes/abilities.php:534
+#: includes/abilities.php:535
 msgid "Fetch delivered page"
 msgstr ""
 
-#: includes/abilities.php:577
+#: includes/abilities.php:578
 msgid "Create page"
 msgstr ""
 
-#: includes/abilities.php:628
+#: includes/abilities.php:629
 msgid "Browse media library"
 msgstr ""
 
-#: includes/abilities.php:664
+#: includes/abilities.php:665
 msgid "Read media item"
 msgstr ""
 
-#: includes/abilities.php:686
+#: includes/abilities.php:687
 msgid "Label media item"
 msgstr ""
 
-#: includes/abilities.php:720
+#: includes/abilities.php:721
 msgid "Write several pages"
 msgstr ""
 
-#: includes/abilities.php:744
+#: includes/abilities.php:745
 msgid "Upload image"
 msgstr ""
 
-#: includes/access.php:34
-msgid "Read only"
+#: includes/abilities.php:786
+msgid "Read Elementor page"
 msgstr ""
 
-#: includes/access.php:35
-msgid "The agent can look at the site and explain it. No write tools exist at all. Note: published content only — WordPress requires an editing capability to read drafts, so drafts stay invisible at this level."
+#: includes/abilities.php:813
+msgid "Write Elementor page"
 msgstr ""
 
 #: includes/access.php:38
-msgid "Drafts"
+msgid "Read only"
 msgstr ""
 
 #: includes/access.php:39
-msgid "The agent can create new pages, duplicate existing ones and edit drafts. Published pages are read-only to it."
+msgid "The agent can look at the site and explain it. No write tools exist at all. Note: published content only — WordPress requires an editing capability to read drafts, so drafts stay invisible at this level."
 msgstr ""
 
 #: includes/access.php:42
-msgid "Drafts and published pages"
+msgid "Drafts"
 msgstr ""
 
 #: includes/access.php:43
+msgid "The agent can create new pages, duplicate existing ones and edit drafts. Published pages are read-only to it."
+msgstr ""
+
+#: includes/access.php:46
+msgid "Drafts and published pages"
+msgstr ""
+
+#: includes/access.php:47
 msgid "As above, and the agent may change published pages directly. Every change still creates a revision."
 msgstr ""
 
-#: includes/access.php:417
+#: includes/access.php:421
 msgid "1 hour"
 msgstr ""
 
-#: includes/access.php:418
+#: includes/access.php:422
 msgid "4 hours"
 msgstr ""
 
-#: includes/access.php:419
+#: includes/access.php:423
 msgid "8 hours"
 msgstr ""
 
@@ -758,7 +766,7 @@ msgstr ""
 msgid "Authorization header"
 msgstr ""
 
-#: includes/tree.php:354
+#: includes/tree.php:373
 msgid "untitled"
 msgstr ""
 
@@ -772,12 +780,12 @@ msgstr ""
 msgid "It needs the Abilities API, which ships with WordPress 6.9. This site runs %s, so no abilities were registered. Update WordPress to use the connector."
 msgstr ""
 
-#: wp-mcp-connector-plus.php:236
+#: wp-mcp-connector-plus.php:242
 msgid "WP MCP Connector Plus:"
 msgstr ""
 
 #. translators: 1: loaded mcp-adapter version, 2: comma-separated list of tested versions
-#: wp-mcp-connector-plus.php:239
+#: wp-mcp-connector-plus.php:245
 #, php-format
 msgid "The MCP server was not started. Another plugin loaded mcp-adapter %1$s, whose interface this plugin cannot drive (tested against %2$s). The abilities themselves remain reachable over wp-abilities/v1."
 msgstr ""

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+	The Elementor suite of the real-WordPress layer: the same WordPress,
+	with Elementor active as well. Run through run.sh, which runs both.
+-->
+<phpunit
+	bootstrap="bootstrap.php"
+	backupGlobals="false"
+	cacheResult="false"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	convertErrorsToExceptions="true"
+	convertNoticesToExceptions="true"
+	convertWarningsToExceptions="true"
+	convertDeprecationsToExceptions="true"
+	failOnRisky="true"
+	failOnWarning="true"
+>
+	<php>
+		<env name="WPMCP_REAL_ELEMENTOR" value="1" force="true"/>
+	</php>
+	<testsuites>
+		<testsuite name="real-wordpress-elementor">
+			<directory suffix="Test.php">elementor</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

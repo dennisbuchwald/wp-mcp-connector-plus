@@ -98,6 +98,19 @@ function wpmcp_restore_revision( $post_id, $revision_id, $dry_run = true ) {
 		return $post;
 	}
 
+	// Putting post_content back restores nothing on an Elementor page,
+	// whose content is its element data; Elementor's History panel
+	// restores both together.
+	if ( wpmcp_elementor_built( $post ) ) {
+		return new \WP_Error(
+			'wpmcp_elementor_page',
+			sprintf(
+				'Post %d is built with Elementor. A revision restore here would put back post_content, which is only Elementor\'s plain-text copy, and not the element data the page is rendered from. Restore it in Elementor (History > Revisions), or undo a change with elementor-write.',
+				$post->ID
+			)
+		);
+	}
+
 	$revision_id = (int) $revision_id;
 	$revision    = wp_get_post_revision( $revision_id ); // By reference: a variable, never an expression.
 	if ( ! $revision ) {

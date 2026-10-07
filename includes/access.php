@@ -26,6 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // The settings screen needs the scope on requests where the tools never
 // load, so it lives in a file of its own that is always there.
 require_once __DIR__ . '/post-types.php';
+require_once __DIR__ . '/builders.php';
 
 /**
  * Access levels, widest last.
@@ -605,7 +606,7 @@ add_filter( 'user_has_cap', 'wpmcp_agent_capabilities', 10, 4 );
  * @return string[]
  */
 function wpmcp_write_ability_names() {
-	return array(
+	$names = array(
 		'wpmcp/content-write',
 		'wpmcp/content-batch',
 		'wpmcp/content-create',
@@ -613,7 +614,10 @@ function wpmcp_write_ability_names() {
 		'wpmcp/content-restore',
 		'wpmcp/media-update',
 		'wpmcp/media-upload',
+		'wpmcp/elementor-write',
 	);
+
+	return wpmcp_offered_where_supported( $names );
 }
 
 /**
@@ -645,13 +649,41 @@ function wpmcp_ability_names() {
 		'wpmcp/content-fetch-live',
 		'wpmcp/media-list',
 		'wpmcp/media-read',
+		'wpmcp/elementor-read',
 	);
+
+	$read = wpmcp_offered_where_supported( $read );
 
 	if ( 'read' === wpmcp_configured_access_level() ) {
 		return $read;
 	}
 
 	return array_merge( $read, wpmcp_write_ability_names() );
+}
+
+/**
+ * Leave out the tools for a page builder this site does not run.
+ *
+ * The Elementor tools exist where Elementor runs, and nowhere else: on
+ * any other site they would be two more descriptions in every session
+ * and two tools that can only answer "not here".
+ *
+ * @param string[] $names Ability names.
+ * @return string[]
+ */
+function wpmcp_offered_where_supported( array $names ) {
+	if ( wpmcp_elementor_active() ) {
+		return $names;
+	}
+
+	return array_values(
+		array_filter(
+			$names,
+			function ( $name ) {
+				return 0 !== strpos( $name, 'wpmcp/elementor-' );
+			}
+		)
+	);
 }
 
 /**
