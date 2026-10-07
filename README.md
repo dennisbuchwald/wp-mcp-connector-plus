@@ -1114,7 +1114,7 @@ Each suite exists because of a specific failure:
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
-**v0.18.0.** In daily use on customer sites, reading and writing. Whole
+**v0.20.0.** In daily use on customer sites, reading and writing. Whole
 pages have been built through it — created, filled, given their SEO fields
 and put in the right place in the tree — and long legal texts have been
 corrected across eighteen pages at once.
