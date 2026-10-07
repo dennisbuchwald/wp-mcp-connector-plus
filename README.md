@@ -581,6 +581,14 @@ heading size, link, image). With `element_id` the tool returns that one
 element with all its settings, and an HTML widget's markup verbatim, in
 windows of 60000 bytes.
 
+**Which widgets there are.** `elementor-read` (outline) and
+`site-info.elementor` carry `availableWidgets` (count, and the names when
+there are 20 or fewer) and `disabledByElementManager`. Where three or
+fewer widgets are left, a `hint` says how to build there: a section is a
+container with one html widget, in the classes and markup of a similar
+section read first. That is the setup of staging.maxport.ch, where only
+the HTML widget is switched on.
+
 **Writing.** `elementor-write` takes operations by element id, applied in
 order, dry run by default:
 
@@ -658,7 +666,11 @@ after a save any setting Elementor stored differently is reported.
   types* to bring them in; a work session brings them in for its length, like other
   building-block types.
 - Element types Elementor cannot load (an addon switched off) block the
-  save, because Elementor's save would silently drop them.
+  save, because Elementor's save would silently drop them. A widget
+  switched off under *Elementor > Element Manager* (option
+  `elementor_disabled_elements`) is not loaded either; the refusal says
+  so, as a site-wide setting for a person to decide, and names the widget
+  types the site has.
 - Page settings (`_elementor_page_settings`), global colours and fonts,
   Elementor Pro's custom code and display conditions.
 
@@ -1108,6 +1120,10 @@ Each suite exists because of a specific failure:
   the wrappers were dropped. Pins every decision of the wrapper check, and
   the generated wrappers byte for byte against what the block editor
   itself saved for the same attributes.
+- **sourced-attributes** — a shortcode sent as `attrs.text` was stored as
+  an empty block after a dry run that said ok: WordPress reads that
+  attribute from the markup, never from the block comment. Pins which
+  attributes become markup, which are refused, and the markup proposed.
 - **elementor-data** — the first Elementor customer site keeps every
   section as one HTML widget, some with a slider script, and Elementor's
   own save would strip every script on the page for the agent account.

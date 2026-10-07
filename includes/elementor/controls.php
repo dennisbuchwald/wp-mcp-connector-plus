@@ -36,6 +36,90 @@ function wpmcp_elementor_type_of( array $element ) {
 }
 
 /**
+ * Which widgets this site has, and which Element Manager switched off.
+ *
+ * Elementor > Element Manager stores the widgets it switched off in the
+ * option `elementor_disabled_elements` (Elementor\Modules\ElementManager,
+ * free Elementor since 3.18), and Elementor never registers them
+ * (`elementor/widgets/is_widget_enabled`). On staging.maxport.ch 85 of
+ * the 86 widgets it lists were off, only html was left, and each refused
+ * heading read as a broken connector. Counted as Element Manager lists
+ * them: the widgets of the panel, not the hidden ones every widget
+ * builds on (common, common-base) or the WordPress widgets.
+ *
+ * @return array{available: string[], disabled: string[]}
+ */
+function wpmcp_elementor_widget_availability() {
+	$available = array();
+	foreach ( \Elementor\Plugin::$instance->widgets_manager->get_widget_types() as $name => $widget ) {
+		// The html widget hides itself from accounts without
+		// unfiltered_html, the agent's included; its save is run with
+		// that right for the one call (guard.php), so it counts.
+		if ( ! is_object( $widget ) || $widget instanceof \Elementor\Widget_Common_Base || ( 'html' !== $name && ! $widget->show_in_panel() ) ) {
+			continue;
+		}
+		$available[] = (string) $name;
+	}
+
+	$disabled = array();
+	foreach ( (array) get_option( 'elementor_disabled_elements', array() ) as $name ) {
+		if ( is_string( $name ) && '' !== $name ) {
+			$disabled[] = $name;
+		}
+	}
+
+	return array(
+		'available' => $available,
+		'disabled'  => array_values( array_unique( $disabled ) ),
+	);
+}
+
+/**
+ * What elementor-read and site-info say about the widgets: how many there
+ * are, their names when few, how many Element Manager switched off, and
+ * how to build on a site that has only a handful.
+ *
+ * @return array
+ */
+function wpmcp_elementor_widgets_report() {
+	$widgets = wpmcp_elementor_widget_availability();
+	$count   = count( $widgets['available'] );
+	$report  = array(
+		'availableWidgets'         => array( 'count' => $count ),
+		'disabledByElementManager' => count( $widgets['disabled'] ),
+	);
+	if ( $count <= 20 ) {
+		$report['availableWidgets']['names'] = $widgets['available'];
+	}
+	if ( $count <= 3 ) {
+		$report['hint'] = sprintf(
+			'Only %s can be used here; the other widgets are switched off under Elementor > Element Manager, a site-wide setting for a person to decide. Build a new section as a container with one html widget. Read the html widget of a similar section first (elementor-read with element_id) and reuse its classes and markup; do not invent class names or inline styles. A new script, event handler or iframe is refused; JSON-LD is fine.',
+			0 === $count ? 'no widget' : implode( ', ', $widgets['available'] )
+		);
+	}
+	return $report;
+}
+
+/**
+ * The widgets a site has, as one sentence for a refusal.
+ *
+ * @param string[] $available Widget names.
+ * @return string
+ */
+function wpmcp_elementor_available_sentence( array $available ) {
+	if ( empty( $available ) ) {
+		return 'This site has no widget types switched on.';
+	}
+	$shown = array_slice( $available, 0, 20 );
+	$more  = count( $available ) - count( $shown );
+	$text  = 'Widget types this site has: ' . implode( ', ', $shown ) . ( $more > 0 ? sprintf( ', and %d more', $more ) : '' ) . '.';
+	if ( count( $available ) <= 3 ) {
+		$text .= ' Build with these: a section is a container holding an html widget, in the classes and markup of an existing one.';
+	}
+	return $text;
+}
+
+/**
  * Elements of a list by id, all levels.
  *
  * @param array $elements Element list.
@@ -67,6 +151,8 @@ function wpmcp_elementor_check_elements( array $before, array $after ) {
 	$warnings   = array();
 	$stored     = wpmcp_elementor_by_id( $before );
 	$unknown    = array();
+	$switched   = array();
+	$disabled   = null;
 	$can_manage = current_user_can( 'manage_options' );
 
 	foreach ( wpmcp_elementor_by_id( $after ) as $id => $element ) {
@@ -74,7 +160,15 @@ function wpmcp_elementor_check_elements( array $before, array $after ) {
 		$name = 'widget' === ( $element['elType'] ?? '' ) ? 'widget "' . ( $element['widgetType'] ?? '' ) . '"' : (string) ( $element['elType'] ?? '' );
 
 		if ( null === $type ) {
-			$unknown[] = sprintf( '%s (%s%s)', $id, $name, isset( $stored[ $id ] ) ? '' : ', new' );
+			if ( null === $disabled ) {
+				$disabled = wpmcp_elementor_widget_availability()['disabled'];
+			}
+			$entry = sprintf( '%s (%s%s)', $id, $name, isset( $stored[ $id ] ) ? '' : ', new' );
+			if ( 'widget' === ( $element['elType'] ?? '' ) && in_array( (string) ( $element['widgetType'] ?? '' ), $disabled, true ) ) {
+				$switched[] = $entry;
+			} else {
+				$unknown[] = $entry;
+			}
 			continue;
 		}
 
@@ -115,10 +209,21 @@ function wpmcp_elementor_check_elements( array $before, array $after ) {
 		}
 	}
 
+	if ( ! empty( $switched ) || ! empty( $unknown ) ) {
+		$available = wpmcp_elementor_available_sentence( wpmcp_elementor_widget_availability()['available'] );
+	}
+	if ( ! empty( $switched ) ) {
+		$errors[] = sprintf(
+			'These widget types are deactivated on this site under Elementor > Element Manager: %s. Elementor does not load a deactivated widget, so it would not render and the save would drop it. Switching widgets back on is a site-wide setting for a person to decide, not something to work around. %s',
+			implode( ', ', $switched ),
+			$available
+		);
+	}
 	if ( ! empty( $unknown ) ) {
 		$errors[] = sprintf(
-			'Elementor does not know these element types on this site: %s. Its save drops every element it cannot load, so saving would delete them. Activate the plugin that provides them (Elementor Pro, an addon) or use a type this site has.',
-			implode( ', ', $unknown )
+			'Elementor does not know these element types on this site: %s. Its save drops every element it cannot load, so saving would delete them. Activate the plugin that provides them (Elementor Pro, an addon) or use a type this site has. %s',
+			implode( ', ', $unknown ),
+			$available
 		);
 	}
 

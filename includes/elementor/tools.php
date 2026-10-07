@@ -92,6 +92,7 @@ function wpmcp_elementor_read( array $args ) {
 
 	if ( '' === $element_id ) {
 		$result['outline'] = wpmcp_elementor_outline( $elements );
+		$result           += wpmcp_elementor_widgets_report();
 		$result['next']    = 'Ask for one element with element_id to get all its settings, and for an HTML widget its markup verbatim. Change it with elementor-write, by element id.';
 		wpmcp_log(
 			'wpmcp/elementor-read',

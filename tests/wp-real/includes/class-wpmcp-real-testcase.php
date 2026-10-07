@@ -193,4 +193,131 @@ abstract class WPMCP_Real_TestCase extends WP_UnitTestCase {
 		}
 		return wp_json_encode( $result );
 	}
+
+	/**
+	 * Serve one request as it arrives from outside.
+	 *
+	 * @param string     $route    REST route.
+	 * @param WP_User    $user     Whose application password signs it.
+	 * @param string     $password The password.
+	 * @param array|null $body     JSON body; a POST when given, else a GET.
+	 * @param array      $headers  Extra request headers, as $_SERVER keys.
+	 * @return array { status: int, body: array|null }
+	 */
+	protected function serve( $route, WP_User $user, $password, $body = null, array $headers = array() ) {
+		$_SERVER['HTTPS']         = 'on';
+		$_SERVER['PHP_AUTH_USER'] = $user->user_login;
+		$_SERVER['PHP_AUTH_PW']   = $password;
+		$_SERVER['REQUEST_METHOD'] = null === $body ? 'GET' : 'POST';
+		$_SERVER['QUERY_STRING']  = 'rest_route=' . rawurlencode( $route );
+		$_SERVER['REQUEST_URI']   = '/?' . $_SERVER['QUERY_STRING'];
+		$_GET                     = array( 'rest_route' => $route );
+
+		unset( $_SERVER['CONTENT_TYPE'], $_SERVER['HTTP_ACCEPT'] );
+		if ( null !== $body ) {
+			$_SERVER['CONTENT_TYPE']      = 'application/json';
+			$_SERVER['HTTP_ACCEPT']       = 'application/json, text/event-stream';
+			$GLOBALS['HTTP_RAW_POST_DATA'] = wp_json_encode( $body );
+		} else {
+			unset( $GLOBALS['HTTP_RAW_POST_DATA'] );
+		}
+
+		foreach ( $headers as $key => $value ) {
+			$_SERVER[ $key ] = $value;
+		}
+
+		// Nobody is signed in when a request starts.
+		wp_set_current_user( 0 );
+
+		// WP::parse_request() fires parse_request, where rest_api_loaded()
+		// would serve the request and exit. The same steps follow below.
+		// The test library gives every test a fresh WP object; on a real
+		// request rest_api_init() registers the query var on init.
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$GLOBALS['wp']->add_query_var( 'rest_route' );
+		$GLOBALS['wp']->query_vars = array();
+		$GLOBALS['wp']->parse_request();
+		add_action( 'parse_request', 'rest_api_loaded' );
+
+		$this->assertSame( $route, $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress read the route from the request' );
+
+		$GLOBALS['wp_rest_server'] = null;
+		$server                    = rest_get_server();
+		$served                    = untrailingslashit( $GLOBALS['wp']->query_vars['rest_route'] );
+		$server->serve_request( '' === $served ? '/' : $served );
+
+		return array(
+			'status' => (int) $server->status,
+			'body'   => json_decode( $server->sent_body, true ),
+		);
+	}
+
+	/**
+	 * Call one tool the way a client does: initialize, then tools/call with
+	 * the session id, over the MCP endpoint with a real application
+	 * password, through the REST fence. What the agent account's request
+	 * goes through on a customer site, in the same order.
+	 *
+	 * @param WP_User $user     Agent account.
+	 * @param string  $password Its application password.
+	 * @param string  $tool     MCP tool name, e.g. wpmcp-elementor-write.
+	 * @param array   $args     Arguments.
+	 * @return array { status: int, result: array|null, text: string, isError: bool, body: array|null }
+	 */
+	protected function mcp_call( WP_User $user, $password, $tool, array $args ) {
+		add_filter( 'application_password_is_api_request', '__return_true' );
+		add_filter(
+			'wp_rest_server_class',
+			function () {
+				return 'Spy_REST_Server';
+			}
+		);
+
+		$init = $this->serve(
+			'/wpmcp/v1/mcp',
+			$user,
+			$password,
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'initialize',
+				'params'  => array(
+					'protocolVersion' => '2025-06-18',
+					'capabilities'    => new stdClass(),
+					'clientInfo'      => array(
+						'name'    => 'wp-real-test',
+						'version' => '1',
+					),
+				),
+			)
+		);
+		$this->assertSame( 200, $init['status'], wp_json_encode( $init['body'] ) );
+		$session = $GLOBALS['wp_rest_server']->sent_headers['Mcp-Session-Id'] ?? '';
+		$this->assertNotSame( '', $session, 'initialize hands out a session' );
+
+		$call = $this->serve(
+			'/wpmcp/v1/mcp',
+			$user,
+			$password,
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 2,
+				'method'  => 'tools/call',
+				'params'  => array(
+					'name'      => $tool,
+					'arguments' => $args,
+				),
+			),
+			array( 'HTTP_MCP_SESSION_ID' => $session )
+		);
+
+		$result = $call['body']['result'] ?? null;
+		return array(
+			'status'  => $call['status'],
+			'result'  => is_array( $result['structuredContent'] ?? null ) ? $result['structuredContent'] : null,
+			'text'    => (string) ( $result['content'][0]['text'] ?? ( $call['body']['error']['message'] ?? '' ) ),
+			'isError' => ! empty( $result['isError'] ) || isset( $call['body']['error'] ),
+			'body'    => $call['body'],
+		);
+	}
 }

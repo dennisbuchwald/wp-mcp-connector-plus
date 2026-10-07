@@ -247,7 +247,7 @@ function wpmcp_site_info() {
 			'pro'      => defined( 'ELEMENTOR_PRO_VERSION' ) ? ELEMENTOR_PRO_VERSION : null,
 			'tools'    => array_map( 'wpmcp_short_ability_name', array_values( array_intersect( array( 'wpmcp/elementor-read', 'wpmcp/elementor-write' ), $available ) ) ),
 			'explains' => 'Elementor runs here. A page built with it (content-list: builtWith "elementor") keeps its content in Elementor\'s element tree: read it with elementor-read and change it with elementor-write, by element id. The block tools refuse to write such a page; SEO meta, slug and status still go through content-write. Pages of Elementor\'s Atomic editor are read-only, and its theme-builder templates (headers, footers) are out of scope unless the site owner adds the "elementor_library" post type.',
-		);
+		) + wpmcp_elementor_widgets_report();
 	}
 
 	if ( function_exists( 'dbw_get_settings' ) ) {
