@@ -62,6 +62,10 @@ function wpmcp_wrapper_context( array $stored = array(), $post_id = 0 ) {
 		'generated' => array(),
 		'missing'   => array(),
 		'notes'     => array(),
+		// Markup generated from, and nodes refused for, attributes that
+		// live in the markup (includes/sourced.php).
+		'markup'    => array(),
+		'sourced'   => array(),
 	);
 }
 

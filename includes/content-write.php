@@ -325,6 +325,8 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 			$refusal = array( 'ok' => false );
 			if ( ! empty( $wrappers->missing ) ) {
 				$refusal['code'] = 'wpmcp_wrapper_missing';
+			} elseif ( ! empty( $wrappers->sourced ) ) {
+				$refusal['code'] = 'wpmcp_sourced_attribute';
 			}
 			return array(
 				'response'      => $refusal + array(
@@ -376,6 +378,14 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 			$generated['path'],
 			$generated['block'],
 			trim( (string) $generated['template'][0] )
+		);
+	}
+	foreach ( $wrappers->markup as $generated ) {
+		$warnings[] = sprintf(
+			'%s: "%s" was sent without "html"; its markup was made from attrs.%s, which is the whole markup of this block.',
+			$generated['path'],
+			$generated['block'],
+			$generated['attribute']
 		);
 	}
 	$warnings = array_merge( $warnings, $wrappers->notes );
@@ -437,6 +447,9 @@ function wpmcp_plan_write( $post, array $args, $dry_run ) {
 	// same thing the agent would have sent, to check or to send next time.
 	if ( ! empty( $wrappers->generated ) ) {
 		$response['wrapperGenerated'] = $wrappers->generated;
+	}
+	if ( ! empty( $wrappers->markup ) ) {
+		$response['markupGenerated'] = $wrappers->markup;
 	}
 
 	// What each patched block reads now, so checking a text change does

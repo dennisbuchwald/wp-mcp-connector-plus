@@ -273,8 +273,10 @@ function wpmcp_create_content( array $args ) {
 		if ( ! empty( $plan['response']['code'] ) ) {
 			$report['code'] = $plan['response']['code'];
 		}
-		if ( ! empty( $plan['response']['wrapperGenerated'] ) ) {
-			$report['wrapperGenerated'] = $plan['response']['wrapperGenerated'];
+		foreach ( array( 'wrapperGenerated', 'markupGenerated' ) as $field ) {
+			if ( ! empty( $plan['response'][ $field ] ) ) {
+				$report[ $field ] = $plan['response'][ $field ];
+			}
 		}
 		if ( isset( $content['tree'] ) && isset( $plan['after_count'] ) ) {
 			$report['blocks'] = $plan['after_count'];
@@ -486,8 +488,10 @@ function wpmcp_batch_item( $index, $post_id, $result, $saving = false ) {
 	}
 	$item['errors']   = array_values( (array) ( $result['errors'] ?? array() ) );
 	$item['warnings'] = array_values( (array) ( $result['warnings'] ?? array() ) );
-	if ( ! empty( $result['wrapperGenerated'] ) ) {
-		$item['wrapperGenerated'] = $result['wrapperGenerated'];
+	foreach ( array( 'wrapperGenerated', 'markupGenerated' ) as $field ) {
+		if ( ! empty( $result[ $field ] ) ) {
+			$item[ $field ] = $result[ $field ];
+		}
 	}
 
 	if ( $saving && $ok ) {

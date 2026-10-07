@@ -91,6 +91,18 @@ check( '0' === ( $item['wrapperGenerated'][0]['path'] ?? null ), 'ein Batch-Post
 $item = wpmcp_batch_item( 0, 5, array( 'ok' => false, 'code' => 'wpmcp_wrapper_missing', 'errors' => array( 'x' ), 'warnings' => array() ) );
 check( 'wpmcp_wrapper_missing' === ( $item['code'] ?? null ), 'und den Code einer fehlenden Huelle' );
 
+// 0.20.1: markup made from an attribute that is the whole markup
+// (core/shortcode's text) is reported the same way, and a refusal for an
+// attribute sent without its markup carries its own code.
+\WP_Block_Type_Registry::get_instance()->register( 'core/shortcode', array( 'attributes' => array( 'text' => array( 'type' => 'string', 'source' => 'raw' ) ) ) );
+$r = wpmcp_create_content( array( 'title' => 'S', 'tree' => array( array( 'name' => 'core/shortcode', 'attrs' => array( 'text' => '[gallery]' ) ) ) ) );
+check( ! is_wp_error( $r ) && true === $r['ok'] && 'text' === ( $r['markupGenerated'][0]['attribute'] ?? null ), 'content-create meldet markupGenerated', is_wp_error( $r ) ? '' : wp_json_encode( $r ) );
+\WP_Block_Type_Registry::get_instance()->register( 'core/verse', array( 'attributes' => array( 'content' => array( 'type' => 'rich-text', 'source' => 'rich-text', 'selector' => 'pre' ) ) ) );
+$r = wpmcp_create_content( array( 'title' => 'V', 'tree' => array( array( 'name' => 'core/verse', 'attrs' => array( 'content' => 'x' ) ) ) ) );
+check( ! is_wp_error( $r ) && false === $r['ok'] && 'wpmcp_sourced_attribute' === ( $r['code'] ?? null ), 'ein Attribut ohne seine Markup traegt in content-create seinen Code', is_wp_error( $r ) ? '' : wp_json_encode( $r ) );
+$item = wpmcp_batch_item( 0, 5, array( 'ok' => true, 'errors' => array(), 'warnings' => array(), 'markupGenerated' => array( array( 'path' => '0', 'block' => 'core/shortcode', 'attribute' => 'text' ) ) ) );
+check( 'text' === ( $item['markupGenerated'][0]['attribute'] ?? null ), 'ein Batch-Posten reicht markupGenerated weiter', wp_json_encode( $item ) );
+
 echo "\n\033[1mBatch: nichts wird gespeichert, solange ein Posten scheitert\033[0m\n";
 
 check( is_wp_error( wpmcp_batch_write( array( 'items' => array() ) ) ), 'eine leere Liste ist ein Fehler' );

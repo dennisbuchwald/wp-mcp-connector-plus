@@ -390,6 +390,7 @@ carry a code an agent can branch on:
 | `wpmcp_runs_code` | The element executes its content as PHP and is not writable. |
 | `wpmcp_save_failed` | WordPress did not save; nothing was changed (for `content-create`: the page was removed again; for `elementor-write`: Elementor refused the save or stopped with an error). |
 | `wpmcp_session_required` | `media-upload` outside a work session; only the site owner can open one. |
+| `wpmcp_sourced_attribute` | An attribute the block reads from its markup (block.json `source`: `core/paragraph` content, `core/image` url and alt ...) was sent in `attrs` without `html`; it would have been lost. The message names where it belongs and shows the markup to send. As the `code` of a refusal (`tree`) or of an error (`ops`, also `set_attrs`). |
 | `wpmcp_stale` | `expected_modified` no longer matches: someone else saved in between. |
 | `wpmcp_unfiltered_html_unavailable` | The site's configuration makes the dynamic-data save impossible, or (`elementor-write`) would make Elementor strip markup the page holds. |
 | `wpmcp_unsafe_markup` | `content-restore`: the revision was not saved by a person and holds markup kses would filter. |
@@ -418,6 +419,13 @@ Every write — dry run and real — passes the same five stages:
 
 Errors name the exact block path and reason, so the agent can fix a
 specific node instead of retrying the whole page.
+
+Attributes a block reads from its markup (a `source` in `block.json`)
+are never written into the block comment, where WordPress and the editor
+ignore them. Where the attribute is the block's whole markup
+(`core/shortcode` text, `core/html` content) the markup is made from it
+and reported in `markupGenerated`; any other such attribute sent without
+`html` is refused with `wpmcp_sourced_attribute` and the markup to send.
 
 Two things happen around the write itself, because validation alone was
 not enough:

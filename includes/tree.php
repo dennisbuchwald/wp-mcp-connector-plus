@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/wrappers.php';
+require_once __DIR__ . '/sourced.php';
 
 /**
  * Whether a parsed block is one a path can point at.
@@ -163,6 +164,14 @@ function wpmcp_tree_to_blocks( array $nodes, $prefix, array &$errors, $context =
 
 		$html     = (string) ( $node['html'] ?? '' );
 		$template = ( isset( $node['htmlTemplate'] ) && is_array( $node['htmlTemplate'] ) ) ? $node['htmlTemplate'] : null;
+
+		// Attributes that live in the markup never go into the comment;
+		// without "html" they become the markup or are refused.
+		$sourced = wpmcp_resolve_sourced_attrs( $name, $attrs, null === $template ? $html : 'template', $children, $path, $context, $errors );
+		$attrs   = $sourced['attrs'];
+		if ( null === $template ) {
+			$html = $sourced['html'];
+		}
 
 		// Children and nothing else: until 0.19.1 that was always saved as
 		// the children alone, and a static wrapper went missing in silence.
@@ -558,12 +567,16 @@ function wpmcp_apply_ops( array $blocks, array $ops, $context = null ) {
 				}
 				$errors  = array();
 				$missing = count( $context->missing );
+				$sourced = count( $context->sourced );
 				$new     = wpmcp_tree_to_blocks( $nodes, 'op' . $n, $errors, $context );
 				if ( ! empty( $errors ) ) {
-					return new \WP_Error(
-						count( $context->missing ) > $missing ? 'wpmcp_wrapper_missing' : 'wpmcp_bad_block',
-						implode( ' ', $errors )
-					);
+					$code = 'wpmcp_bad_block';
+					if ( count( $context->missing ) > $missing ) {
+						$code = 'wpmcp_wrapper_missing';
+					} elseif ( count( $context->sourced ) > $sourced ) {
+						$code = 'wpmcp_sourced_attribute';
+					}
+					return new \WP_Error( $code, implode( ' ', $errors ) );
 				}
 				$result = wpmcp_splice( $blocks, $path, $new, $replace ? 1 : 0 );
 				if ( is_wp_error( $result ) ) {
@@ -591,6 +604,13 @@ function wpmcp_apply_ops( array $blocks, array $ops, $context = null ) {
 				$attrs = is_object( $attrs ) ? (array) $attrs : $attrs;
 				if ( ! is_array( $attrs ) ) {
 					return new \WP_Error( 'wpmcp_bad_op', sprintf( 'Operation %d (set_attrs): "attrs" object required.', $n ) );
+				}
+				$target = wpmcp_blocks_at_path( $blocks, $path );
+				if ( is_array( $target ) && is_string( $target['blockName'] ?? null ) ) {
+					$sourced = wpmcp_sourced_set_attrs_error( $target['blockName'], $attrs, $n );
+					if ( $sourced ) {
+						return $sourced;
+					}
 				}
 				$result = wpmcp_patch_attrs( $blocks, $path, $attrs );
 				if ( is_wp_error( $result ) ) {
