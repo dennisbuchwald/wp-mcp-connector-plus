@@ -27,6 +27,25 @@ function wpmcp_listable_statuses() {
 }
 
 /**
+ * Asked statuses with "any" spelled out.
+ *
+ * Agents send "any" because WP_Query takes it. Here it means every
+ * listable status, which wpmcp_list_visibility() then narrows to what
+ * this account may read; never trash, inherit or auto-draft, which
+ * WP_Query's own "any" would not include either.
+ *
+ * @param string[] $asked Statuses as asked.
+ * @return string[]
+ */
+function wpmcp_expand_any_status( array $asked ) {
+	$out = array();
+	foreach ( $asked as $status ) {
+		$out = array_merge( $out, 'any' === $status ? wpmcp_listable_statuses() : array( $status ) );
+	}
+	return array_values( array_unique( $out ) );
+}
+
+/**
  * Which statuses of a post type the current user may see in a list.
  *
  * The same line wpmcp_get_readable_post() draws for one post, drawn for a
@@ -145,13 +164,13 @@ function wpmcp_list_content( array $args ) {
 
 	$statuses = wpmcp_listable_statuses();
 	if ( ! empty( $args['status'] ) ) {
-		$asked    = array_filter( array_map( 'trim', is_array( $args['status'] ) ? $args['status'] : explode( ',', (string) $args['status'] ) ) );
+		$asked    = wpmcp_expand_any_status( array_filter( array_map( 'trim', is_array( $args['status'] ) ? $args['status'] : explode( ',', (string) $args['status'] ) ) ) );
 		$statuses = array_values( array_intersect( $asked, wpmcp_listable_statuses() ) );
 		if ( count( $statuses ) !== count( $asked ) ) {
 			return new \WP_Error(
 				'wpmcp_bad_status',
 				sprintf(
-					'Status "%s" cannot be listed. Use one of: %s.',
+					'Status "%s" cannot be listed. Use one of: %s, or any for all of them.',
 					implode( ', ', array_diff( $asked, wpmcp_listable_statuses() ) ),
 					implode( ', ', wpmcp_listable_statuses() )
 				)

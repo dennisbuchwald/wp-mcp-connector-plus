@@ -283,10 +283,17 @@ check( array( 1, 2, 4, 6 ) === listed( array() ), 'Vollstufe: auch die passwortg
 
 $GLOBALS['caps'] = $draft_level;
 
-foreach ( array( 'trash', 'any', 'inherit', 'auto-draft', 'publish,trash' ) as $status ) {
+foreach ( array( 'trash', 'inherit', 'auto-draft', 'publish,trash', 'any,trash' ) as $status ) {
 	$out = wpmcp_list_content( array( 'status' => $status ) );
 	check( is_wp_error( $out ) && 'wpmcp_bad_status' === $out->get_error_code(), "Status \"{$status}\" wird abgelehnt", 'bis 0.18 ging er unveraendert an WP_Query' );
 }
+check( array( 1, 2, 6 ) === listed( array( 'status' => 'any' ) ), 'Status "any" (0.20.1): alles Lesbare, wie ohne Status', wp_json_encode( listed( array( 'status' => 'any' ) ) ) );
+check( array( 1, 2, 6 ) === listed( array( 'status' => array( 'any', 'draft' ) ) ), '"any" in einer Liste ebenso, ohne Doppelte', wp_json_encode( listed( array( 'status' => array( 'any', 'draft' ) ) ) ) );
+$GLOBALS['caps'] = array();
+check( array( 1 ) === listed( array( 'status' => 'any' ) ), '"any" auf der Lesestufe: nur Veroeffentlichtes, kein Entwurf', wp_json_encode( listed( array( 'status' => 'any' ) ) ) );
+$GLOBALS['caps'] = $full_level;
+check( array( 1, 2, 4, 6 ) === listed( array( 'status' => 'any' ) ), '"any" auf der Vollstufe: nie Papierkorb, auto-draft oder inherit', wp_json_encode( listed( array( 'status' => 'any' ) ) ) );
+$GLOBALS['caps'] = $draft_level;
 check( array( 2 ) === listed( array( 'status' => 'draft' ) ), 'Status "draft" liefert nur Entwuerfe' );
 check( array( 1, 2 ) === listed( array( 'status' => 'publish,draft' ) ), 'mehrere Status mit Komma' );
 check( array() === listed( array( 'status' => 'private' ) ), 'nach "private" gefragt: leer statt fremder Inhalte' );

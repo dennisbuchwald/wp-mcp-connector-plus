@@ -110,10 +110,10 @@ function wpmcp_search_content( array $args ) {
 		);
 	}
 
-	// The same statuses content-list accepts. "trash", "inherit" or "any"
-	// went to the query unchecked and found text in posts no other tool
-	// shows.
-	$asked_status = wpmcp_search_list( $args['post_status'] ?? null );
+	// The same statuses content-list accepts. "trash" or "inherit" went
+	// to the query unchecked and found text in posts no other tool shows;
+	// "any" now means every listable status (wpmcp_expand_any_status()).
+	$asked_status = wpmcp_expand_any_status( wpmcp_search_list( $args['post_status'] ?? null ) );
 	$statuses     = wpmcp_listable_statuses();
 	if ( ! empty( $asked_status ) ) {
 		$statuses = array_values( array_intersect( $asked_status, wpmcp_listable_statuses() ) );
@@ -121,7 +121,7 @@ function wpmcp_search_content( array $args ) {
 			return new \WP_Error(
 				'wpmcp_bad_status',
 				sprintf(
-					'Status "%s" cannot be searched. Use one of: %s.',
+					'Status "%s" cannot be searched. Use one of: %s, or any for all of them.',
 					implode( ', ', array_diff( $asked_status, wpmcp_listable_statuses() ) ),
 					implode( ', ', wpmcp_listable_statuses() )
 				)

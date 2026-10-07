@@ -225,7 +225,7 @@ function wpmcp_ability_definitions() {
 					),
 					'status'     => array(
 						'type'        => 'string',
-						'description' => 'Post status filter: publish, draft, pending, future or private, several separated by commas.',
+						'description' => 'Post status filter: publish, draft, pending, future or private, several separated by commas; any for all you may read.',
 					),
 					'per_page'   => array(
 						'type'        => 'integer',
@@ -506,7 +506,7 @@ function wpmcp_ability_definitions() {
 					'post_status'   => array(
 						'type'        => array( 'array', 'string' ),
 						'items'       => array( 'type' => 'string' ),
-						'description' => 'Restrict to these statuses, e.g. ["publish"]. One of publish, draft, pending, future, private.',
+						'description' => 'Restrict to these statuses, e.g. ["publish"]. One of publish, draft, pending, future, private; any for all.',
 					),
 					'context_chars' => array(
 						'type'        => 'integer',

@@ -215,10 +215,15 @@ check( array( 1 ) === hit_ids( search( array( 'query' => 'geheim-wort' ) ) ), 'o
 $GLOBALS['caps'] = array( 'edit_pages' => true, 'edit_others_pages' => true, 'edit_published_pages' => true, 'edit_private_pages' => true );
 check( array( 1, 2, 4, 5 ) === hit_ids( search( array( 'query' => 'geheim-wort' ) ) ), 'mit Bearbeitungsrechten auch Entwurf, Passwortseite und Privates, aber kein Papierkorb', wp_json_encode( hit_ids( search( array( 'query' => 'geheim-wort' ) ) ) ) );
 
-foreach ( array( 'trash', 'any', 'inherit', 'auto-draft' ) as $status ) {
+foreach ( array( 'trash', 'inherit', 'auto-draft', 'any,trash' ) as $status ) {
 	$out = search( array( 'query' => 'geheim-wort', 'post_status' => $status ) );
 	check( is_wp_error( $out ) && 'wpmcp_bad_status' === $out->get_error_code(), "post_status \"{$status}\" wird abgelehnt", is_wp_error( $out ) ? $out->get_error_code() : wp_json_encode( hit_ids( $out ) ) );
 }
+check( array( 1, 2, 4, 5 ) === hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => 'any' ) ) ), 'post_status "any" (0.20.1): alles Lesbare, kein Papierkorb, keine Revision', wp_json_encode( hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => 'any' ) ) ) ) );
+check( array( 1, 2, 4, 5 ) === hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => array( 'any' ) ) ) ), 'auch als Liste' );
+$GLOBALS['caps'] = array();
+check( array( 1 ) === hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => 'any' ) ) ), '"any" ohne Rechte: nur Oeffentliches' );
+$GLOBALS['caps'] = array( 'edit_pages' => true, 'edit_others_pages' => true, 'edit_published_pages' => true, 'edit_private_pages' => true );
 check( array( 2 ) === hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => 'draft' ) ) ), 'post_status "draft" grenzt ein' );
 check( array( 1, 4 ) === hit_ids( search( array( 'query' => 'geheim-wort', 'post_status' => 'publish' ) ) ), 'post_status als Text' );
 
